@@ -91,6 +91,7 @@ Prerequisites: Phase 5.
 ## Phase 7 — Release Prep
 Prerequisites: Phase 6.
 
+- [ ] Restore Android release ABIs: `apps/mobile/android/gradle.properties` `reactNativeArchitectures` is set to `arm64-v8a` only — a single ABI for fast dev builds against the physical phone over USB (this PC's GPU can't run the emulator) — restore the real device set (at least `arm64-v8a,armeabi-v7a,x86_64`) before any Play Store build
 - [ ] App Store Screen Time entitlement — confirm approval status, or document fallback plan
 - [ ] Privacy nutrition labels (confirm: no geolocation, no contacts collected)
 - [ ] Detox/Maestro E2E suite across golden paths (create → join → complete; create → emergency exit)
