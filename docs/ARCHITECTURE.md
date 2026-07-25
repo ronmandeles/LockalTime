@@ -8,6 +8,8 @@ Social, location/time/group-based distraction-blocking app. Core value: shared, 
 
 Design/product philosophy: **reward consistency and completion, never reward randomness or comparison.** No leaderboards, no variable/surprise rewards, no badge overload. Streaks and milestones only, both with generous grace/periodicity so they build habit without inducing anxiety.
 
+> ⚠️ **Product direction under active revision (owner decision, 2026-07).** The owner wants Lockal Time to be deliberately **engaging / high-retention** ("addictive") on the theory that the more a user is hooked on *this* app, the less they use their phone overall — so retention is treated as aligned with the mission, not opposed to it, and it's a selling point. This **reverses** the restrained-engagement stance stated in this section and in §9. It does **not** yet decide any specific mechanic: the next step is an explicit analysis of the retention/"addiction" techniques used by large consumer apps (variable rewards, streak pressure, notifications, social proof, etc.), rethought to fit the less-phone-use goal, after which the adopted mechanics get written into §1/§9 and the DoDs. Until that analysis is agreed, the text below still stands as the current spec — but new gamification/engagement work must flag this pivot and not treat the "avoid" list as final. Tracked in `backlog.md` and CLAUDE.md.
+
 ## 2. Screens & Flow
 
 1. Onboarding (permission priming)
@@ -121,6 +123,8 @@ Sessions are **not** linear (`created → active → completed`) — model expli
 | 13 | OEM aggressive battery-optimization killing the foreground service | Onboarding prompt to disable battery optimization for the app; reliability issue, not abuse | MVP (UX) |
 
 ## 9. Gamification Philosophy
+
+> ⚠️ **Under active revision — see the product-direction note in §1.** The owner has decided to pivot toward deliberate engagement/retention ("ethical addictiveness" in service of less overall phone use). The Keep/Avoid lists below are the *pre-pivot* spec and are pending re-evaluation; the "Avoid" items (variable/randomized rewards, social comparison, etc.) are explicitly **on the table** now and must not be treated as settled. No specific mechanic is decided until the retention-strategy analysis is done and agreed (tracked in `backlog.md`).
 
 Keep: streaks (48h flexible grace — one session per 48h keeps it alive), milestones (global, periodic, not per-session — avoids "reward after every session" cognitive load), transparent point receipts (bonuses broken out separately, never bundled opaquely).
 

@@ -68,6 +68,7 @@ Prerequisites: Phase 3.
 ## Phase 5 — Gamification & Stats (Screens 11–12)
 Prerequisites: Phase 4 (needs real `rewards_history` data).
 
+- [ ] **Retention-strategy analysis + gamification re-spec** (product-direction pivot — see ARCHITECTURE.md §1/§9 "under revision" notes + CLAUDE.md): analyze the addictive/retention techniques used by major consumer apps (variable rewards, streak pressure, notifications, social proof, etc.), rethink each for the less-phone-use goal, decide which to adopt, then rewrite ARCHITECTURE §1/§9 and the affected DoDs before building the mechanics below. Not blocked by Phase 4 — can (and should) be done earlier, since it also informs notification/engagement touchpoints in Phases 2–4.
 - [ ] Streak calculation job (48h grace)
 - [ ] Milestone crossing detection (global, periodic)
 - [ ] `user_stats` / `user_stats_daily` write-through at session close
