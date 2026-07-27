@@ -43,12 +43,21 @@ Prerequisites: Phase 1.
 ## Phase 3 — Native Blocker Bridge
 Prerequisites: Phase 2 (needs a real session to attach to).
 
-- [ ] Android: Foreground Service + `UsageStatsManager` polling + `SYSTEM_ALERT_WINDOW` overlay (not AccessibilityService — see ARCHITECTURE.md §4)
-- [ ] Android: boot-persistence `BroadcastReceiver` on `BOOT_COMPLETED`
-- [ ] iOS: `FamilyControls` authorization + `ManagedSettings` shield + `DeviceActivityMonitor` extension + App Group bridge
-- [ ] Unified `AppBlockerModule` JS interface (`start/stop/getStatus` + event emitter)
-- [ ] `useAppBlocker` hook reconciling native events with session state
-- [ ] Apple Family Controls entitlement application submitted (parallel track, not blocking dev)
+**Planned 2026-07-27** (see conversation; reordered from a first-draft backlog to a contract-first sequence, matching the `blockingPermissions`/`nativeSignIn` seam pattern from Phases 1–2). Locked decisions:
+- Blocked-category MVP list is final: **Social Networking, Games, Entertainment** (one JS constant, mapped to each platform's native category enum, passed into `start()` — not hardcoded per platform, so the list can change without a native rebuild).
+- **No physical Android device available this phase** — Android native code is written and Gradle-build-verified (compiles clean) but not runtime-verified; same "manual QA pending" posture as iOS. The literal physical-device DoD below stays open until hardware exists.
+- iOS gets a full real Swift implementation this phase (not a thin stub), verified via JS contract tests only (no Mac).
+- Camera QR scanning (`react-native-vision-camera`, deferred from Phase 2 — see `docs/MANUAL_QA.md`) is folded in here since native Pod/Gradle linking work is already in flight this phase.
+
+Task order:
+- [x] 3.0 `AppBlockerModule` TS contract (`SessionBlockerConfig`, `BlockerStatus`, `BlockerEvent` union: `shield_triggered`/`service_killed`/`permission_revoked`/`battery_critical`) + fake implementation — contract test first. `apps/mobile/src/services/app-blocker.ts` (interface + deterministic no-op placeholder, same pattern as `blocking-permissions.ts`) + `apps/mobile/src/config/blocked-categories.ts` (locked `social`/`games`/`entertainment` constant, single source of truth for both platforms). 7/7 new tests, 330/330 mobile suite green, lint/typecheck clean.
+- [ ] 3.1 `useAppBlocker` hook — starts/stops the blocker off session state; feeds `OFFLINE_TIMEOUT` into `session-lifecycle-machine.ts` (already has this event reserved); tracks local violation state for an inline banner (no new screen this phase — edge-case screens stay Phase 6)
+- [ ] 3.2 Swap Phase 1's `blockingPermissions` placeholder (`apps/mobile/src/services/blocking-permissions.ts`) for the real Android seam, plus a battery-optimization-exemption ask alongside the existing Usage Access/Overlay grants on Screen 2
+- [ ] 3.3 Android native: Foreground Service + `UsageStatsManager` polling (2s interval) + `SYSTEM_ALERT_WINDOW` overlay (not AccessibilityService — see ARCHITECTURE.md §4). Note: Android 14+ needs a declared `foregroundServiceType` (likely `specialUse` + Play Console justification) — flag in ARCHITECTURE.md §4 once built.
+- [ ] 3.4 Android native: boot-persistence `BroadcastReceiver` on `BOOT_COMPLETED`, backed by `EncryptedSharedPreferences` (native-only storage — JS isn't running yet at boot)
+- [ ] 3.5 Camera QR scanning: wire `react-native-vision-camera` into the Scan screen (Android + iOS linking)
+- [ ] 3.6 iOS native: `FamilyControls` authorization + `ManagedSettings` shield + `DeviceActivityMonitor` extension + App Group bridge, same `AppBlockerModule` contract
+- [ ] 3.7 Apple Family Controls entitlement application submitted (parallel track, not blocking dev)
 
 **DoD:** on a physical device, starting a session actually blocks a test app; killing the app or rebooting the device does not lift the block prematurely.
 
