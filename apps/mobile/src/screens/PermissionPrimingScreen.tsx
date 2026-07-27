@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useTranslation } from 'react-i18next';
 
-import { blockingPermissions } from '../services/blocking-permissions';
+import { blockingPermissions, requestBatteryOptimizationExemption } from '../services/blocking-permissions';
 import { radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Permission-priming screen (Screen 2), DESIGN_GUIDELINES §9: one screen
@@ -15,6 +15,15 @@ import { radius, sizing, spacing, typography } from '../theme/tokens';
 // hard-wall the app; the full reasoning is pinned in
 // PermissionPrimingScreen.spec.tsx). An 'undetermined' request result leaves
 // the priming state intact for a retry — neither completion nor fallback.
+//
+// Phase 3 task 3.2: Usage Access / Overlay are granted in a Settings screen
+// the app gets no direct callback from, so an AppState 'change' listener
+// re-checks getStatus() whenever the app returns to 'active' while in the
+// denied state — the only way "open settings, grant it, come back" actually
+// resolves. A real grant (either from request() or this recheck) also fires
+// requestBatteryOptimizationExemption() as a fire-and-forget reliability ask
+// (ARCHITECTURE.md §8 item 13) — separate from the granted/denied capability
+// itself, so its outcome is never awaited or gated on.
 //
 // Like OnboardingScreen, the screen is storage-agnostic: it only fires
 // onHandled (granted result or proceed-anyway); the App gate owns persistence
@@ -34,12 +43,17 @@ const PermissionPrimingScreen = ({
   const { t } = useTranslation();
   const [screenState, setScreenState] = useState<ScreenState>('priming');
 
+  const handleGranted = (): void => {
+    requestBatteryOptimizationExemption().catch(() => undefined);
+    onHandled();
+  };
+
   const handleAllowPress = (): void => {
     // Never rejects per the service contract, so no catch branch exists to
     // get wrong; the screen only maps the discriminated result.
     blockingPermissions.request().then((result) => {
       if (result.status === 'granted') {
-        onHandled();
+        handleGranted();
         return;
       }
       if (result.status === 'denied') {
@@ -55,6 +69,29 @@ const PermissionPrimingScreen = ({
     // this deliberately does NOT fire onHandled.
     Linking.openSettings();
   };
+
+  // Stable refs so the AppState effect below only subscribes once (deps
+  // `[]`) instead of tearing down and re-subscribing on every render/state
+  // change — it reads the latest screenState/onHandled via the ref when the
+  // event actually fires.
+  const screenStateRef = useRef(screenState);
+  screenStateRef.current = screenState;
+  const handleGrantedRef = useRef(handleGranted);
+  handleGrantedRef.current = handleGranted;
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState !== 'active' || screenStateRef.current !== 'denied') {
+        return;
+      }
+      blockingPermissions.getStatus().then((result) => {
+        if (result.status === 'granted') {
+          handleGrantedRef.current();
+        }
+      });
+    });
+    return () => subscription.remove();
+  }, []);
 
   return (
     <View style={styles.container} testID="permission-priming-screen">

@@ -1,52 +1,100 @@
-import { blockingPermissions } from './blocking-permissions';
+const mockGetStatus = jest.fn();
+const mockRequest = jest.fn();
+const mockRequestBatteryOptimizationExemption = jest.fn();
 
-// Phase 1 blocking-permission service contract (backlog: "Permission-priming
-// screen copy/logic (Screen 2)"). The REAL permission requests are native
-// (ARCHITECTURE.md §4: Android Usage Access + SYSTEM_ALERT_WINDOW settings
-// intents; iOS FamilyControls authorization, requested at Screen 2) and land
-// with the Phase 3 native bridge. What Phase 1 pins is the SURFACE the screen
-// codes against, so the Phase 3 swap changes only this module's internals —
-// never the screen:
-//
-// - `blockingPermissions.getStatus()` / `.request()` both resolve a
-//   discriminated BlockingPermissionStatus: 'granted' | 'denied' |
-//   'undetermined'. One combined status for the blocking capability as a
-//   whole — per-platform nuance (Android's two separate grants) stays inside
-//   the future native module, which reports the weakest link
-//   (.claude/skills/testing-standards/SKILL.md native-modules rule: JS-side contract test
-//   over a mocked/absent bridge; real OS behavior is manual QA in Phase 3).
-// - The Phase 1 implementation is a pure-JS placeholder, deterministic by
-//   design: getStatus() always resolves 'undetermined' (nothing native exists
-//   to consult) and request() always resolves 'denied' (no bridge exists that
-//   could actually grant — resolving 'granted' here would fake a capability
-//   the app does not have). This also means Phase 1 dev builds exercise the
-//   denied-fallback path for real, which is the state that actually needs the
-//   recovery UX.
-// - Neither call ever rejects: permission state is an answer, not an error
-//   (the screen's fail-open posture depends on this).
-//
-// Determinism: no native modules, no timers, no storage — pure JS.
+import { NativeModules, Platform } from 'react-native';
 
-describe('blockingPermissions.getStatus', () => {
-  it("resolves 'undetermined' — the placeholder has no native source to consult", async () => {
+// NativeModules/Platform come from the RN jest preset's own mock — mutated
+// in place rather than replaced via jest.mock('react-native', ...), which
+// would eagerly re-evaluate the whole real module (including native-only
+// registries like DevMenu that don't exist outside a real app binary).
+(NativeModules as Record<string, unknown>).BlockingPermissionsModule = {
+  getStatus: (...args: unknown[]) => mockGetStatus(...args),
+  request: (...args: unknown[]) => mockRequest(...args),
+  requestBatteryOptimizationExemption: (...args: unknown[]) =>
+    mockRequestBatteryOptimizationExemption(...args),
+};
+
+import { blockingPermissions, requestBatteryOptimizationExemption } from './blocking-permissions';
+
+// Phase 3 task 3.2 (backlog.md): swaps the Phase 1 placeholder for the real
+// Android seam — apps/mobile/android/app/src/main/java/com/lockaltime/blocking/
+// BlockingPermissionsModule.kt checks Usage Access (AppOpsManager) + Overlay
+// (Settings.canDrawOverlays) and reports the weaker of the two, matching the
+// "one combined status, weakest link" contract this module has always
+// pinned. iOS keeps the Phase 1 placeholder behavior until task 3.6 wires
+// FamilyControls — this suite pins both branches. NativeModules is mocked
+// (no real bridge in Jest); the real OS behavior is manual QA
+// (docs/MANUAL_QA.md), but the Kotlin module is real and Gradle-build-verified.
+
+const setPlatform = (os: 'android' | 'ios'): void => {
+  (Platform as unknown as { OS: string }).OS = os;
+};
+
+describe('blockingPermissions on Android', () => {
+  beforeEach(() => {
+    setPlatform('android');
+    mockGetStatus.mockReset();
+    mockRequest.mockReset();
+    mockRequestBatteryOptimizationExemption.mockReset();
+  });
+
+  it('getStatus forwards a granted native result', async () => {
+    mockGetStatus.mockResolvedValue({ status: 'granted' });
+
+    await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'granted' });
+  });
+
+  it('getStatus forwards a denied native result (the weakest-link report)', async () => {
+    mockGetStatus.mockResolvedValue({ status: 'denied' });
+
+    await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'denied' });
+  });
+
+  it('getStatus falls back to undetermined for a garbage native payload — boundary validation', async () => {
+    mockGetStatus.mockResolvedValue({ status: 'not-a-real-status' });
+
     await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'undetermined' });
+  });
+
+  it('request forwards the native request outcome', async () => {
+    mockRequest.mockResolvedValue({ status: 'undetermined' });
+
+    await expect(blockingPermissions.request()).resolves.toEqual({ status: 'undetermined' });
+
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it('requestBatteryOptimizationExemption calls the native module and never throws', async () => {
+    mockRequestBatteryOptimizationExemption.mockResolvedValue(true);
+
+    await expect(requestBatteryOptimizationExemption()).resolves.toBeUndefined();
+    expect(mockRequestBatteryOptimizationExemption).toHaveBeenCalledTimes(1);
+  });
+
+  it('requestBatteryOptimizationExemption swallows a native rejection — best-effort, never blocks', async () => {
+    mockRequestBatteryOptimizationExemption.mockRejectedValue(new Error('unavailable'));
+
+    await expect(requestBatteryOptimizationExemption()).resolves.toBeUndefined();
   });
 });
 
-describe('blockingPermissions.request', () => {
-  it("resolves 'denied' — the placeholder can never mint a grant it cannot enforce", async () => {
+describe('blockingPermissions on iOS (Phase 1 placeholder, until task 3.6)', () => {
+  beforeEach(() => {
+    setPlatform('ios');
+    mockRequestBatteryOptimizationExemption.mockReset();
+  });
+
+  it("getStatus resolves 'undetermined' — no FamilyControls bridge yet", async () => {
+    await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'undetermined' });
+  });
+
+  it("request resolves 'denied' — no bridge exists that could actually grant", async () => {
     await expect(blockingPermissions.request()).resolves.toEqual({ status: 'denied' });
   });
-});
 
-describe('determinism of the placeholder', () => {
-  it('returns the same statuses on every call, in any interleaving', async () => {
-    // Statelessness is a placeholder-specific property (a real native module
-    // would report 'denied' from getStatus after a denied request); this case
-    // is replaced together with the implementation in Phase 3.
-    await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'undetermined' });
-    await expect(blockingPermissions.request()).resolves.toEqual({ status: 'denied' });
-    await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'undetermined' });
-    await expect(blockingPermissions.request()).resolves.toEqual({ status: 'denied' });
+  it('requestBatteryOptimizationExemption is a no-op — Android-only concept', async () => {
+    await expect(requestBatteryOptimizationExemption()).resolves.toBeUndefined();
+    expect(mockRequestBatteryOptimizationExemption).not.toHaveBeenCalled();
   });
 });

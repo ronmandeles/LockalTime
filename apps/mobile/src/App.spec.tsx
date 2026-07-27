@@ -184,6 +184,7 @@ jest.mock(
       getStatus: () => mockPermissionGetStatus(),
       request: () => mockPermissionRequest(),
     },
+    requestBatteryOptimizationExemption: () => Promise.resolve(),
   }),
   { virtual: true },
 );

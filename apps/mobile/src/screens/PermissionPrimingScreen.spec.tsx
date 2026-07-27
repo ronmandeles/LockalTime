@@ -1,7 +1,16 @@
 import React from 'react';
-import { Linking, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  AppState,
+  Linking,
+  StyleSheet,
+  type AppStateEvent,
+  type AppStateStatus,
+  type NativeEventSubscription,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
@@ -83,6 +92,7 @@ interface PermissionStatusStub {
 
 const mockGetStatus = jest.fn<Promise<PermissionStatusStub>, []>();
 const mockRequest = jest.fn<Promise<PermissionStatusStub>, []>();
+const mockRequestBatteryOptimizationExemption = jest.fn<Promise<void>, []>();
 
 // Mocking the service module pins that the screen goes through the contract
 // surface — an implementation reaching for a native module (or the placeholder
@@ -96,6 +106,7 @@ jest.mock(
       getStatus: () => mockGetStatus(),
       request: () => mockRequest(),
     },
+    requestBatteryOptimizationExemption: () => mockRequestBatteryOptimizationExemption(),
   }),
   { virtual: true },
 );
@@ -143,6 +154,10 @@ const asNumber = (value: unknown): number => {
 
 describe('PermissionPrimingScreen', () => {
   let openSettingsSpy: jest.SpyInstance<Promise<void>, []>;
+  let addEventListenerSpy: jest.SpyInstance<
+    NativeEventSubscription,
+    [type: AppStateEvent, listener: (state: AppStateStatus) => void]
+  >;
 
   beforeEach(() => {
     mockGetLocales.mockReset();
@@ -151,15 +166,38 @@ describe('PermissionPrimingScreen', () => {
     mockGetStatus.mockResolvedValue({ status: 'undetermined' });
     mockRequest.mockReset();
     mockRequest.mockResolvedValue({ status: 'undetermined' });
+    mockRequestBatteryOptimizationExemption.mockReset();
+    mockRequestBatteryOptimizationExemption.mockResolvedValue(undefined);
     // Linking is the one OS touchpoint; spied so no test opens real settings.
     openSettingsSpy = jest
       .spyOn(Linking, 'openSettings')
       .mockImplementation(async () => undefined);
+    addEventListenerSpy = jest.spyOn(AppState, 'addEventListener');
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
   });
+
+  // The screen's AppState 'change' subscription is the only foreground-return
+  // recheck mechanism (Usage Access/Overlay grants happen in a Settings
+  // screen the app never gets a direct callback from). Finds the *most
+  // recently registered* listener and fires it, simulating the OS resuming
+  // the app to 'active' — the spy's call history isn't guaranteed to be
+  // empty at the start of a test (RN's AppState mock doesn't fully reset via
+  // jest.restoreAllMocks() between tests), so the last registration is
+  // always the current test's own render, never an earlier one's.
+  const simulateAppBecameActive = async (): Promise<void> => {
+    const calls = addEventListenerSpy.mock.calls.filter(([eventName]) => eventName === 'change');
+    const call = calls.at(-1);
+    if (call === undefined) {
+      throw new Error('component did not register an AppState "change" listener');
+    }
+    const listener = call[1];
+    await act(async () => {
+      listener('active');
+    });
+  };
 
   describe('priming state', () => {
     it('renders the priming title, body, and Allow CTA from the en locale module', async () => {
@@ -216,6 +254,17 @@ describe('PermissionPrimingScreen', () => {
         expect(onHandled).toHaveBeenCalledTimes(1);
       });
       expect(screen.queryByTestId('permission-open-settings-cta')).toBeNull();
+    });
+
+    it('fires the battery-optimization exemption ask as a side effect of a real grant', async () => {
+      mockRequest.mockResolvedValue({ status: 'granted' });
+      await renderPermissionPrimingIn('en');
+
+      await pressAllow();
+
+      await waitFor(() => {
+        expect(mockRequestBatteryOptimizationExemption).toHaveBeenCalledTimes(1);
+      });
     });
   });
 
@@ -293,6 +342,44 @@ describe('PermissionPrimingScreen', () => {
       await fireEvent.press(screen.getByTestId('permission-proceed-anyway'));
 
       expect(onHandled).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('foreground-return recheck (Phase 3 task 3.2)', () => {
+    // Usage Access / Overlay grants happen in a Settings screen the app
+    // never gets a direct callback from — this is the only path back to
+    // 'granted' after "open settings", so it must actually work.
+    it('re-checks status and fires onHandled when the app returns to active and is now granted', async () => {
+      const onHandled = jest.fn<void, []>();
+      await renderPermissionPrimingIn('en', onHandled);
+      await driveToDeniedFallback();
+
+      mockGetStatus.mockResolvedValue({ status: 'granted' });
+      await simulateAppBecameActive();
+
+      await waitFor(() => expect(onHandled).toHaveBeenCalledTimes(1));
+      expect(mockRequestBatteryOptimizationExemption).toHaveBeenCalledTimes(1);
+    });
+
+    it('stays on the denied screen if the recheck still reports denied', async () => {
+      const onHandled = jest.fn<void, []>();
+      await renderPermissionPrimingIn('en', onHandled);
+      await driveToDeniedFallback();
+
+      mockGetStatus.mockResolvedValue({ status: 'denied' });
+      await simulateAppBecameActive();
+
+      expect(onHandled).not.toHaveBeenCalled();
+      expect(screen.getByTestId('permission-open-settings-cta')).toBeOnTheScreen();
+    });
+
+    it('does not recheck while still in the priming state — nothing to recover from yet', async () => {
+      await renderPermissionPrimingIn('en');
+
+      mockGetStatus.mockResolvedValue({ status: 'granted' });
+      await simulateAppBecameActive();
+
+      expect(mockGetStatus).not.toHaveBeenCalled();
     });
   });
 
