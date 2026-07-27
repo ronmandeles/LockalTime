@@ -2,6 +2,11 @@ import dotenv from 'dotenv';
 
 import { createApp } from './app';
 import { loadEnv } from './config/env';
+import { SESSION_SWEEP_INTERVAL_SECONDS } from './config/constants';
+import { createSupabaseSessionRealtimePort } from './modules/sessions/session-realtime-port';
+import { createSupabaseSessionsStore } from './modules/sessions/sessions-store';
+import { runSweep } from './modules/sessions/sweep';
+import { getSupabaseAdminClient } from './services/supabase-admin';
 
 // Populates process.env from a local .env file (see .env.example) — a
 // no-op if one isn't present, e.g. in CI, where the real env vars are set
@@ -14,6 +19,23 @@ dotenv.config();
 const env = loadEnv(process.env);
 
 const app = createApp(env);
+
+// Phase 4 decision (ARCHITECTURE.md §6, backlog.md task 7): the session
+// sweep worker runs in-process rather than as a separate deployment, since
+// no standalone scheduling infra exists yet. runSweep() itself is the
+// testable core (sweep.ts, sweep.test.ts); this setInterval wiring is the
+// untested runtime shell, same split as app.ts vs this file.
+const adminClient = getSupabaseAdminClient(env);
+const sweepDeps = {
+  store: createSupabaseSessionsStore(adminClient),
+  realtime: createSupabaseSessionRealtimePort(adminClient),
+  now: () => new Date(),
+};
+setInterval(() => {
+  runSweep(sweepDeps).catch((error: unknown) => {
+    console.error('Session sweep tick failed', error);
+  });
+}, SESSION_SWEEP_INTERVAL_SECONDS * 1000);
 
 app.listen(env.PORT, () => {
   console.log(`Lockal Time API listening on port ${env.PORT}`);

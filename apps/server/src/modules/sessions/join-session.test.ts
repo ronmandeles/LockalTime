@@ -40,6 +40,8 @@ const buildFakeStore = (
     writeSessionParticipants: jest.fn(),
     insertRewardsHistory: jest.fn(),
     markSessionEnded: jest.fn(),
+    listActiveSessions: jest.fn(),
+    migrateHost: jest.fn(),
   };
   return store;
 };

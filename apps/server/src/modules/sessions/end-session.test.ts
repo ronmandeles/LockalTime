@@ -87,6 +87,12 @@ const buildFakeStore = (
     }) {
       store.markedEnded = input;
     },
+    async listActiveSessions(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async migrateHost(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
   };
   return store;
 };

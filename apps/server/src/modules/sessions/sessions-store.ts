@@ -49,6 +49,18 @@ export interface SessionSummary {
   readonly startedAt: string | null;
 }
 
+// What the sweep worker (sweep.ts) needs to know about every currently
+// active session — a third, even narrower projection alongside
+// SessionRecord/SessionSummary, matching each caller's actual needs rather
+// than reusing one wide row shape everywhere.
+export interface ActiveSessionSummary {
+  readonly id: string;
+  readonly hostId: string;
+  readonly durationMode: DurationMode;
+  readonly plannedDurationMinutes: number | null;
+  readonly startedAt: string | null;
+}
+
 export interface PresenceIntervalRow {
   readonly userId: string;
   readonly joinedAt: string;
@@ -161,6 +173,18 @@ export interface SessionsStore {
     endedBy: string | null;
     endReason: EndReason;
   }): Promise<void>;
+
+  // --- Phase 4: sweep worker (host migration + stale reconciliation + auto-close) ---
+  listActiveSessions(): Promise<readonly ActiveSessionSummary[]>;
+  // Flips sessions.host_id, closes the old host's session_host_assignments
+  // row (unassigned_at), and opens a new one with reason='migration' — all
+  // three in one call so sweep.ts's caller never has to sequence them.
+  migrateHost(
+    sessionId: string,
+    oldHostId: string,
+    newHostId: string,
+    migratedAt: string,
+  ): Promise<void>;
 }
 
 interface SessionRow {
@@ -419,6 +443,51 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
 
     if (error !== null) {
       throw new ApiError(500, 'session_end_failed', error.message);
+    }
+  },
+
+  async listActiveSessions() {
+    const { data, error } = await client
+      .from('sessions')
+      .select('id, host_id, duration_mode, planned_duration_minutes, started_at')
+      .eq('status', 'active');
+
+    if (error !== null) {
+      throw new ApiError(500, 'session_sweep_failed', error.message);
+    }
+    return (data ?? []).map((row) => ({
+      id: row.id as string,
+      hostId: row.host_id as string,
+      durationMode: row.duration_mode as DurationMode,
+      plannedDurationMinutes: row.planned_duration_minutes as number | null,
+      startedAt: row.started_at as string | null,
+    }));
+  },
+
+  async migrateHost(sessionId, oldHostId, newHostId, migratedAt) {
+    const { error: sessionError } = await client
+      .from('sessions')
+      .update({ host_id: newHostId })
+      .eq('id', sessionId);
+    if (sessionError !== null) {
+      throw new ApiError(500, 'host_migration_failed', sessionError.message);
+    }
+
+    const { error: unassignError } = await client
+      .from('session_host_assignments')
+      .update({ unassigned_at: migratedAt })
+      .eq('session_id', sessionId)
+      .eq('user_id', oldHostId)
+      .is('unassigned_at', null);
+    if (unassignError !== null) {
+      throw new ApiError(500, 'host_migration_failed', unassignError.message);
+    }
+
+    const { error: assignError } = await client
+      .from('session_host_assignments')
+      .insert({ session_id: sessionId, user_id: newHostId, reason: 'migration' });
+    if (assignError !== null) {
+      throw new ApiError(500, 'host_migration_failed', assignError.message);
     }
   },
 });

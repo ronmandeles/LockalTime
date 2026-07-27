@@ -102,6 +102,12 @@ const buildFakeStore = (options: {
     async markSessionEnded(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async listActiveSessions(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async migrateHost(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
   };
   return store;
 };
