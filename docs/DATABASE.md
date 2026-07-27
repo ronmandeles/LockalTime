@@ -1,6 +1,6 @@
 # Lockal Time — Database Schema
 
-Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. 63/63 pgTAP passing (`supabase/tests/venues_test.sql`, `supabase/tests/sessions_test.sql`, `supabase/tests/join_session_test.sql`), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, and true concurrent-join-at-capacity against the live local stack; production push pending (manual, per `CLAUDE.md`). This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
+Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. 74/74 pgTAP passing (`supabase/tests/venues_test.sql`, `supabase/tests/sessions_test.sql`, `supabase/tests/join_session_test.sql`, `supabase/tests/phase4_lifecycle_test.sql`), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, and true concurrent-join-at-capacity against the live local stack; production push pending (manual, per `CLAUDE.md`). This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
 
 Note on RLS in production: a table's RLS policies alone don't grant access — Postgres privileges (`GRANT`) must exist too, and new tables get none by default for `anon`/`authenticated` **or `service_role`** (confirmed against the real local stack in Phase 2 task 2.3 — the Node API's own service-role writes 500'd until `service_role` got explicit grants too). See `.claude/skills/supabase-integration/SKILL.md` for the pattern (table-wide `SELECT`, column-scoped `UPDATE` to exclude fields like `role`, and a `service_role` grant for every table the Node API writes to).
 
@@ -81,7 +81,7 @@ create table public.sessions (
   ended_at                 timestamptz,
   ended_by                 uuid references public.users(id),
   end_reason               text
-                             check (end_reason in ('host_ended', 'planned_duration_reached')),
+                             check (end_reason in ('host_ended', 'planned_duration_reached', 'force_terminated')),
   created_at               timestamptz not null default now(),
 
   constraint chk_dynamic_qr_has_token
@@ -117,7 +117,12 @@ create table public.session_presence_intervals (
   joined_at         timestamptz not null default now(),
   left_at           timestamptz,      -- null while still connected
   disconnect_reason text
-                      check (disconnect_reason in ('emergency_exit', 'involuntary_disconnect', 'session_ended'))
+                      check (disconnect_reason in ('emergency_exit', 'involuntary_disconnect', 'session_ended')),
+  blocker_ready_at  timestamptz       -- Phase 4: set once the device confirms
+                                       -- the native blocker actually started;
+                                       -- null = never counts toward the Group
+                                       -- Bonus 5+ threshold (still counts for
+                                       -- base points). See §7 "Bonus Computation".
 );
 
 create index idx_presence_session on public.session_presence_intervals(session_id);
@@ -132,7 +137,7 @@ create table public.session_participants (
   user_id                   uuid not null references public.users(id),
   is_host                   boolean not null default false,
   total_minutes_present     int not null default 0,
-  exit_reason               text check (exit_reason in ('completed', 'emergency_exit')),
+  exit_reason               text check (exit_reason in ('completed', 'emergency_exit', 'disconnected')),
   group_bonus_earned        boolean not null default false,
   completion_bonus_earned   boolean not null default false,
   points_earned             int not null default 0,
@@ -289,6 +294,7 @@ All rules above are confirmed final — see `docs/ARCHITECTURE.md` §7/§11.
 | `COMPLETION_BONUS_MIN_SESSION_MINUTES` | 60 | |
 | `COMPLETION_BONUS_JOIN_TOLERANCE_SECONDS` | 60 | practical tolerance for "joined at the start" |
 | `HOST_MIGRATION_PRESENCE_TIMEOUT_SECONDS` | 20 | debounced to avoid migration storms |
+| `PARTICIPANT_PRESENCE_TIMEOUT_MINUTES` | 30 | non-host stale-interval reconciliation (Phase 4) — matches the native offline-cutoff grace period, §4, so a brief disconnect isn't penalized |
 | `OPEN_ENDED_SESSION_MAX_HOURS` | 24 | server force-closes past this |
 | `STREAK_GRACE_HOURS` | 48 | |
 | `BLOCKED_APP_CATEGORIES` | `[Social Networking, Games, Entertainment]` | Fixed default-category blocklist, not per-session/per-user configurable; see `docs/ARCHITECTURE.md` §4 |
