@@ -8,7 +8,7 @@ import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
 // mutated in place rather than replaced via jest.mock('react-native', ...),
 // which would eagerly re-evaluate the whole real module (same reasoning as
 // blocking-permissions.test.ts).
-(NativeModules as Record<string, unknown>).AppBlockerModule = {
+const NATIVE_MODULE_STUB = {
   start: (...args: unknown[]) => mockStart(...args),
   stop: (...args: unknown[]) => mockStop(...args),
   getStatus: (...args: unknown[]) => mockGetStatus(...args),
@@ -18,17 +18,19 @@ import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
 
 import { appBlocker } from './app-blocker';
 
-// Phase 3 tasks 3.0/3.3 (backlog.md): the AppBlockerModule contract, and its
-// real Android implementation. Android emits events via the Kotlin module's
-// AppBlockerModule.emitEvent -> RCTDeviceEventEmitter (BlockerForegroundService.kt),
-// so the JS side listens on the shared DeviceEventEmitter directly rather
-// than wrapping a NativeEventEmitter around the native module — the
-// Kotlin module's addListener/removeListeners are no-op bookkeeping methods
-// only (required by the bridge, not by this delivery path). iOS keeps the
-// Phase 3.0 placeholder until task 3.6 wires FamilyControls; this suite
-// pins both branches. NativeModules is mocked (no real bridge in Jest); the
-// real OS/native behavior is manual QA (docs/MANUAL_QA.md), but the Kotlin
-// module itself is Gradle-build-verified.
+// Phase 3 tasks 3.0/3.3 (Android)/3.6 (iOS): both platforms register a real
+// native module under the same name, AppBlockerModule, with the same
+// start/stop/getStatus shape — start/stop/getStatus need no Platform.OS
+// branching, just "is a module registered." Event *delivery* genuinely
+// differs though: Android's Kotlin module emits via the shared
+// RCTDeviceEventEmitter (BlockerForegroundService.kt calling
+// AppBlockerModule.emitEvent), so JS listens on the shared DeviceEventEmitter
+// directly; iOS's Swift module is an RCTEventEmitter subclass, so JS must
+// wrap it in its own NativeEventEmitter — see app-blocker.ts's header.
+// NativeModules is mocked (no real bridge in Jest); the real OS/native
+// behavior is manual QA (docs/MANUAL_QA.md). Android's Kotlin module is
+// Gradle-build-verified; iOS's Swift module is written but not yet linked
+// into the Xcode project (no Mac).
 
 const setPlatform = (os: 'android' | 'ios'): void => {
   (Platform as unknown as { OS: string }).OS = os;
@@ -36,15 +38,16 @@ const setPlatform = (os: 'android' | 'ios'): void => {
 
 const CONFIG = { sessionId: 'session-1', endsAt: null, blockedCategories: ['social'] as const };
 
-describe('appBlocker on Android', () => {
+describe('appBlocker with a native module registered', () => {
   beforeEach(() => {
-    setPlatform('android');
+    (NativeModules as Record<string, unknown>).AppBlockerModule = NATIVE_MODULE_STUB;
     mockStart.mockReset().mockResolvedValue(undefined);
     mockStop.mockReset().mockResolvedValue(undefined);
     mockGetStatus.mockReset();
   });
 
-  it('start forwards the session config to the native module', async () => {
+  it.each(['android', 'ios'] as const)('start forwards the session config to the native module on %s', async (os) => {
+    setPlatform(os);
     await appBlocker.start(CONFIG);
 
     expect(mockStart).toHaveBeenCalledWith({
@@ -54,19 +57,22 @@ describe('appBlocker on Android', () => {
     });
   });
 
-  it('stop calls the native module', async () => {
+  it.each(['android', 'ios'] as const)('stop calls the native module on %s', async (os) => {
+    setPlatform(os);
     await appBlocker.stop();
 
     expect(mockStop).toHaveBeenCalledTimes(1);
   });
 
   it('getStatus forwards a real active status', async () => {
+    setPlatform('android');
     mockGetStatus.mockResolvedValue({ state: 'active', sessionId: 'session-1' });
 
     await expect(appBlocker.getStatus()).resolves.toEqual({ state: 'active', sessionId: 'session-1' });
   });
 
   it('getStatus forwards a real violation status', async () => {
+    setPlatform('android');
     mockGetStatus.mockResolvedValue({
       state: 'violation',
       sessionId: 'session-1',
@@ -81,18 +87,24 @@ describe('appBlocker on Android', () => {
   });
 
   it('getStatus falls back to inactive for a garbage native payload — boundary validation', async () => {
+    setPlatform('android');
     mockGetStatus.mockResolvedValue({ state: 'not-a-real-state' });
 
     await expect(appBlocker.getStatus()).resolves.toEqual({ state: 'inactive' });
   });
 
   it('getStatus falls back to inactive for a violation payload with an unrecognized reason', async () => {
+    setPlatform('android');
     mockGetStatus.mockResolvedValue({ state: 'violation', sessionId: 'session-1', reason: 'made-up' });
 
     await expect(appBlocker.getStatus()).resolves.toEqual({ state: 'inactive' });
   });
 
-  describe('addEventListener', () => {
+  describe('addEventListener on Android (shared DeviceEventEmitter)', () => {
+    beforeEach(() => {
+      setPlatform('android');
+    });
+
     it('forwards a valid shield_triggered event', () => {
       const listener = jest.fn();
       appBlocker.addEventListener(listener);
@@ -198,28 +210,79 @@ describe('appBlocker on Android', () => {
       }).not.toThrow();
     });
   });
+
+  describe('addEventListener on iOS (NativeEventEmitter wrapping the module)', () => {
+    beforeEach(() => {
+      setPlatform('ios');
+    });
+
+    it('forwards a valid shield_triggered event', () => {
+      const listener = jest.fn();
+      appBlocker.addEventListener(listener);
+
+      DeviceEventEmitter.emit('shield_triggered', {
+        sessionId: 'session-1',
+        category: 'social',
+        at: '2026-07-27T00:00:00.000Z',
+      });
+
+      expect(listener).toHaveBeenCalledWith({
+        type: 'shield_triggered',
+        sessionId: 'session-1',
+        category: 'social',
+        at: '2026-07-27T00:00:00.000Z',
+      });
+    });
+
+    it('drops a malformed payload instead of forwarding garbage — boundary validation', () => {
+      const listener = jest.fn();
+      appBlocker.addEventListener(listener);
+
+      DeviceEventEmitter.emit('battery_critical', { sessionId: 'session-1', level: 'not-a-number' });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('unsubscribe stops delivering events', () => {
+      const listener = jest.fn();
+      const unsubscribe = appBlocker.addEventListener(listener);
+
+      unsubscribe();
+      DeviceEventEmitter.emit('shield_triggered', {
+        sessionId: 'session-1',
+        category: 'social',
+        at: '2026-07-27T00:00:00.000Z',
+      });
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
 });
 
-describe('appBlocker on iOS (Phase 3.0 placeholder, until task 3.6)', () => {
+describe('appBlocker with no native module registered (today\'s real state on iOS until a build links one)', () => {
   beforeEach(() => {
-    setPlatform('ios');
+    delete (NativeModules as Record<string, unknown>).AppBlockerModule;
   });
 
-  it('start resolves without calling any native module', async () => {
+  it.each(['android', 'ios'] as const)('start resolves without throwing on %s', async (os) => {
+    setPlatform(os);
     await expect(appBlocker.start(CONFIG)).resolves.toBeUndefined();
     expect(mockStart).not.toHaveBeenCalled();
   });
 
-  it('stop resolves without calling any native module', async () => {
+  it.each(['android', 'ios'] as const)('stop resolves without throwing on %s', async (os) => {
+    setPlatform(os);
     await expect(appBlocker.stop()).resolves.toBeUndefined();
     expect(mockStop).not.toHaveBeenCalled();
   });
 
-  it("getStatus resolves { state: 'inactive' }", async () => {
+  it.each(['android', 'ios'] as const)("getStatus resolves { state: 'inactive' } on %s", async (os) => {
+    setPlatform(os);
     await expect(appBlocker.getStatus()).resolves.toEqual({ state: 'inactive' });
   });
 
-  it('addEventListener never invokes the listener', () => {
+  it.each(['android', 'ios'] as const)('addEventListener never invokes the listener on %s', (os) => {
+    setPlatform(os);
     const listener = jest.fn();
     appBlocker.addEventListener(listener);
 
@@ -233,6 +296,7 @@ describe('appBlocker on iOS (Phase 3.0 placeholder, until task 3.6)', () => {
   });
 
   it('addEventListener returns a safe-to-call unsubscribe', () => {
+    setPlatform('android');
     const unsubscribe = appBlocker.addEventListener(() => {});
     expect(() => unsubscribe()).not.toThrow();
   });

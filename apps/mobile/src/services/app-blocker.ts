@@ -1,19 +1,23 @@
-import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
+import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
 import type { BlockedCategory } from '../config/blocked-categories';
 
 // AppBlockerModule seam for the native blocker bridge (ARCHITECTURE.md §4).
-// Phase 3 task 3.3 wires the real Android half: BlockerForegroundService.kt
-// (Foreground Service + UsageStatsManager polling + SYSTEM_ALERT_WINDOW
-// overlay) started/stopped via AppBlockerModule.kt, emitting BlockerEvents
-// through RCTDeviceEventEmitter — so this module listens on the shared
-// DeviceEventEmitter directly rather than wrapping a NativeEventEmitter
-// around the native module (the Kotlin module's addListener/removeListeners
-// are no-op bridge bookkeeping only, not this delivery path). iOS keeps the
-// Phase 3.0 placeholder until task 3.6 wires FamilyControls.
+// Both platforms register a real native module under the same name,
+// AppBlockerModule, with the same start/stop/getStatus shape — Phase 3 task
+// 3.3 (Android: BlockerForegroundService.kt, Gradle-build-verified) and
+// task 3.6 (iOS: ManagedSettingsStore + DeviceActivityMonitor, written but
+// not yet linked into the Xcode project — no Mac). So start/stop/getStatus
+// need no Platform.OS branching, same simplification as
+// blocking-permissions.ts. Event *delivery* genuinely differs per platform
+// though, not just "not implemented yet": Android's Kotlin module emits via
+// the shared RCTDeviceEventEmitter (no NativeEventEmitter wrapper needed —
+// its addListener/removeListeners are bridge bookkeeping only), while iOS's
+// Swift module is an RCTEventEmitter subclass, which JS must wrap in its
+// own NativeEventEmitter instance to subscribe to.
 //
-// Every call branches on Platform.OS at CALL time (not cached at module-load
-// time) — same lesson as blocking-permissions.ts: caching a native-module
+// Every call reads the native module fresh at CALL time (not cached at
+// module-load time) — same lesson as blocking-permissions.ts: caching a
 // reference in a top-level const makes the seam unmockable in Jest, since
 // imports execute before any later test-file mutation of NativeModules.
 
@@ -175,12 +179,10 @@ const EVENT_NAMES = [
 
 export const appBlocker: AppBlockerModule = {
   start: async (config: SessionBlockerConfig): Promise<void> => {
-    if (Platform.OS !== 'android') {
-      // iOS placeholder until task 3.6 — nothing native exists yet to start.
-      return;
-    }
     const native = getNativeModule();
     if (native === undefined) {
+      // No native module registered on this build yet — fail-open, never
+      // crash (matches blocking-permissions.ts's posture).
       return;
     }
     await native.start({
@@ -191,9 +193,6 @@ export const appBlocker: AppBlockerModule = {
   },
 
   stop: async (): Promise<void> => {
-    if (Platform.OS !== 'android') {
-      return;
-    }
     const native = getNativeModule();
     if (native === undefined) {
       return;
@@ -202,9 +201,6 @@ export const appBlocker: AppBlockerModule = {
   },
 
   getStatus: async (): Promise<BlockerStatus> => {
-    if (Platform.OS !== 'android') {
-      return { state: 'inactive' };
-    }
     const native = getNativeModule();
     if (native === undefined) {
       return { state: 'inactive' };
@@ -213,11 +209,31 @@ export const appBlocker: AppBlockerModule = {
   },
 
   addEventListener: (listener: (event: BlockerEvent) => void): (() => void) => {
-    if (Platform.OS !== 'android') {
+    const native = getNativeModule();
+    if (native === undefined) {
       return (): void => {};
     }
+
+    if (Platform.OS === 'android') {
+      const subscriptions = EVENT_NAMES.map((eventName) =>
+        DeviceEventEmitter.addListener(eventName, (payload: unknown) => {
+          const event = toBlockerEvent(eventName, payload);
+          if (event !== null) {
+            listener(event);
+          }
+        }),
+      );
+      return (): void => {
+        subscriptions.forEach((subscription) => subscription.remove());
+      };
+    }
+
+    // iOS: AppBlockerModule.swift is an RCTEventEmitter subclass — JS must
+    // wrap it in its own NativeEventEmitter to subscribe (unlike Android's
+    // shared DeviceEventEmitter above).
+    const emitter = new NativeEventEmitter(native as never);
     const subscriptions = EVENT_NAMES.map((eventName) =>
-      DeviceEventEmitter.addListener(eventName, (payload: unknown) => {
+      emitter.addListener(eventName, (payload: unknown) => {
         const event = toBlockerEvent(eventName, payload);
         if (event !== null) {
           listener(event);

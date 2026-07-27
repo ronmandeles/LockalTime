@@ -1,0 +1,8 @@
+/* Phase 3 task 3.6: native SwiftUI chrome around FamilyControls'
+   FamilyActivityPicker (Blocking/ActivityPickerHostView.swift) — the one
+   piece of user-visible iOS text that isn't React Native, so it gets its
+   own Localizable.strings pair instead of the JS i18n bundle
+   (CLAUDE.md: no hardcoded UI strings, en+he from day one). */
+"activityPicker.title" = "Choose categories to block";
+"activityPicker.cancel" = "Cancel";
+"activityPicker.done" = "Done";

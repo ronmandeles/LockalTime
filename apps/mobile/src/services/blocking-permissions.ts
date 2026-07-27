@@ -2,16 +2,25 @@ import { NativeModules, Platform } from 'react-native';
 
 // Blocking-permission service contract for Screen 2 (permission priming).
 //
-// Phase 3 task 3.2: swaps the Phase 1 placeholder for the real Android seam.
-// apps/mobile/android/app/src/main/java/com/lockaltime/blocking/
-// BlockingPermissionsModule.kt checks Usage Access (AppOpsManager) + Overlay
-// (Settings.canDrawOverlays) and reports the weaker of the two as one
-// combined status — the screen never sees per-platform nuance. iOS keeps the
-// Phase 1 placeholder (FamilyControls arrives in task 3.6) so this module
-// stays the seam PermissionPrimingScreen always coded against
-// (.claude/skills/testing-standards/SKILL.md native-modules rule: JS-side
-// contract test over the mocked bridge; real OS behavior is manual QA,
-// docs/MANUAL_QA.md, though the Kotlin module itself is Gradle-build-verified).
+// Phase 3 tasks 3.2 (Android) / 3.6 (iOS) both swap in a real native module
+// under the SAME name, `BlockingPermissionsModule`, each reporting the same
+// `{ status }` shape — so this module needs no Platform.OS branching at
+// all for getStatus/request: it just calls whichever native module is
+// actually registered.
+// - Android: apps/mobile/android/.../blocking/BlockingPermissionsModule.kt
+//   checks Usage Access (AppOpsManager) + Overlay (Settings.canDrawOverlays).
+//   Gradle-build-verified.
+// - iOS: apps/mobile/ios/LockalTime/Blocking/BlockingPermissionsModule.swift
+//   checks FamilyControls authorization + a saved category selection (the
+//   FamilyActivityPicker flow). Written but NOT compiled or linked into the
+//   Xcode project yet (no Mac) — see that file's header and
+//   docs/MANUAL_QA.md's iOS extension target setup.
+// Until either is actually wired into a running build, NativeModules.
+// BlockingPermissionsModule is undefined and the fallbacks below apply —
+// this is today's real state on both platforms in this repo, not a
+// deliberate placeholder distinction anymore (.claude/skills/testing-standards/SKILL.md
+// native-modules rule: JS-side contract test over the mocked bridge; real
+// OS behavior is manual QA, docs/MANUAL_QA.md).
 //
 // Neither call ever rejects: permission state is an answer, not an error.
 
@@ -57,19 +66,17 @@ const toStatus = (raw: { readonly status: unknown }): BlockingPermissionStatus =
 export const blockingPermissions: BlockingPermissionsService = {
   getStatus: async (): Promise<BlockingPermissionStatus> => {
     const nativeModule = getNativeModule();
-    if (Platform.OS !== 'android' || nativeModule === undefined) {
+    if (nativeModule === undefined) {
       return UNDETERMINED;
     }
     return toStatus(await nativeModule.getStatus());
   },
   request: async (): Promise<BlockingPermissionStatus> => {
-    if (Platform.OS !== 'android') {
-      // iOS Phase 1 placeholder: no bridge exists that could actually grant.
-      return DENIED;
-    }
     const nativeModule = getNativeModule();
     if (nativeModule === undefined) {
-      return UNDETERMINED;
+      // No bridge registered on this build yet — an answer, not a retry
+      // invitation, since nothing here could actually change on a retry.
+      return DENIED;
     }
     return toStatus(await nativeModule.request());
   },
@@ -79,10 +86,14 @@ export const blockingPermissions: BlockingPermissionsService = {
 // best-effort, non-blocking ask — Android reliability UX, not part of the
 // granted/denied capability above (Android never lets an app force this, so
 // it can't gate anything). Fired once after the main permission flow
-// succeeds; never rejects, iOS is a no-op until it has an equivalent.
+// succeeds. Android-only concept: iOS has no equivalent setting, not just
+// "not implemented yet" — never rejects either way.
 export const requestBatteryOptimizationExemption = async (): Promise<void> => {
+  if (Platform.OS !== 'android') {
+    return;
+  }
   const nativeModule = getNativeModule();
-  if (Platform.OS !== 'android' || nativeModule === undefined) {
+  if (nativeModule === undefined) {
     return;
   }
   await nativeModule.requestBatteryOptimizationExemption().catch(() => undefined);

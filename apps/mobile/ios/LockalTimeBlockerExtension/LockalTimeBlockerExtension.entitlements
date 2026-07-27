@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Phase 3 task 3.6 (backlog.md): reference entitlements for the
+  DeviceActivityMonitor extension target — same App Groups identifier as
+  the main app (LockalTime.entitlements) so both can read/write
+  SharedAppGroup's UserDefaults suite, plus Family Controls since this
+  extension calls ManagedSettingsStore directly. Not wired into any real
+  Xcode target in this repo — see DeviceActivityMonitorExtension.swift's
+  header.
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.com.lockaltime.app</string>
+	</array>
+	<key>com.apple.developer.family-controls</key>
+	<true/>
+</dict>
+</plist>

@@ -1,0 +1,4 @@
+/* Phase 3 task 3.6 — see en.lproj/Localizable.strings for context. */
+"activityPicker.title" = "בחירת קטגוריות לחסימה";
+"activityPicker.cancel" = "ביטול";
+"activityPicker.done" = "סיום";
