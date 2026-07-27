@@ -30,6 +30,10 @@ export interface SessionRecord {
   readonly plannedDurationMinutes: number | null;
   readonly qrToken: string | null;
   readonly qrExpiresAt: string | null;
+  // Set at creation (Phase 4: sessions activate immediately, see
+  // create-session.ts) — never null for a session created through this
+  // path, but typed nullable to match the DB column's real shape.
+  readonly startedAt: string | null;
   readonly createdAt: string;
 }
 
@@ -42,6 +46,8 @@ export interface NewSessionInput {
   readonly plannedDurationMinutes: number | null;
   readonly qrToken: string | null;
   readonly qrExpiresAt: string | null;
+  readonly status: SessionStatus;
+  readonly startedAt: string;
 }
 
 // Thin persistence seam over the sessions/session_host_assignments tables —
@@ -68,6 +74,11 @@ export interface SessionsStore {
   // was none to close (already left, or never joined) — a single UPDATE
   // scoped to one row, so no TOCTOU concern the way join has.
   closeOpenInterval(sessionId: string, userId: string, reason: DisconnectReason): Promise<boolean>;
+  // Opens a presence interval directly, bypassing join_session() — used
+  // only for the host's own interval at session creation (Phase 4), since
+  // the host isn't "joining" through a QR token/capacity check the way a
+  // participant does.
+  insertPresenceInterval(sessionId: string, userId: string, joinedAt: string): Promise<void>;
 }
 
 interface SessionRow {
@@ -80,6 +91,7 @@ interface SessionRow {
   planned_duration_minutes: number | null;
   qr_token: string | null;
   qr_expires_at: string | null;
+  started_at: string | null;
   created_at: string;
 }
 
@@ -93,6 +105,7 @@ const toSessionRecord = (row: SessionRow): SessionRecord => ({
   plannedDurationMinutes: row.planned_duration_minutes,
   qrToken: row.qr_token,
   qrExpiresAt: row.qr_expires_at,
+  startedAt: row.started_at,
   createdAt: row.created_at,
 });
 
@@ -109,6 +122,8 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
         planned_duration_minutes: input.plannedDurationMinutes,
         qr_token: input.qrToken,
         qr_expires_at: input.qrExpiresAt,
+        status: input.status,
+        started_at: input.startedAt,
       })
       .select()
       .single<SessionRow>();
@@ -156,5 +171,15 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
       throw new ApiError(500, 'session_leave_failed', error.message);
     }
     return (data?.length ?? 0) > 0;
+  },
+
+  async insertPresenceInterval(sessionId, userId, joinedAt) {
+    const { error } = await client
+      .from('session_presence_intervals')
+      .insert({ session_id: sessionId, user_id: userId, joined_at: joinedAt });
+
+    if (error !== null) {
+      throw new ApiError(500, 'session_create_failed', error.message);
+    }
   },
 });

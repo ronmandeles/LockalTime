@@ -30,6 +30,7 @@ const buildFakeStore = (
       return joinOutcome;
     },
     closeOpenInterval: jest.fn(async (_s: string, _u: string, _r: DisconnectReason) => true),
+    insertPresenceInterval: jest.fn(),
   };
   return store;
 };

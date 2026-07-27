@@ -54,11 +54,12 @@ const buildFakeStore = (): SessionsStore & {
         hostId: input.hostId,
         venueId: input.venueId,
         type: input.type,
-        status: 'pending',
+        status: input.status,
         durationMode: input.durationMode,
         plannedDurationMinutes: input.plannedDurationMinutes,
         qrToken: input.qrToken,
         qrExpiresAt: input.qrExpiresAt,
+        startedAt: input.startedAt,
         createdAt: '2026-07-26T00:00:00.000Z',
       };
     },
@@ -69,6 +70,7 @@ const buildFakeStore = (): SessionsStore & {
     ): Promise<void> {
       store.hostAssignment = { sessionId, userId, reason };
     },
+    async insertPresenceInterval(): Promise<void> {},
     // Not exercised by these tests — present only to satisfy the
     // SessionsStore interface.
     async joinSession(): Promise<never> {

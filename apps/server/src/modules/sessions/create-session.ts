@@ -17,6 +17,14 @@ export interface CreateSessionInput {
 // hostId is trusted as already-sanitized: the router derives it from the
 // verified JWT (req.auth.userId), never from the request body, so a
 // caller can't create a session "hosted by" someone else.
+//
+// Phase 4 decision (ARCHITECTURE.md §6): a session activates immediately at
+// creation — there's no separate "start" step anywhere in the screens spec
+// (Create -> straight to Active Session) — so status/started_at are set
+// here, not left at the table's pending/null defaults. The host also gets
+// their own open presence interval here, the same as a participant's /join
+// does, since bonus math (points/) needs every participant's interval
+// history including the host's.
 export const createSession = async (
   store: SessionsStore,
   qrSigningSecret: string,
@@ -28,6 +36,7 @@ export const createSession = async (
   const qrExpiresAt = needsQrToken
     ? new Date(Date.now() + QR_TOKEN_TTL_MINUTES * 60_000).toISOString()
     : null;
+  const startedAt = new Date().toISOString();
 
   const session = await store.insertSession({
     id,
@@ -38,9 +47,12 @@ export const createSession = async (
     plannedDurationMinutes: input.plannedDurationMinutes,
     qrToken,
     qrExpiresAt,
+    status: 'active',
+    startedAt,
   });
 
   await store.insertHostAssignment(session.id, input.hostId, 'initial_host');
+  await store.insertPresenceInterval(session.id, input.hostId, session.startedAt ?? startedAt);
 
   return session;
 };

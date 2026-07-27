@@ -128,12 +128,17 @@ describe('sessions integration (local Supabase)', () => {
       .select('user_id, left_at, disconnect_reason')
       .eq('session_id', sessionId);
     expect(error).toBeNull();
-    expect(intervals).toHaveLength(1);
-    expect(intervals?.[0]).toMatchObject({
-      user_id: participant.userId,
+    // 2 rows: the host's own open interval (Phase 4 — created immediately
+    // at session creation) + the participant's now-closed one.
+    expect(intervals).toHaveLength(2);
+    const participantInterval = intervals?.find((row) => row.user_id === participant.userId);
+    expect(participantInterval).toMatchObject({
       disconnect_reason: 'emergency_exit',
     });
-    expect(intervals?.[0]?.left_at).not.toBeNull();
+    expect(participantInterval?.left_at).not.toBeNull();
+
+    const hostInterval = intervals?.find((row) => row.user_id === host.userId);
+    expect(hostInterval).toMatchObject({ left_at: null, disconnect_reason: null });
   });
 
   it('records a monitor-mode device attestation row when the create request includes one', async () => {
@@ -205,21 +210,24 @@ describe('sessions integration (local Supabase)', () => {
     const sessionId = createResponse.body.id as string;
     const qrToken = createResponse.body.qrToken as string;
 
-    // Exercises join_session() directly with max_participants=1 — proves
-    // the DB-level row lock serializes two truly concurrent callers,
-    // independent of the app's SESSION_MAX_PARTICIPANTS constant.
+    // Exercises join_session() directly with max_participants=2 — the host
+    // already occupies 1 slot from creation (Phase 4: the host gets their
+    // own open presence interval immediately), leaving exactly 1 open slot
+    // for the two concurrent callers below. Proves the DB-level row lock
+    // serializes two truly concurrent callers, independent of the app's
+    // SESSION_MAX_PARTICIPANTS constant.
     const [resultA, resultB] = await Promise.all([
       adminClient.rpc('join_session', {
         p_session_id: sessionId,
         p_user_id: a.userId,
         p_token: qrToken,
-        p_max_participants: 1,
+        p_max_participants: 2,
       }),
       adminClient.rpc('join_session', {
         p_session_id: sessionId,
         p_user_id: b.userId,
         p_token: qrToken,
-        p_max_participants: 1,
+        p_max_participants: 2,
       }),
     ]);
 

@@ -14,6 +14,7 @@ const HOST_ID = '55555555-5555-5555-5555-555555555555';
 const buildFakeStore = (): SessionsStore & {
   insertedSession: NewSessionInput | null;
   hostAssignment: { sessionId: string; userId: string; reason: HostAssignmentReason } | null;
+  hostPresenceInterval: { sessionId: string; userId: string; joinedAt: string } | null;
 } => {
   const store = {
     insertedSession: null as NewSessionInput | null,
@@ -22,6 +23,7 @@ const buildFakeStore = (): SessionsStore & {
       userId: string;
       reason: HostAssignmentReason;
     } | null,
+    hostPresenceInterval: null as { sessionId: string; userId: string; joinedAt: string } | null,
     async insertSession(input: NewSessionInput): Promise<SessionRecord> {
       store.insertedSession = input;
       return {
@@ -29,11 +31,12 @@ const buildFakeStore = (): SessionsStore & {
         hostId: input.hostId,
         venueId: input.venueId,
         type: input.type,
-        status: 'pending',
+        status: input.status,
         durationMode: input.durationMode,
         plannedDurationMinutes: input.plannedDurationMinutes,
         qrToken: input.qrToken,
         qrExpiresAt: input.qrExpiresAt,
+        startedAt: input.startedAt,
         createdAt: new Date().toISOString(),
       };
     },
@@ -43,6 +46,13 @@ const buildFakeStore = (): SessionsStore & {
       reason: HostAssignmentReason,
     ): Promise<void> {
       store.hostAssignment = { sessionId, userId, reason };
+    },
+    async insertPresenceInterval(
+      sessionId: string,
+      userId: string,
+      joinedAt: string,
+    ): Promise<void> {
+      store.hostPresenceInterval = { sessionId, userId, joinedAt };
     },
     // Not exercised by createSession — present only to satisfy the
     // SessionsStore interface.
@@ -107,6 +117,45 @@ describe('createSession', () => {
       sessionId: session.id,
       userId: HOST_ID,
       reason: 'initial_host',
+    });
+  });
+
+  it('activates the session immediately, setting status and started_at at creation', async () => {
+    const store = buildFakeStore();
+    const before = Date.now();
+
+    const session = await createSession(store, QR_SECRET, {
+      hostId: HOST_ID,
+      type: 'solo',
+      durationMode: 'fixed',
+      plannedDurationMinutes: 30,
+      venueId: null,
+    });
+
+    expect(session.status).toBe('active');
+    expect(session.startedAt).not.toBeNull();
+    const startedAtMs = new Date(session.startedAt as string).getTime();
+    expect(startedAtMs).toBeGreaterThanOrEqual(before);
+    expect(startedAtMs).toBeLessThan(before + 5_000);
+    expect(store.insertedSession?.status).toBe('active');
+    expect(store.insertedSession?.startedAt).toBe(session.startedAt);
+  });
+
+  it('gives the host their own open presence interval at creation, starting at started_at', async () => {
+    const store = buildFakeStore();
+
+    const session = await createSession(store, QR_SECRET, {
+      hostId: HOST_ID,
+      type: 'dynamic_qr',
+      durationMode: 'fixed',
+      plannedDurationMinutes: 30,
+      venueId: null,
+    });
+
+    expect(store.hostPresenceInterval).toEqual({
+      sessionId: session.id,
+      userId: HOST_ID,
+      joinedAt: session.startedAt,
     });
   });
 

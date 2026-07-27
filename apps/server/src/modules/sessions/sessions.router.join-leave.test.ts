@@ -57,6 +57,7 @@ const buildFakeStore = (options: {
       store.closeCalledWith = { sessionId, userId, reason };
       return options.closeResult ?? true;
     },
+    async insertPresenceInterval(_s: string, _u: string, _j: string) {},
   };
   return store;
 };
