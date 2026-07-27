@@ -2,6 +2,11 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- react-native-vision-camera (Phase 3 task 3.5): real QR-code
+         scanning on the Scan screen. Normal runtime permission, requested
+         via useCameraPermission()'s requestPermission() — not a Settings
+         redirect like Usage Access/Overlay above. -->
+    <uses-permission android:name="android.permission.CAMERA" />
     <!-- Usage Access: a "special app op", granted only via Settings, never a
          runtime dialog — Play's protected-permission lint would otherwise
          flag this as unrequestable at install time. -->

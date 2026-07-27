@@ -66,6 +66,13 @@ jest.mock(
   { virtual: true },
 );
 
+// react-native-vision-camera's native module doesn't exist in Jest (Phase 3
+// task 3.5) — App.tsx transitively renders ScanSessionScreen via
+// navigation, so this mock is required wherever the real App tree mounts.
+jest.mock('react-native-vision-camera', () => ({
+  useCameraPermission: () => ({ hasPermission: false, requestPermission: jest.fn() }),
+}));
+
 interface RawUserStub {
   readonly email?: string;
   readonly id: string;

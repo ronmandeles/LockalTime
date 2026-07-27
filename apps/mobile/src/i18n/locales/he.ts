@@ -34,6 +34,12 @@ export const he: TranslationSchema = {
     body: 'הזינו את הקוד מה-QR של המארח כדי להצטרף לסשן שלו.',
     tokenPlaceholder: 'קוד סשן',
     continue: 'המשך',
+    scanWithCamera: 'סריקה במצלמה',
+    enterManually: 'הזנת קוד ידנית',
+    cameraPermission: {
+      body: 'אפשרו גישה למצלמה כדי לסרוק קוד QR במקום להקליד אותו.',
+      allow: 'אפשרו גישה למצלמה',
+    },
     errors: {
       tokenRequired: 'הזינו קוד סשן כדי להמשיך.',
     },

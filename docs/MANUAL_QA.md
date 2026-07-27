@@ -42,7 +42,7 @@ Items that cannot be verified on this development machine (no Android SDK platfo
 ## Phase 2 — Session screens (Screens 4–8) and two-device DoD
 
 - [ ] **Two-physical-device create → join → live participant list** — the literal Phase 2 DoD ("two devices/simulators can create and join the same session and see each other in a live participant list"). Not run on this machine: no Android SDK platforms and no Mac (standing constraint). Verified instead via `apps/server/integration/sessions.integration.test.ts` and `apps/mobile/integration/session-channel.integration.test.ts` against the real local Supabase stack — create→join→leave, RLS, concurrent-join-at-capacity, and realtime Broadcast + Postgres Changes delivered between two independent live clients. When a device/emulator is available: install on two, Device A creates a `dynamic_qr` session, Device B enters the QR token manually (see below) on the Scan screen, both should see the other in Active Session's participant list within a couple seconds.
-- [ ] **Real camera QR scanning** — Scan screen (`apps/mobile/src/screens/ScanSessionScreen.tsx`) uses manual text entry only this phase; no camera dependency was added (`apps/mobile/src/services/qr-scanner.ts`'s header comment explains why — `react-native-vision-camera` needs Pod/Gradle linking this machine can't install-and-verify). Wiring a real camera adapter is deferred to Phase 3 (native blocker bridge), which already carries this same manual-QA-pending native-module posture. The `ScanResult` type the seam exports is ready for it — no change needed in `SessionDetailsScreen` (the actual join call) when it lands.
+- [x] **Real camera QR scanning** — wired in Phase 3 task 3.5 (`react-native-vision-camera`); see the dedicated Phase 3 section below for device verification.
 - [ ] **RTL layout on the five session screens** — Create/Scan/Details/Active Session were never visually checked in Hebrew/RTL on-device (same `forceRTL`-needs-a-real-device limitation as every other screen in this checklist).
 
 ## Phase 3 — Real Android blocking permissions (task 3.2)
@@ -57,6 +57,11 @@ Items that cannot be verified on this development machine (no Android SDK platfo
 - [ ] **Foreground-service notification** — confirm it's non-dismissible while a session is active, tapping it opens the app, and it disappears when the session ends/is stopped.
 - [ ] **Battery-critical event** — drain (or simulate via `adb shell dumpsys battery set level <n>`) to below the OS's low-battery threshold and confirm the app surfaces something reasonable (currently: `useAppBlocker`'s violation banner, same UI as a permission revoke).
 - [ ] **`service_killed` detection** — force-stop the app process via Settings while a session is active (not just swipe from Recents) and confirm, on next foreground, the app reflects reality rather than a stuck "active" state.
+
+## Phase 3 — Camera QR scanning (task 3.5)
+
+- [ ] **Android: camera permission + live scan** — Gradle-build-verified with `react-native-vision-camera` linked, but never run on a real device. On a device: Scan screen should default to manual entry (undetermined permission) with an "Allow camera access" prompt; tapping it should show the real OS camera-permission dialog; once granted, the screen should switch to a live camera preview and scanning a real session QR code should navigate to Session Details with the decoded token. Confirm "Enter code manually" still works as an escape hatch from camera mode.
+- [ ] **iOS: camera permission + live scan** — `NSCameraUsageDescription` added to `Info.plist`, but `pod install` and an actual build have never run (no Mac — standing constraint). Once available: same flow as Android, plus confirm the iOS permission dialog shows the `Info.plist` description text correctly.
 
 ## Phase 3 — Boot persistence (task 3.4)
 

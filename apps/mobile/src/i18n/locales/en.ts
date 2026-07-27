@@ -36,6 +36,12 @@ export const en = {
     body: "Enter the code from the host's QR to join their session.",
     tokenPlaceholder: 'Session code',
     continue: 'Continue',
+    scanWithCamera: 'Scan with camera',
+    enterManually: 'Enter code manually',
+    cameraPermission: {
+      body: 'Allow camera access to scan a QR code instead of typing it.',
+      allow: 'Allow camera access',
+    },
     errors: {
       tokenRequired: 'Enter a session code to continue.',
     },
