@@ -73,6 +73,14 @@ export const he: TranslationSchema = {
       remaining: 'זמן שנותר',
     },
     qrLabel: 'שתפו קוד זה כדי לאפשר לאחרים להצטרף',
+    blockerViolation: {
+      message: {
+        permission_revoked: 'הרשאת החסימה בוטלה — הסשן הזה כבר לא נאכף.',
+        service_killed: 'החסימה הופרעה — הסשן הזה כבר לא נאכף.',
+        battery_critical: 'חיסכון בסוללה עשוי לעצור זמנית את החסימה בסשן הזה.',
+      },
+      openSettings: 'פתיחת הגדרות',
+    },
   },
   onboarding: {
     pages: {

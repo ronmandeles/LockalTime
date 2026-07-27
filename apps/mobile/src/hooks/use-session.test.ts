@@ -133,4 +133,33 @@ describe('useSession', () => {
 
     expect(mockUnsubscribe).toHaveBeenCalledTimes(1);
   });
+
+  // Phase 3 task 3.1: reportOfflineTimeout is the seam useAppBlocker forwards
+  // the native-enforced 30-min offline cutoff through (ARCHITECTURE.md §4;
+  // the cutoff-detection timer itself is Phase 4 backlog work — this task
+  // only wires the plumbing that will consume it). useSession stays "the
+  // only driver" of the machine: this exposes a send, not the actor itself.
+  // CONNECTION_LOST isn't wired yet (a separate, not-yet-scheduled task), so
+  // participant_reconnecting is unreachable through this hook today — this
+  // asserts the currently-reachable case: 'active' has no OFFLINE_TIMEOUT
+  // handler, so the call is a documented no-op, not a crash.
+  it('reportOfflineTimeout is a safe no-op from a state with no handler for it', async () => {
+    const { result } = await renderHook(() => useSession(SESSION_ID));
+    await waitFor(() => expect(result.current.status).toBe('active'));
+
+    await act(async () => {
+      result.current.reportOfflineTimeout();
+    });
+
+    expect(result.current.status).toBe('active');
+  });
+
+  it('reportOfflineTimeout is safe to call after unmount', async () => {
+    const { result, unmount } = await renderHook(() => useSession(SESSION_ID));
+    await waitFor(() => expect(result.current.status).toBe('active'));
+
+    await unmount();
+
+    expect(() => result.current.reportOfflineTimeout()).not.toThrow();
+  });
 });

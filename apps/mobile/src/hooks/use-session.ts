@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { createActor } from 'xstate';
 
 import { SessionLifecycleMachine } from '../machines/session-lifecycle-machine';
+import type { SessionLifecycleEvent } from '../machines/session-lifecycle-machine';
 import { subscribeToSessionChannel } from '../services/session-channel';
 import { fetchOpenPresenceIntervals, fetchSession } from '../services/session-repository';
 import type { PresenceIntervalRow, SessionRow } from '../services/session-repository';
@@ -11,6 +12,13 @@ export interface UseSessionResult {
   readonly session: SessionRow | null;
   readonly openIntervals: readonly PresenceIntervalRow[];
   readonly status: string;
+  // Forwards the native-enforced 30-min offline cutoff (Phase 3's
+  // useAppBlocker, ARCHITECTURE.md §4) into the machine's OFFLINE_TIMEOUT
+  // event. The actor itself stays private to this hook — this is a send,
+  // not a handle — so useSession remains "the only driver" of the machine.
+  // Safe to call from any status (including after unmount): a no-op if the
+  // current state has no handler for it, or if the actor already stopped.
+  readonly reportOfflineTimeout: () => void;
 }
 
 interface SessionRowChangePayload {
@@ -31,9 +39,19 @@ export const useSession = (sessionId: string): UseSessionResult => {
   const [openIntervals, setOpenIntervals] = useState<readonly PresenceIntervalRow[]>([]);
   const [status, setStatus] = useState<string>('idle');
 
+  // Holds the current effect's actor so reportOfflineTimeout (a stable
+  // function identity, safe to pass to useAppBlocker as a dependency) can
+  // reach it without itself becoming a dependency that recreates the
+  // effect. Never read outside this hook — the actor stays private.
+  const actorRef = useRef<{ send: (event: SessionLifecycleEvent) => void } | null>(null);
+  const reportOfflineTimeout = useRef((): void => {
+    actorRef.current?.send({ type: 'OFFLINE_TIMEOUT' });
+  }).current;
+
   useEffect(() => {
     let cancelled = false;
     const actor = createActor(SessionLifecycleMachine).start();
+    actorRef.current = actor;
     const actorSubscription = actor.subscribe((snapshot) => {
       if (!cancelled) {
         setStatus(String(snapshot.value));
@@ -102,9 +120,10 @@ export const useSession = (sessionId: string): UseSessionResult => {
       cancelled = true;
       actorSubscription.unsubscribe();
       actor.stop();
+      actorRef.current = null;
       channelHandle?.unsubscribe().catch(() => undefined);
     };
   }, [sessionId]);
 
-  return { session, openIntervals, status };
+  return { session, openIntervals, status, reportOfflineTimeout };
 };

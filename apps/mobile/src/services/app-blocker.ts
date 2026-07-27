@@ -56,7 +56,13 @@ export type BlockerEvent =
       readonly sessionId: string;
       readonly permission: 'usage_access' | 'overlay' | 'family_controls' | 'battery_optimization';
     }
-  | { readonly type: 'battery_critical'; readonly sessionId: string; readonly level: number };
+  | { readonly type: 'battery_critical'; readonly sessionId: string; readonly level: number }
+  // The native layer self-enforces the 30-minute offline cutoff
+  // (ARCHITECTURE.md §4 "Offline mode") and emits this once it fires; JS
+  // only surfaces the result — useAppBlocker forwards it into the session
+  // machine's OFFLINE_TIMEOUT event (session-lifecycle-machine.ts), never
+  // re-derives the cutoff itself.
+  | { readonly type: 'offline_cutoff_reached'; readonly sessionId: string; readonly lastConnectedAt: string };
 
 export interface AppBlockerModule {
   start(config: SessionBlockerConfig): Promise<void>;

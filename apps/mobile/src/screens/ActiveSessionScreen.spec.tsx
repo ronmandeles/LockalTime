@@ -7,9 +7,15 @@ jest.mock('../hooks/use-session', () => ({
   useSession: (...args: unknown[]) => mockUseSession(...args),
 }));
 
+const mockUseAppBlocker = jest.fn();
+jest.mock('../hooks/use-app-blocker', () => ({
+  useAppBlocker: (...args: unknown[]) => mockUseAppBlocker(...args),
+}));
+
 import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
+import type { SessionRow } from '../services/session-repository';
 
 interface DeviceLocaleStub {
   readonly countryCode: string;
@@ -25,12 +31,13 @@ import ActiveSessionScreen from './ActiveSessionScreen';
 
 // Active Session (Screen 6), DESIGN_GUIDELINES §0: an IN-SESSION surface —
 // deliberately quiet, no stimulation beyond what's functionally necessary
-// (the timer, the participant list). useSession is mocked; its own
-// contract is pinned in use-session.test.ts. Per Phase 2 task 2.7's plan:
-// the timer under fake timers, and the participant list re-rendering on a
-// CDC event (simulated here as the mocked hook's return value changing
-// across a rerender, exactly how a real CDC-driven state update looks from
-// the screen's point of view).
+// (the timer, the participant list). useSession and useAppBlocker are both
+// mocked; their own contracts are pinned in use-session.test.ts and
+// use-app-blocker.test.ts respectively — this suite only pins how the
+// screen renders their outputs. Per Phase 2 task 2.7's plan: the timer under
+// fake timers, and the participant list re-rendering on a CDC event
+// (simulated here as the mocked hook's return value changing across a
+// rerender). Phase 3 task 3.1 adds the blocker-violation banner.
 
 const navigationStub = {} as unknown as Parameters<typeof ActiveSessionScreen>[0]['navigation'];
 const routeStub = {
@@ -39,17 +46,26 @@ const routeStub = {
   params: { sessionId: 'session-1' },
 };
 
-const SESSION_ROW = {
+const SESSION_ROW: SessionRow = {
   id: 'session-1',
   host_id: 'host-1',
   venue_id: null,
-  type: 'solo' as const,
-  status: 'active' as const,
-  duration_mode: 'fixed' as const,
+  type: 'solo',
+  status: 'active',
+  duration_mode: 'fixed',
   planned_duration_minutes: 30,
   started_at: '2026-07-26T12:00:00.000Z',
   ended_at: null,
   created_at: '2026-07-26T12:00:00.000Z',
+};
+
+const mockSession = (overrides: Partial<SessionRow> | null, status: string, openIntervals: unknown[] = []) => {
+  mockUseSession.mockReturnValue({
+    session: overrides === null ? null : { ...SESSION_ROW, ...overrides },
+    openIntervals,
+    status,
+    reportOfflineTimeout: jest.fn(),
+  });
 };
 
 const renderScreen = async (): Promise<void> => {
@@ -66,6 +82,7 @@ describe('ActiveSessionScreen', () => {
   beforeEach(() => {
     jest.useFakeTimers({ now: new Date('2026-07-26T12:05:00.000Z') });
     mockUseSession.mockReset();
+    mockUseAppBlocker.mockReset().mockReturnValue({ violation: null });
   });
 
   afterEach(() => {
@@ -73,7 +90,7 @@ describe('ActiveSessionScreen', () => {
   });
 
   it('shows the empty state before anyone has joined', async () => {
-    mockUseSession.mockReturnValue({ session: SESSION_ROW, openIntervals: [], status: 'active' });
+    mockSession({}, 'active');
 
     await renderScreen();
 
@@ -81,7 +98,7 @@ describe('ActiveSessionScreen', () => {
   });
 
   it('shows the mapped status label', async () => {
-    mockUseSession.mockReturnValue({ session: SESSION_ROW, openIntervals: [], status: 'active' });
+    mockSession({}, 'active');
 
     await renderScreen();
 
@@ -89,7 +106,7 @@ describe('ActiveSessionScreen', () => {
   });
 
   it('shows a loading state while the session has not hydrated yet', async () => {
-    mockUseSession.mockReturnValue({ session: null, openIntervals: [], status: 'idle' });
+    mockSession(null, 'idle');
 
     await renderScreen();
 
@@ -97,7 +114,7 @@ describe('ActiveSessionScreen', () => {
   });
 
   it('counts down remaining minutes for a fixed-duration session and ticks under fake timers', async () => {
-    mockUseSession.mockReturnValue({ session: SESSION_ROW, openIntervals: [], status: 'active' });
+    mockSession({}, 'active');
 
     await renderScreen();
 
@@ -112,7 +129,7 @@ describe('ActiveSessionScreen', () => {
   });
 
   it('re-renders the participant list when the hook reports a CDC-driven change', async () => {
-    mockUseSession.mockReturnValue({ session: SESSION_ROW, openIntervals: [], status: 'active' });
+    mockSession({}, 'active');
     const { rerender } = await render(
       <I18nProvider i18n={await initI18n()}>
         <ActiveSessionScreen navigation={navigationStub} route={routeStub} />
@@ -121,13 +138,9 @@ describe('ActiveSessionScreen', () => {
 
     expect(screen.getByText(en.activeSession.participants.empty)).toBeOnTheScreen();
 
-    mockUseSession.mockReturnValue({
-      session: SESSION_ROW,
-      openIntervals: [
-        { id: 'i1', session_id: 'session-1', user_id: 'host-1', joined_at: '2026-07-26T12:00:00.000Z', left_at: null },
-      ],
-      status: 'active',
-    });
+    mockSession({}, 'active', [
+      { id: 'i1', session_id: 'session-1', user_id: 'host-1', joined_at: '2026-07-26T12:00:00.000Z', left_at: null },
+    ]);
     await rerender(
       <I18nProvider i18n={await initI18n()}>
         <ActiveSessionScreen navigation={navigationStub} route={routeStub} />
@@ -139,7 +152,7 @@ describe('ActiveSessionScreen', () => {
   });
 
   it('shows the QR token for the host to share when one was passed via navigation', async () => {
-    mockUseSession.mockReturnValue({ session: SESSION_ROW, openIntervals: [], status: 'active' });
+    mockSession({}, 'active');
     const routeWithQr = {
       key: 'ActiveSession',
       name: 'ActiveSession' as const,
@@ -153,5 +166,93 @@ describe('ActiveSessionScreen', () => {
     );
 
     expect(screen.getByText('share-this-code')).toBeOnTheScreen();
+  });
+
+  describe('blocker-violation banner (Phase 3 task 3.1)', () => {
+    it('shows no banner when there is no violation', async () => {
+      mockSession({}, 'active');
+
+      await renderScreen();
+
+      expect(screen.queryByTestId('active-session-blocker-violation')).toBeNull();
+    });
+
+    it('shows the permission_revoked message', async () => {
+      mockSession({}, 'active');
+      mockUseAppBlocker.mockReturnValue({
+        violation: { state: 'violation', sessionId: 'session-1', reason: 'permission_revoked' },
+      });
+
+      await renderScreen();
+
+      expect(
+        screen.getByText(en.activeSession.blockerViolation.message.permission_revoked),
+      ).toBeOnTheScreen();
+      expect(screen.getByTestId('active-session-open-settings')).toBeOnTheScreen();
+    });
+
+    it('shows the service_killed message', async () => {
+      mockSession({}, 'active');
+      mockUseAppBlocker.mockReturnValue({
+        violation: { state: 'violation', sessionId: 'session-1', reason: 'service_killed' },
+      });
+
+      await renderScreen();
+
+      expect(screen.getByText(en.activeSession.blockerViolation.message.service_killed)).toBeOnTheScreen();
+    });
+
+    it('shows the battery_critical message', async () => {
+      mockSession({}, 'active');
+      mockUseAppBlocker.mockReturnValue({
+        violation: { state: 'violation', sessionId: 'session-1', reason: 'battery_critical' },
+      });
+
+      await renderScreen();
+
+      expect(screen.getByText(en.activeSession.blockerViolation.message.battery_critical)).toBeOnTheScreen();
+    });
+  });
+
+  describe('useAppBlocker wiring', () => {
+    it('passes an absolute endsAt derived from started_at + planned_duration_minutes for a fixed session', async () => {
+      mockSession({}, 'active');
+
+      await renderScreen();
+
+      expect(mockUseAppBlocker).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'session-1',
+          isSessionActive: true,
+          endsAt: '2026-07-26T12:30:00.000Z',
+        }),
+      );
+    });
+
+    it('passes a null endsAt for an open-ended session', async () => {
+      mockSession({ duration_mode: 'open_ended', planned_duration_minutes: null }, 'active');
+
+      await renderScreen();
+
+      expect(mockUseAppBlocker).toHaveBeenCalledWith(expect.objectContaining({ endsAt: null }));
+    });
+
+    it('treats host_disconnected as still session-active — a presence blip must not lift the block', async () => {
+      mockSession({}, 'host_disconnected');
+
+      await renderScreen();
+
+      expect(mockUseAppBlocker).toHaveBeenCalledWith(expect.objectContaining({ isSessionActive: true }));
+    });
+
+    it('is not session-active before the session has hydrated', async () => {
+      mockSession(null, 'idle');
+
+      await renderScreen();
+
+      expect(mockUseAppBlocker).toHaveBeenCalledWith(
+        expect.objectContaining({ sessionId: null, isSessionActive: false }),
+      );
+    });
   });
 });

@@ -75,6 +75,14 @@ export const en = {
       remaining: 'Remaining',
     },
     qrLabel: 'Share this code to let others join',
+    blockerViolation: {
+      message: {
+        permission_revoked: 'Blocking permission was turned off — this session is no longer enforced.',
+        service_killed: 'Blocking was interrupted — this session is no longer enforced.',
+        battery_critical: 'Battery saver may have paused blocking for this session.',
+      },
+      openSettings: 'Open settings',
+    },
   },
   // Onboarding copy is PLACEHOLDER, flagged for the deferred copy pass. Each
   // page resolves one hesitation (DESIGN_GUIDELINES §9): why this app / how

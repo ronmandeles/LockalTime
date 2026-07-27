@@ -1,12 +1,25 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 
+import { BLOCKED_CATEGORIES } from '../config/blocked-categories';
+import { useAppBlocker } from '../hooks/use-app-blocker';
 import { useSession } from '../hooks/use-session';
 import type { RootStackParamList } from '../navigation/types';
-import { spacing, typography } from '../theme/tokens';
+import { radius, sizing, spacing, typography } from '../theme/tokens';
+
+// Session statuses in which the blocker should keep running — everything
+// short of a terminal/not-yet-started status. host_disconnected /
+// participant_reconnecting / degraded_offline are still an ongoing session
+// (ARCHITECTURE.md §6), so a brief presence hiccup must not lift the block.
+const BLOCKING_STATUSES = new Set([
+  'active',
+  'host_disconnected',
+  'participant_reconnecting',
+  'degraded_offline',
+]);
 
 // Active Session (Screen 6). DESIGN_GUIDELINES §0: an IN-SESSION surface —
 // deliberately quiet, no stimulation beyond what's functionally necessary
@@ -28,13 +41,39 @@ const formatClock = (totalSeconds: number): string => {
 
 const ActiveSessionScreen = ({ route }: ActiveSessionScreenProps): React.JSX.Element => {
   const { t } = useTranslation();
-  const { session, openIntervals, status } = useSession(route.params.sessionId);
+  const { session, openIntervals, status, reportOfflineTimeout } = useSession(route.params.sessionId);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // Absolute server timestamp, never "now + duration" (ARCHITECTURE.md §8
+  // item 5) — derived from the server-issued started_at, not the device
+  // clock's `now`. null (open-ended, or not yet started) means no
+  // self-timeout on the native side.
+  const endsAt =
+    session !== null &&
+    session.duration_mode === 'fixed' &&
+    session.started_at !== null &&
+    session.planned_duration_minutes !== null
+      ? new Date(
+          new Date(session.started_at).getTime() + session.planned_duration_minutes * 60_000,
+        ).toISOString()
+      : null;
+
+  // Called unconditionally, before the loading early-return below, so hook
+  // order stays stable across renders (rules of hooks) — sessionId/
+  // isSessionActive simply start out null/false while session is still
+  // hydrating.
+  const { violation } = useAppBlocker({
+    sessionId: session?.id ?? null,
+    isSessionActive: session !== null && BLOCKING_STATUSES.has(status),
+    endsAt,
+    blockedCategories: BLOCKED_CATEGORIES,
+    onOfflineTimeout: reportOfflineTimeout,
+  });
 
   if (session === null) {
     return (
@@ -64,6 +103,19 @@ const ActiveSessionScreen = ({ route }: ActiveSessionScreenProps): React.JSX.Ele
     <View style={styles.container} testID="active-session-screen">
       <Text style={styles.title}>{t('activeSession.title')}</Text>
       <Text style={styles.status}>{statusLabel}</Text>
+
+      {violation !== null && (
+        <View style={styles.violationBanner} testID="active-session-blocker-violation">
+          <Text style={styles.violationMessage}>
+            {t(`activeSession.blockerViolation.message.${violation.reason}`)}
+          </Text>
+          <TouchableOpacity onPress={() => Linking.openSettings()} testID="active-session-open-settings">
+            <Text style={styles.violationOpenSettings}>
+              {t('activeSession.blockerViolation.openSettings')}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {timerValue !== null && (
         <View style={styles.timerCard}>
@@ -177,6 +229,22 @@ const styles = StyleSheet.create({
   title: {
     ...typography.heading,
     color: '#222222',
+  },
+  violationBanner: {
+    backgroundColor: '#F5F5F5',
+    borderRadius: radius.md,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+  },
+  violationMessage: {
+    ...typography.body,
+    color: '#222222',
+  },
+  violationOpenSettings: {
+    ...typography.bodyStrong,
+    color: '#222222',
+    marginTop: spacing.sm,
+    minHeight: sizing.minTouchTarget,
   },
 });
 
