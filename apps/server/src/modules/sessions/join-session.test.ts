@@ -34,6 +34,7 @@ const buildFakeStore = (
     getSessionSummary: jest.fn(),
     closeAllOpenIntervals: jest.fn(),
     getPresenceIntervals: jest.fn(),
+    getUserPresenceIntervals: jest.fn(),
     getFinalizedParticipantUserIds: jest.fn(),
     writeSessionParticipants: jest.fn(),
     insertRewardsHistory: jest.fn(),

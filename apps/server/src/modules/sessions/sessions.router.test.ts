@@ -88,6 +88,9 @@ const buildFakeStore = (): SessionsStore & {
     async getPresenceIntervals(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async getUserPresenceIntervals(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
     async getFinalizedParticipantUserIds(): Promise<never> {
       throw new Error('not used in these tests');
     },

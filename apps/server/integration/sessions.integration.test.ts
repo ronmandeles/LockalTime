@@ -139,6 +139,28 @@ describe('sessions integration (local Supabase)', () => {
 
     const hostInterval = intervals?.find((row) => row.user_id === host.userId);
     expect(hostInterval).toMatchObject({ left_at: null, disconnect_reason: null });
+
+    // Emergency exit finalizes inline (Phase 4 task 5) -- base points only,
+    // both bonuses forfeited, written immediately rather than waiting for
+    // the session to end.
+    const { data: participantRows } = await adminClient
+      .from('session_participants')
+      .select('user_id, exit_reason, group_bonus_earned, completion_bonus_earned')
+      .eq('session_id', sessionId);
+    expect(participantRows).toEqual([
+      {
+        user_id: participant.userId,
+        exit_reason: 'emergency_exit',
+        group_bonus_earned: false,
+        completion_bonus_earned: false,
+      },
+    ]);
+
+    const { data: rewardRows } = await adminClient
+      .from('rewards_history')
+      .select('user_id, bonus_type')
+      .eq('session_id', sessionId);
+    expect(rewardRows).toEqual([{ user_id: participant.userId, bonus_type: 'base' }]);
   });
 
   it('records a monitor-mode device attestation row when the create request includes one', async () => {

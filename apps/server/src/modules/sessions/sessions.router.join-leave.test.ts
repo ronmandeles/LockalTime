@@ -10,9 +10,11 @@ import { mintQrToken } from './qr-token';
 import { createSessionsRouter } from './sessions.router';
 import type {
   DisconnectReason,
+  FinalizedParticipantInput,
   HostAssignmentReason,
   JoinOutcome,
   NewSessionInput,
+  RewardsHistoryRowInput,
   SessionsStore,
 } from './sessions-store';
 
@@ -43,9 +45,13 @@ const buildFakeStore = (options: {
   closeResult?: boolean;
 }): SessionsStore & {
   closeCalledWith: { sessionId: string; userId: string; reason: DisconnectReason } | null;
+  writtenParticipants: readonly FinalizedParticipantInput[] | null;
+  writtenRewards: readonly RewardsHistoryRowInput[] | null;
 } => {
   const store = {
     closeCalledWith: null as { sessionId: string; userId: string; reason: DisconnectReason } | null,
+    writtenParticipants: null as readonly FinalizedParticipantInput[] | null,
+    writtenRewards: null as readonly RewardsHistoryRowInput[] | null,
     async insertSession(_input: NewSessionInput) {
       throw new Error('not used in this test');
     },
@@ -58,8 +64,13 @@ const buildFakeStore = (options: {
       return options.closeResult ?? true;
     },
     async insertPresenceInterval(_s: string, _u: string, _j: string) {},
-    async getSessionSummary(): Promise<never> {
-      throw new Error('not used in these tests');
+    async getSessionSummary() {
+      return {
+        id: SESSION_ID,
+        hostId: 'some-other-host',
+        status: 'active' as const,
+        startedAt: null,
+      };
     },
     async closeAllOpenIntervals(): Promise<never> {
       throw new Error('not used in these tests');
@@ -67,14 +78,25 @@ const buildFakeStore = (options: {
     async getPresenceIntervals(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async getUserPresenceIntervals(sessionId: string, userId: string) {
+      return [
+        {
+          userId,
+          joinedAt: '2026-01-01T10:00:00.000Z',
+          leftAt: '2026-01-01T10:23:00.000Z',
+          blockerReadyAt: '2026-01-01T10:00:00.000Z',
+          disconnectReason: 'emergency_exit' as const,
+        },
+      ];
+    },
     async getFinalizedParticipantUserIds(): Promise<never> {
       throw new Error('not used in these tests');
     },
-    async writeSessionParticipants(): Promise<never> {
-      throw new Error('not used in these tests');
+    async writeSessionParticipants(_sessionId: string, rows: readonly FinalizedParticipantInput[]) {
+      store.writtenParticipants = rows;
     },
-    async insertRewardsHistory(): Promise<never> {
-      throw new Error('not used in these tests');
+    async insertRewardsHistory(rows: readonly RewardsHistoryRowInput[]) {
+      store.writtenRewards = rows;
     },
     async markSessionEnded(): Promise<never> {
       throw new Error('not used in these tests');
@@ -245,6 +267,58 @@ describe('POST /sessions/:id/leave', () => {
       userId: USER_ID,
       reason: 'emergency_exit',
     });
+  });
+
+  it('finalizes base-only rewards inline on an emergency exit', async () => {
+    const authToken = await mintAuthToken(USER_ID);
+    const store = buildFakeStore({ closeResult: true });
+
+    const response = await request(buildApp(store))
+      .post(`/sessions/${SESSION_ID}/leave`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ reason: 'emergency_exit' });
+
+    expect(response.status).toBe(200);
+    expect(store.writtenParticipants).toEqual([
+      expect.objectContaining({
+        userId: USER_ID,
+        exitReason: 'emergency_exit',
+        groupBonusEarned: false,
+        completionBonusEarned: false,
+        totalMinutesPresent: 23,
+        pointsEarned: 23,
+      }),
+    ]);
+    expect(store.writtenRewards).toEqual([
+      { userId: USER_ID, sessionId: SESSION_ID, points: 23, bonusType: 'base' },
+    ]);
+  });
+
+  it('does not finalize anything on an involuntary_disconnect — the participant may still reconnect', async () => {
+    const authToken = await mintAuthToken(USER_ID);
+    const store = buildFakeStore({ closeResult: true });
+
+    const response = await request(buildApp(store))
+      .post(`/sessions/${SESSION_ID}/leave`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ reason: 'involuntary_disconnect' });
+
+    expect(response.status).toBe(200);
+    expect(store.writtenParticipants).toBeNull();
+    expect(store.writtenRewards).toBeNull();
+  });
+
+  it('does not finalize anything when there was no open interval to close', async () => {
+    const authToken = await mintAuthToken(USER_ID);
+    const store = buildFakeStore({ closeResult: false });
+
+    await request(buildApp(store))
+      .post(`/sessions/${SESSION_ID}/leave`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send({ reason: 'emergency_exit' });
+
+    expect(store.writtenParticipants).toBeNull();
+    expect(store.writtenRewards).toBeNull();
   });
 
   it('returns 404 when there is no open interval to close', async () => {

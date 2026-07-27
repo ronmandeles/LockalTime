@@ -62,6 +62,9 @@ const buildFakeStore = (
             },
           ];
     },
+    async getUserPresenceIntervals(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
     async getFinalizedParticipantUserIds() {
       return new Set<string>();
     },

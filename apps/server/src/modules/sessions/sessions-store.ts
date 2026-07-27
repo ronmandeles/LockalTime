@@ -131,6 +131,13 @@ export interface SessionsStore {
   // needs the full set to reconstruct an accurate concurrent-count timeline
   // for the participants it still has to finalize.
   getPresenceIntervals(sessionId: string): Promise<readonly PresenceIntervalRow[]>;
+  // Just one user's intervals for the session — used for inline
+  // emergency-exit finalization, which never needs anyone else's data
+  // (computeForfeitedReward() forfeits both bonuses unconditionally).
+  getUserPresenceIntervals(
+    sessionId: string,
+    userId: string,
+  ): Promise<readonly PresenceIntervalRow[]>;
   // user_ids that already have a session_participants row (finalized
   // inline at their own emergency-exit moment) — end-session.ts still needs
   // their intervals for the timeline above, but must not re-finalize or
@@ -292,6 +299,25 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
 
     if (error !== null) {
       throw new ApiError(500, 'session_end_failed', error.message);
+    }
+    return (data ?? []).map((row) => ({
+      userId: row.user_id as string,
+      joinedAt: row.joined_at as string,
+      leftAt: row.left_at as string | null,
+      blockerReadyAt: row.blocker_ready_at as string | null,
+      disconnectReason: row.disconnect_reason as DisconnectReason | null,
+    }));
+  },
+
+  async getUserPresenceIntervals(sessionId, userId) {
+    const { data, error } = await client
+      .from('session_presence_intervals')
+      .select('user_id, joined_at, left_at, blocker_ready_at, disconnect_reason')
+      .eq('session_id', sessionId)
+      .eq('user_id', userId);
+
+    if (error !== null) {
+      throw new ApiError(500, 'session_leave_failed', error.message);
     }
     return (data ?? []).map((row) => ({
       userId: row.user_id as string,

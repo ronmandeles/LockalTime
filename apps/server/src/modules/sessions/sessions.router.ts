@@ -8,6 +8,7 @@ import type { AttestationStore } from '../attestation/attestation-store';
 import { recordDeviceAttestation } from '../attestation/record-attestation';
 import { createSession } from './create-session';
 import { endSession } from './end-session';
+import { finalizeEmergencyExit } from './finalize-emergency-exit';
 import { joinSession } from './join-session';
 import type { SessionsStore } from './sessions-store';
 
@@ -170,9 +171,10 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
     }
     const userId = req.auth?.userId as string;
 
+    const sessionId = req.params.id;
     deps.store
-      .closeOpenInterval(req.params.id, userId, parsed.data.reason)
-      .then((closed) => {
+      .closeOpenInterval(sessionId, userId, parsed.data.reason)
+      .then(async (closed) => {
         if (!closed) {
           next(
             new ApiError(
@@ -182,6 +184,15 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
             ),
           );
           return;
+        }
+        // Emergency exit finalizes immediately — the participant forfeits
+        // both bonuses unconditionally (§7), so there's no reason to wait
+        // for session end. involuntary_disconnect never finalizes here:
+        // the participant may still reconnect, so their exit_reason isn't
+        // known yet (the stale-interval reconciliation worker or
+        // end-session.ts settles it later).
+        if (parsed.data.reason === 'emergency_exit') {
+          await finalizeEmergencyExit(deps.store, sessionId, userId);
         }
         res.status(200).json({ left: true });
       })
