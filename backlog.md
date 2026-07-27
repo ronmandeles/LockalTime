@@ -64,7 +64,7 @@ Task order:
 ## Phase 4 — Session Lifecycle Logic
 Prerequisites: Phase 3.
 
-- [ ] Points/bonus math as pure functions (base rate, group bonus, completion bonus, stacking) — **test-first**, spec fully confirmed in ARCHITECTURE.md §7
+- [x] Points/bonus math as pure functions (base rate, group bonus, completion bonus, stacking) — **test-first**, spec fully confirmed in ARCHITECTURE.md §7 — `apps/server/src/modules/points/` (`base-points.ts`, `group-bonus.ts`, `completion-bonus.ts`, `compute-rewards.ts`): `computeSessionRewards()` (whole-session, called at session end) and `computeForfeitedReward()` (single-participant base-only shortcut for inline emergency-exit finalization). Group bonus uses a sweep-line/interval-merge reconstruction of the concurrent-participant-count timeline (classic "meeting rooms II" technique) gated by a new `blocker_ready_at` per-interval timestamp (Sybil-resistance gate, §7/§8 item 9) rather than raw `joined_at` — see DATABASE.md's corrected step 5/6. Both bonuses stack additively with a single rounding pass at the end (not per-bonus) to avoid compounding drift. 35/35 new tests, 97.93% coverage on the module (skill floor: 90%), 93/93 server suite green, lint/typecheck clean.
 - [ ] Emergency exit flow end-to-end (Screen 9)
 - [ ] Completion flow end-to-end (Screen 10)
 - [ ] Host migration worker (Presence-timeout detection, highest-minutes-present promotion, `session_host_assignments` audit)

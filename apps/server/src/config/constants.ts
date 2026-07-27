@@ -12,3 +12,13 @@ export const QR_TOKEN_TTL_MINUTES = 15;
 // promoting this to a `sessions.max_participants` column is a small,
 // backwards-compatible change if that decision is made later.
 export const SESSION_MAX_PARTICIPANTS = 50;
+
+// Points & bonus engine (ARCHITECTURE.md §7, DATABASE.md "Bonus
+// Computation" — spec confirmed, §11). Consumed by src/modules/points/.
+export const BASE_POINTS_PER_MINUTE = 1;
+export const GROUP_BONUS_PERCENT = 10;
+export const GROUP_BONUS_MIN_PARTICIPANTS = 5;
+export const GROUP_BONUS_MIN_MINUTES = 30;
+export const COMPLETION_BONUS_PERCENT = 10;
+export const COMPLETION_BONUS_MIN_SESSION_MINUTES = 60;
+export const COMPLETION_BONUS_JOIN_TOLERANCE_SECONDS = 60;

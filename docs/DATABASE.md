@@ -266,7 +266,12 @@ Computed by the Node API at session-close time, from `session_presence_intervals
 2. Find maximal continuous sub-intervals where count ≥ 5. Discard any shorter than 30 minutes — these confer no bonus at all (no partial credit).
 3. For each surviving ≥30-minute streak, any participant whose own presence was unbroken for that streak's full duration and whose final `exit_reason = 'completed'` gets `group_bonus_earned = true`.
 4. For Completion Bonus: check the session's actual duration ≥ 60 minutes, the participant's first interval started within ~60s of `sessions.started_at`, they have exactly one interval spanning the whole session (no disconnect gaps), and `exit_reason = 'completed'`.
-5. `points_earned = total_minutes_present × 1 + (10 if group_bonus_earned) + (10 if completion_bonus_earned)`, expressed as a percentage of the base — additive, not compounded.
+5. `points_earned = round(base_points × (100 + bonus_percent) / 100)`, where `base_points = total_minutes_present × BASE_POINTS_PER_MINUTE` and `bonus_percent` is the sum of whichever bonus percentages were earned (0/10/20) — additive on the percentage, never compounded (e.g. both earned means ×1.20 once, not ×1.10 twice). Rounded once at the end, not per-bonus, to avoid compounding rounding drift.
+6. Step 1's "concurrent-participant-count" timeline only counts a participant from the moment their device confirms local blocker setup (`session_presence_intervals.blocker_ready_at`, Phase 4), never from raw `joined_at` — closes the Sybil/bonus-farming vector (§7, §8 item 9). Base points (step 5) are unaffected by this gate and still use the participant's real `joined_at`/`left_at`.
+
+An `exit_reason` of `emergency_exit` or `disconnected` (Phase 4 — a participant who went offline and never reconnected before the session ended) forfeits both bonuses unconditionally, regardless of how close they were to qualifying; base points for actual minutes present are always kept.
+
+Implemented as pure functions in `apps/server/src/modules/points/` (`base-points.ts`, `group-bonus.ts` — a sweep-line/interval-merge reconstruction of the concurrent-count timeline, `completion-bonus.ts`, `compute-rewards.ts`), 90%+ branch-covered per `.claude/skills/testing-standards/SKILL.md`'s money-equivalent-module bar. `computeSessionRewards()` is the whole-session entry point (called at session end); `computeForfeitedReward()` is the single-participant, bonus-free shortcut used for inline emergency-exit finalization, since that never needs the rest of the session's data.
 
 All rules above are confirmed final — see `docs/ARCHITECTURE.md` §7/§11.
 
