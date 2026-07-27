@@ -10,7 +10,7 @@ jest.mock('../state/auth-store', () => ({
   useAuthStore: { getState: () => mockGetState() },
 }));
 
-import { createSession, joinSession, leaveSession } from './api-client';
+import { createSession, joinSession, leaveSession, markBlockerReady } from './api-client';
 
 const AUTHENTICATED = {
   auth: {
@@ -119,5 +119,25 @@ describe('leaveSession', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toContain('/sessions/session-1/leave');
     expect(JSON.parse(init.body as string)).toEqual({ reason: 'emergency_exit' });
+  });
+});
+
+describe('markBlockerReady', () => {
+  it('posts to /sessions/:id/blocker-ready', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(200, { ok: true }));
+
+    const result = await markBlockerReady('session-1');
+
+    expect(result).toEqual({ ok: true, value: { ok: true } });
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/sessions/session-1/blocker-ready');
+  });
+
+  it('never throws when the request fails — callers fire-and-forget this', async () => {
+    mockFetch.mockRejectedValue(new Error('offline'));
+
+    const result = await markBlockerReady('session-1');
+
+    expect(result.ok).toBe(false);
   });
 });

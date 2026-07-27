@@ -57,6 +57,7 @@ const buildFakeStore = (
       throw new Error('not used in these tests');
     },
     async insertPresenceInterval() {},
+    async markBlockerReady() {},
     async getSessionSummary() {
       return options.session;
     },

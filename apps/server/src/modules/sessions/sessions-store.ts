@@ -118,6 +118,13 @@ export interface SessionsStore {
   // the host isn't "joining" through a QR token/capacity check the way a
   // participant does.
   insertPresenceInterval(sessionId: string, userId: string, joinedAt: string): Promise<void>;
+  // Best-effort, idempotent: sets blocker_ready_at on the caller's open
+  // interval only if it isn't already set (a second call never shifts an
+  // earlier legitimate timestamp), and silently no-ops if there's no open
+  // interval at all — this is an advisory signal for the group bonus
+  // threshold (ARCHITECTURE.md §7), never something that can fail a
+  // request the way join/leave do.
+  markBlockerReady(sessionId: string, userId: string, readyAt: string): Promise<void>;
 
   // --- Phase 4: session-end / finalization ---
   getSessionSummary(sessionId: string): Promise<SessionSummary | null>;
@@ -255,6 +262,25 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
 
     if (error !== null) {
       throw new ApiError(500, 'session_create_failed', error.message);
+    }
+  },
+
+  async markBlockerReady(sessionId, userId, readyAt) {
+    const { error } = await client
+      .from('session_presence_intervals')
+      .update({ blocker_ready_at: readyAt })
+      .eq('session_id', sessionId)
+      .eq('user_id', userId)
+      .is('left_at', null)
+      .is('blocker_ready_at', null);
+
+    // Best-effort by design (see the interface doc comment) — a failure
+    // here never blocks the caller; still logged server-side via the
+    // thrown ApiError being caught by the router's .catch(next), which
+    // renders a 500 the client (app-blocker start success path) never
+    // waits on or surfaces to the user.
+    if (error !== null) {
+      throw new ApiError(500, 'blocker_ready_failed', error.message);
     }
   },
 

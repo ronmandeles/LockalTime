@@ -54,6 +54,7 @@ const buildFakeStore = (): SessionsStore & {
     ): Promise<void> {
       store.hostPresenceInterval = { sessionId, userId, joinedAt };
     },
+    async markBlockerReady(): Promise<void> {},
     // Not exercised by createSession — present only to satisfy the
     // SessionsStore interface.
     async joinSession(): Promise<never> {

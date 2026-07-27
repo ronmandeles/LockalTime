@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
 import type { BlockedCategory } from '../config/blocked-categories';
+import { markBlockerReady } from '../services/api-client';
 import { appBlocker } from '../services/app-blocker';
 import type { AppBlockerModule, BlockerStatus } from '../services/app-blocker';
 
@@ -56,7 +57,16 @@ export const useAppBlocker = (params: UseAppBlockerParams): UseAppBlockerResult 
     }
 
     const activeSessionId = sessionId;
-    module.start({ sessionId: activeSessionId, endsAt, blockedCategories }).catch(() => undefined);
+    // Reports blocker-ready only once start() genuinely resolves — never on
+    // a failed start, and never awaited/surfaced to the caller (ARCHITECTURE.md
+    // §7's Sybil-resistance gate is advisory: a failure here only costs this
+    // participant the Group Bonus threshold, never their place in the session).
+    module
+      .start({ sessionId: activeSessionId, endsAt, blockedCategories })
+      .then(() => {
+        markBlockerReady(activeSessionId).catch(() => undefined);
+      })
+      .catch(() => undefined);
 
     const unsubscribe = module.addEventListener((event) => {
       switch (event.type) {

@@ -64,6 +64,7 @@ const buildFakeStore = (options: {
       return options.closeResult ?? true;
     },
     async insertPresenceInterval(_s: string, _u: string, _j: string) {},
+    async markBlockerReady() {},
     async getSessionSummary() {
       return {
         id: SESSION_ID,

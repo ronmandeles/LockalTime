@@ -31,6 +31,7 @@ const buildFakeStore = (
     },
     closeOpenInterval: jest.fn(async (_s: string, _u: string, _r: DisconnectReason) => true),
     insertPresenceInterval: jest.fn(),
+    markBlockerReady: jest.fn(),
     getSessionSummary: jest.fn(),
     closeAllOpenIntervals: jest.fn(),
     getPresenceIntervals: jest.fn(),

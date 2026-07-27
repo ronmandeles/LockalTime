@@ -163,6 +163,42 @@ describe('sessions integration (local Supabase)', () => {
     expect(rewardRows).toEqual([{ user_id: participant.userId, bonus_type: 'base' }]);
   });
 
+  it('POST /:id/blocker-ready sets blocker_ready_at once and is idempotent on a second call', async () => {
+    const host = await createTestUserAndToken('blocker-ready-host');
+
+    const createResponse = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ type: 'solo', duration_mode: 'fixed', planned_duration_minutes: 30 });
+    const sessionId = createResponse.body.id as string;
+
+    const first = await request(app)
+      .post(`/sessions/${sessionId}/blocker-ready`)
+      .set('Authorization', `Bearer ${host.token}`);
+    expect(first.status).toBe(200);
+
+    const { data: afterFirst } = await adminClient
+      .from('session_presence_intervals')
+      .select('blocker_ready_at')
+      .eq('session_id', sessionId)
+      .single();
+    expect(afterFirst?.blocker_ready_at).not.toBeNull();
+    const firstReadyAt = afterFirst?.blocker_ready_at as string;
+
+    const second = await request(app)
+      .post(`/sessions/${sessionId}/blocker-ready`)
+      .set('Authorization', `Bearer ${host.token}`);
+    expect(second.status).toBe(200);
+
+    const { data: afterSecond } = await adminClient
+      .from('session_presence_intervals')
+      .select('blocker_ready_at')
+      .eq('session_id', sessionId)
+      .single();
+    // A second call never overwrites the first legitimate timestamp.
+    expect(afterSecond?.blocker_ready_at).toBe(firstReadyAt);
+  });
+
   it('records a monitor-mode device attestation row when the create request includes one', async () => {
     const host = await createTestUserAndToken('attestation-host');
 

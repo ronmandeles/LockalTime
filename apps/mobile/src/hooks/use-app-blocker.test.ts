@@ -4,6 +4,14 @@ import type { AppBlockerModule, BlockerEvent } from '../services/app-blocker';
 import { useAppBlocker } from './use-app-blocker';
 import type { UseAppBlockerParams } from './use-app-blocker';
 
+const mockMarkBlockerReady = jest.fn(async (_sessionId: string) => ({
+  ok: true as const,
+  value: { ok: true as const },
+}));
+jest.mock('../services/api-client', () => ({
+  markBlockerReady: (sessionId: string) => mockMarkBlockerReady(sessionId),
+}));
+
 // Phase 3 task 3.1 (backlog.md): useAppBlocker starts/stops the blocker off
 // session state, forwards offline_cutoff_reached into the session lifecycle
 // machine's OFFLINE_TIMEOUT event (owned by the native layer per
@@ -44,6 +52,10 @@ const baseParams = (module: AppBlockerModule, onOfflineTimeout = jest.fn()) => (
   blockedCategories: ['social'] as const,
   onOfflineTimeout,
   module,
+});
+
+beforeEach(() => {
+  mockMarkBlockerReady.mockClear();
 });
 
 describe('useAppBlocker starting/stopping', () => {
@@ -90,6 +102,36 @@ describe('useAppBlocker starting/stopping', () => {
     await rerender({ ...baseParams(module), isSessionActive: false });
 
     expect(module.stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('useAppBlocker blocker-ready reporting', () => {
+  it('reports blocker-ready once module.start() resolves', async () => {
+    const module = buildFakeModule();
+    await renderHook(() => useAppBlocker(baseParams(module)));
+    // start() and the .then() reporting markBlockerReady are both
+    // microtasks — flush them before asserting.
+    await Promise.resolve();
+
+    expect(mockMarkBlockerReady).toHaveBeenCalledWith(SESSION_ID);
+  });
+
+  it('never reports blocker-ready when module.start() fails', async () => {
+    const module = buildFakeModule();
+    (module.start as jest.Mock).mockRejectedValueOnce(new Error('permission revoked'));
+
+    await renderHook(() => useAppBlocker(baseParams(module)));
+    await Promise.resolve();
+
+    expect(mockMarkBlockerReady).not.toHaveBeenCalled();
+  });
+
+  it('never reports blocker-ready when the blocker never starts (no session)', async () => {
+    const module = buildFakeModule();
+    await renderHook(() => useAppBlocker({ ...baseParams(module), sessionId: null }));
+    await Promise.resolve();
+
+    expect(mockMarkBlockerReady).not.toHaveBeenCalled();
   });
 });
 

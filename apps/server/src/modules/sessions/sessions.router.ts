@@ -199,6 +199,22 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
       .catch(next);
   });
 
+  // Advisory only (ARCHITECTURE.md §7's Sybil-resistance gate): the client
+  // calls this once its native blocker's start() actually resolves. Always
+  // 200 — this can never fail the caller's flow the way join/leave do,
+  // since it only affects whether the participant later counts toward the
+  // Group Bonus threshold, never whether they're in the session at all.
+  router.post('/:id/blocker-ready', requireAuth, (req, res, next) => {
+    const userId = req.auth?.userId as string;
+
+    deps.store
+      .markBlockerReady(req.params.id, userId, new Date().toISOString())
+      .then(() => {
+        res.status(200).json({ ok: true });
+      })
+      .catch(next);
+  });
+
   // Host-only. The auto-close sweep (Phase 4's session sweep worker) ends a
   // session the same way but calls endSession() directly with a null
   // endedBy — it never goes through this HTTP route, since there's no

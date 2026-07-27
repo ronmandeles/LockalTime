@@ -71,6 +71,7 @@ const buildFakeStore = (): SessionsStore & {
       store.hostAssignment = { sessionId, userId, reason };
     },
     async insertPresenceInterval(): Promise<void> {},
+    async markBlockerReady(): Promise<void> {},
     // Not exercised by these tests — present only to satisfy the
     // SessionsStore interface.
     async joinSession(): Promise<never> {

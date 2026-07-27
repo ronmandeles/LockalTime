@@ -76,6 +76,7 @@ export interface CreateSessionResponse {
   readonly plannedDurationMinutes: number | null;
   readonly qrToken: string | null;
   readonly qrExpiresAt: string | null;
+  readonly startedAt: string | null;
   readonly createdAt: string;
 }
 
@@ -100,3 +101,16 @@ export const leaveSession = (
   reason: LeaveReason,
 ): Promise<ApiResult<LeaveSessionResponse>> =>
   request<LeaveSessionResponse>(`/sessions/${sessionId}/leave`, { reason });
+
+export interface BlockerReadyResponse {
+  readonly ok: true;
+}
+
+// Advisory (ARCHITECTURE.md §7's Sybil-resistance gate) — called once
+// useAppBlocker's module.start() resolves. Callers should fire-and-forget
+// this (never block session UX on it): the server-side endpoint is itself
+// best-effort and idempotent, and a failure here only means this
+// participant won't count toward the Group Bonus threshold, never that
+// they're removed from the session.
+export const markBlockerReady = (sessionId: string): Promise<ApiResult<BlockerReadyResponse>> =>
+  request<BlockerReadyResponse>(`/sessions/${sessionId}/blocker-ready`, {});
