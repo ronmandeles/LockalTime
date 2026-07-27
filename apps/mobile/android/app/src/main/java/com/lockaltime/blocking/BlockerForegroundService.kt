@@ -112,12 +112,20 @@ class BlockerForegroundService : Service() {
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    var rawCategories: List<String> = emptyList()
     if (intent != null) {
       sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
       currentSessionId = sessionId
       endsAtMillis = parseEndsAt(intent.getStringExtra(EXTRA_ENDS_AT))
-      val categories = intent.getStringArrayExtra(EXTRA_BLOCKED_CATEGORIES)?.toList() ?: emptyList()
-      blockedAndroidCategories = categories.flatMap { CategoryMapping.androidCategoriesFor(it) }.toSet()
+      rawCategories = intent.getStringArrayExtra(EXTRA_BLOCKED_CATEGORIES)?.toList() ?: emptyList()
+      blockedAndroidCategories = rawCategories.flatMap { CategoryMapping.androidCategoriesFor(it) }.toSet()
+    }
+
+    // Boot persistence (task 3.4): every real start (not a boot-restart
+    // replaying the same config) re-saves the snapshot, so a reboot
+    // mid-session always has the latest config to resume from.
+    if (intent != null && sessionId.isNotEmpty()) {
+      BootPersistence.save(applicationContext, sessionId, intent.getStringExtra(EXTRA_ENDS_AT), rawCategories)
     }
 
     startForeground(NOTIFICATION_ID, buildNotification())
@@ -134,7 +142,14 @@ class BlockerForegroundService : Service() {
     isRunning = false
     currentSessionId = null
 
-    if (!deliberateStop && sessionId.isNotEmpty()) {
+    if (deliberateStop) {
+      // JS-initiated stop(), or the local endsAt-reached self-stop — either
+      // way there's nothing left to resume on a later boot.
+      BootPersistence.clear(applicationContext)
+    } else if (sessionId.isNotEmpty()) {
+      // Unexpected teardown while a session was mid-flight — the persisted
+      // snapshot deliberately survives so BOOT_COMPLETED (or a future
+      // relaunch-reconciliation task) can restart it.
       AppBlockerModule.emitEvent(
         "service_killed",
         Arguments.createMap().apply {

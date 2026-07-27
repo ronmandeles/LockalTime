@@ -56,7 +56,14 @@ Items that cannot be verified on this development machine (no Android SDK platfo
 - [ ] **UsageStatsManager polling accuracy** — verify the 2s poll interval reliably catches fast app-switches (the `POLL_INTERVAL_MS * 3` trailing window in `currentForegroundPackageName()` is a best-guess buffer, unverified on real hardware) and doesn't misfire on Lockal Time's own foreground state (`foregroundPackage != packageName` guard).
 - [ ] **Foreground-service notification** — confirm it's non-dismissible while a session is active, tapping it opens the app, and it disappears when the session ends/is stopped.
 - [ ] **Battery-critical event** — drain (or simulate via `adb shell dumpsys battery set level <n>`) to below the OS's low-battery threshold and confirm the app surfaces something reasonable (currently: `useAppBlocker`'s violation banner, same UI as a permission revoke).
-- [ ] **`service_killed` detection** — force-stop the app process via Settings while a session is active (not just swipe from Recents) and confirm, on next foreground, the app reflects reality rather than a stuck "active" state — full reconciliation depends on task 3.4's boot/relaunch persistence, not yet built.
+- [ ] **`service_killed` detection** — force-stop the app process via Settings while a session is active (not just swipe from Recents) and confirm, on next foreground, the app reflects reality rather than a stuck "active" state.
+
+## Phase 3 — Boot persistence (task 3.4)
+
+- [ ] **Reboot mid-session restarts blocking** — start a session, then reboot the device (not just force-stop the app) without stopping the session first. After the device finishes booting and is unlocked, confirm the Foreground Service notification reappears and blocking resumes without opening the app. `BootPersistence`/`BootCompletedReceiver` are Gradle-build-verified but never run on a real device this phase.
+- [ ] **A cleanly-ended session does NOT resume after reboot** — stop a session normally (or let a fixed-duration one reach `endsAt`), then reboot. Confirm nothing restarts — the persisted snapshot should have been cleared.
+- [ ] **A fixed-duration session whose `endsAt` passed while the device was off does NOT resume** — start a short fixed session, power off the device before it ends, wait past `endsAt`, power back on. Confirm blocking does not restart (and the stale snapshot gets cleared on that boot).
+- [ ] **Direct-boot limitation** — this only listens for `BOOT_COMPLETED` (after the user unlocks), not `LOCKED_BOOT_COMPLETED` — `EncryptedSharedPreferences` needs credential-encrypted storage, unavailable before first unlock. A session active across a reboot won't resume enforcement until the user actually unlocks the device once; document this as an accepted limitation if it matters in practice.
 
 ## Phase 1 — Auth error states (Screen 3)
 

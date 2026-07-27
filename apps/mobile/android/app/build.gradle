@@ -111,6 +111,11 @@ dependencies {
     // The version of react-native is set by the React Native Gradle Plugin
     implementation("com.facebook.react:react-android")
 
+    // Phase 3 task 3.4: EncryptedSharedPreferences for boot-persisted
+    // session state (BootPersistence.kt) — the device may boot offline, so
+    // this can't just be a Supabase re-fetch.
+    implementation("androidx.security:security-crypto:1.1.0")
+
     if (hermesEnabled.toBoolean()) {
         implementation("com.facebook.react:hermes-android")
     } else {

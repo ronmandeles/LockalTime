@@ -19,6 +19,7 @@
          Android version is current by ship time — this targets API 34's
          documented requirement as of this writing. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application
       android:name=".MainApplication"
@@ -49,5 +50,13 @@
           android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
           android:value="app_blocking_during_joined_focus_session" />
       </service>
+      <receiver
+        android:name="com.lockaltime.blocking.BootCompletedReceiver"
+        android:exported="true"
+        android:enabled="true">
+        <intent-filter>
+          <action android:name="android.intent.action.BOOT_COMPLETED" />
+        </intent-filter>
+      </receiver>
     </application>
 </manifest>
