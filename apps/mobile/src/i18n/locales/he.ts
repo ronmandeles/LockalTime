@@ -88,6 +88,32 @@ export const he: TranslationSchema = {
       openSettings: 'פתיחת הגדרות',
     },
   },
+  emergencyExit: {
+    title: 'יציאת חירום',
+    body: 'יציאה עכשיו מבטלת בונוס קבוצתי או בונוס השלמה עבור הסשן הזה. הנקודות שכבר צברתם יישמרו.',
+    holdToExit: 'החזיקו כדי לצאת',
+    cancel: 'ביטול',
+    errors: {
+      requestFailed: 'לא הצלחנו להשלים את היציאה. נסו שוב.',
+    },
+  },
+  sessionCompletion: {
+    title: {
+      completed: 'הסשן הושלם',
+      left: 'יצאתם מוקדם',
+    },
+    pointsEarned: 'נקודות שנצברו',
+    breakdown: {
+      base: 'נקודות בסיס',
+      groupBonus: 'בונוס קבוצתי',
+      completionBonus: 'בונוס השלמה',
+    },
+    forfeitedNote: 'בונוסים אינם זמינים עבור סשנים שלא נשארתם בהם עד הסוף.',
+    minutesPresent: '{{count}} דקות נוכחות',
+    done: 'סיום',
+    loading: 'מחשבים את הנקודות שלכם…',
+    notReady: 'התוצאות שלכם עדיין לא מוכנות — בדקו בהיסטוריה בעוד רגע.',
+  },
   onboarding: {
     pages: {
       valueProposition: {

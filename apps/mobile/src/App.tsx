@@ -16,6 +16,7 @@ import HomeScreen from './screens/HomeScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import PermissionPrimingScreen from './screens/PermissionPrimingScreen';
 import ScanSessionScreen from './screens/ScanSessionScreen';
+import SessionCompletionScreen from './screens/SessionCompletionScreen';
 import SessionDetailsScreen from './screens/SessionDetailsScreen';
 import { attachAuthStateListener, useAuthStore } from './state/auth-store';
 import { hydrateOnboardingStatus, markOnboardingSeen, useOnboardingStore } from './state/onboarding-store';
@@ -140,6 +141,7 @@ const App = (): React.JSX.Element | null => {
           <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
           <RootStack.Screen name="SessionDetails" component={SessionDetailsScreen} />
           <RootStack.Screen name="ActiveSession" component={ActiveSessionScreen} />
+          <RootStack.Screen name="SessionCompletion" component={SessionCompletionScreen} />
         </RootStack.Navigator>
       </NavigationContainer>
     </I18nProvider>

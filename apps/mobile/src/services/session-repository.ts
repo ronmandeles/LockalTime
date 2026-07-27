@@ -33,6 +33,31 @@ export interface PresenceIntervalRow {
   readonly left_at: string | null;
 }
 
+export type ExitReasonRow = 'completed' | 'emergency_exit' | 'disconnected';
+
+// Computed once by the Node API at session-close/emergency-exit time
+// (apps/server/src/modules/sessions/end-session.ts,
+// finalize-emergency-exit.ts) and never recomputed here — this is a read
+// of an already-authoritative value, not a client-side calculation
+// (CLAUDE.md's Money-Equivalent Logic Rule).
+export interface SessionParticipantRow {
+  readonly session_id: string;
+  readonly user_id: string;
+  readonly is_host: boolean;
+  readonly total_minutes_present: number;
+  readonly exit_reason: ExitReasonRow | null;
+  readonly group_bonus_earned: boolean;
+  readonly completion_bonus_earned: boolean;
+  readonly points_earned: number;
+}
+
+export type BonusTypeRow = 'base' | 'group_bonus' | 'completion_bonus' | 'milestone';
+
+export interface RewardsHistoryRow {
+  readonly points: number;
+  readonly bonus_type: BonusTypeRow;
+}
+
 export interface RepositoryFailure {
   readonly message: string;
 }
@@ -75,4 +100,45 @@ export const fetchOpenPresenceIntervals = async (
     return { ok: false, error: { message: error.message } };
   }
   return { ok: true, value: data as unknown as readonly PresenceIntervalRow[] };
+};
+
+// Screen 10's receipt data. maybeSingle (not single) because a null result
+// is a real, expected state — the caller navigated here right as
+// finalization was landing — not an error to surface.
+export const fetchSessionParticipant = async (
+  sessionId: string,
+  userId: string,
+): Promise<RepositoryResult<SessionParticipantRow | null>> => {
+  const { data, error } = await getSupabaseClient()
+    .from('session_participants')
+    .select(
+      'session_id, user_id, is_host, total_minutes_present, exit_reason, group_bonus_earned, completion_bonus_earned, points_earned',
+    )
+    .eq('session_id', sessionId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error !== null) {
+    return { ok: false, error: { message: error.message } };
+  }
+  return { ok: true, value: data as unknown as SessionParticipantRow | null };
+};
+
+// The itemized breakdown behind session_participants.points_earned — one
+// row per bonus category actually earned (ARCHITECTURE.md §9's
+// "transparent point receipts, bonuses broken out separately").
+export const fetchRewardsHistory = async (
+  sessionId: string,
+  userId: string,
+): Promise<RepositoryResult<readonly RewardsHistoryRow[]>> => {
+  const { data, error } = await getSupabaseClient()
+    .from('rewards_history')
+    .select('points, bonus_type')
+    .eq('session_id', sessionId)
+    .eq('user_id', userId);
+
+  if (error !== null) {
+    return { ok: false, error: { message: error.message } };
+  }
+  return { ok: true, value: (data ?? []) as unknown as readonly RewardsHistoryRow[] };
 };

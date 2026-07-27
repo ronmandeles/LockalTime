@@ -90,6 +90,40 @@ export const en = {
       openSettings: 'Open settings',
     },
   },
+  // Emergency Exit (Screen 9) copy is PLACEHOLDER, flagged for the deferred
+  // copy pass. In-session surface (DESIGN_GUIDELINES §0) — quiet, no new
+  // stimulation; the hold-to-confirm interaction itself is what carries the
+  // "this is high-stakes" weight (§7), not louder copy.
+  emergencyExit: {
+    title: 'Emergency exit',
+    body: "Leaving now forfeits any group or completion bonus for this session. You'll still keep the points you've already earned.",
+    holdToExit: 'Hold to exit',
+    cancel: 'Cancel',
+    errors: {
+      requestFailed: "We couldn't complete the exit. Please try again.",
+    },
+  },
+  // Session Completion (Screen 10) copy is PLACEHOLDER, flagged for the
+  // deferred copy pass. Acquisition surface (DESIGN_GUIDELINES §0) — full
+  // design effort; bonuses always broken out separately, never bundled
+  // (ARCHITECTURE.md §9).
+  sessionCompletion: {
+    title: {
+      completed: 'Session complete',
+      left: 'You left early',
+    },
+    pointsEarned: 'Points earned',
+    breakdown: {
+      base: 'Base points',
+      groupBonus: 'Group bonus',
+      completionBonus: 'Completion bonus',
+    },
+    forfeitedNote: "Bonuses aren't available for sessions you didn't stay in until the end.",
+    minutesPresent: '{{count}} minutes present',
+    done: 'Done',
+    loading: 'Calculating your points…',
+    notReady: "Your results aren't ready yet — check History in a moment.",
+  },
   // Onboarding copy is PLACEHOLDER, flagged for the deferred copy pass. Each
   // page resolves one hesitation (DESIGN_GUIDELINES §9): why this app / how
   // sessions work / why the permission ask is coming.

@@ -11,4 +11,12 @@ export type RootStackParamList = {
   // participant's session-repository read deliberately never re-exposes
   // it (no reason for a participant to see the host's re-share code).
   ActiveSession: { readonly sessionId: string; readonly qrToken?: string };
+  // Screen 9 — participant-initiated, forfeits both bonuses unconditionally
+  // (ARCHITECTURE.md §7). Long-press/slide confirmation, not a tap.
+  EmergencyExit: { readonly sessionId: string };
+  // Screen 10 — the points receipt, reached either from a normal session
+  // end (host-ended/duration-reached/force-terminated) or from a
+  // successful Emergency Exit; the exit_reason on the fetched row is what
+  // tells the two apart, not a route param.
+  SessionCompletion: { readonly sessionId: string };
 };
