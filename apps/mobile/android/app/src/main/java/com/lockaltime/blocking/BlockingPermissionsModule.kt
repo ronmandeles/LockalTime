@@ -1,6 +1,5 @@
 package com.lockaltime.blocking
 
-import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -28,22 +27,11 @@ class BlockingPermissionsModule(private val reactContext: ReactApplicationContex
 
   override fun getName(): String = "BlockingPermissionsModule"
 
-  private fun hasUsageAccess(): Boolean {
-    val appOps = reactContext.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-    val mode =
-      appOps.checkOpNoThrow(
-        AppOpsManager.OPSTR_GET_USAGE_STATS,
-        android.os.Process.myUid(),
-        reactContext.packageName,
-      )
-    return mode == AppOpsManager.MODE_ALLOWED
-  }
-
-  private fun hasOverlayPermission(): Boolean = Settings.canDrawOverlays(reactContext)
-
   private fun currentStatusMap(): WritableMap {
+    val granted =
+      PermissionChecks.hasUsageAccess(reactContext) && PermissionChecks.hasOverlayPermission(reactContext)
     val map = Arguments.createMap()
-    map.putString("status", if (hasUsageAccess() && hasOverlayPermission()) "granted" else "denied")
+    map.putString("status", if (granted) "granted" else "denied")
     return map
   }
 
@@ -59,12 +47,12 @@ class BlockingPermissionsModule(private val reactContext: ReactApplicationContex
     // there is no combined settings screen.
     val intent =
       when {
-        !hasUsageAccess() ->
+        !PermissionChecks.hasUsageAccess(reactContext) ->
           Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
             data = Uri.parse("package:${reactContext.packageName}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
           }
-        !hasOverlayPermission() ->
+        !PermissionChecks.hasOverlayPermission(reactContext) ->
           Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
             data = Uri.parse("package:${reactContext.packageName}")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

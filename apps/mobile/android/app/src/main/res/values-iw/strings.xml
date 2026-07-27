@@ -1,0 +1,5 @@
+<resources>
+    <string name="blocker_notification_channel_name">חסימת סשן</string>
+    <string name="blocker_notification_title">סשן Lockal Time פעיל</string>
+    <string name="blocker_notification_text">חוסם אפליקציות מסיחות דעת עד לסיום הסשן.</string>
+</resources>

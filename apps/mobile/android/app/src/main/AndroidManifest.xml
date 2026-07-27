@@ -10,6 +10,15 @@
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <!-- Android 14+ (API 34) requires a foregroundServiceType; "specialUse"
+         is the closest fit (blocking distracting apps during a joined
+         session isn't camera/location/media-playback/etc.) and requires
+         both this permission and the PROPERTY_SPECIAL_USE_FGS_SUBTYPE
+         declaration below the service element. Re-verify against whatever
+         Android version is current by ship time — this targets API 34's
+         documented requirement as of this writing. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
 
     <application
       android:name=".MainApplication"
@@ -32,5 +41,13 @@
             <category android:name="android.intent.category.LAUNCHER" />
         </intent-filter>
       </activity>
+      <service
+        android:name="com.lockaltime.blocking.BlockerForegroundService"
+        android:exported="false"
+        android:foregroundServiceType="specialUse">
+        <property
+          android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+          android:value="app_blocking_during_joined_focus_session" />
+      </service>
     </application>
 </manifest>

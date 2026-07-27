@@ -1,3 +1,10 @@
 <resources>
     <string name="app_name">LockalTime</string>
+    <!-- Foreground-service notification (BlockerForegroundService, Phase 3
+         task 3.3) — native-side text, so it lives in Android string
+         resources (not the JS i18n bundle) with the same en+he coverage
+         requirement (CLAUDE.md: no hardcoded UI strings). -->
+    <string name="blocker_notification_channel_name">Session blocking</string>
+    <string name="blocker_notification_title">Lockal Time session active</string>
+    <string name="blocker_notification_text">Blocking distracting apps until your session ends.</string>
 </resources>

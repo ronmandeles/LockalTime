@@ -1,24 +1,21 @@
+import { DeviceEventEmitter, NativeModules, Platform } from 'react-native';
+
 import type { BlockedCategory } from '../config/blocked-categories';
 
-// AppBlockerModule seam for the native blocker bridge (ARCHITECTURE.md §4,
-// Phase 3 task 3.0 — backlog.md). The REAL start/stop/poll behavior is
-// native (Android Foreground Service + UsageStatsManager + overlay; iOS
-// FamilyControls + ManagedSettings + DeviceActivityMonitor) and lands with
-// tasks 3.3 (Android) / 3.6 (iOS). This module is the SEAM: useAppBlocker
-// (task 3.1) and any screen code against this surface only, so those tasks
-// swap the implementation below without touching a call site — same pattern
-// as blocking-permissions.ts (Phase 1 -> Phase 3 swap).
+// AppBlockerModule seam for the native blocker bridge (ARCHITECTURE.md §4).
+// Phase 3 task 3.3 wires the real Android half: BlockerForegroundService.kt
+// (Foreground Service + UsageStatsManager polling + SYSTEM_ALERT_WINDOW
+// overlay) started/stopped via AppBlockerModule.kt, emitting BlockerEvents
+// through RCTDeviceEventEmitter — so this module listens on the shared
+// DeviceEventEmitter directly rather than wrapping a NativeEventEmitter
+// around the native module (the Kotlin module's addListener/removeListeners
+// are no-op bridge bookkeeping only, not this delivery path). iOS keeps the
+// Phase 3.0 placeholder until task 3.6 wires FamilyControls.
 //
-// PHASE 3.0 PLACEHOLDER, deliberately deterministic pure JS:
-// - start()/stop() no-op and resolve — nothing native exists yet to start or
-//   stop.
-// - getStatus() always resolves { state: 'inactive' } — the placeholder
-//   cannot actually enforce a block, so it must never claim 'active'.
-// - addEventListener() registers the listener and returns an unsubscribe
-//   function, but never invokes it — no native bridge exists yet to emit
-//   BlockerEvents from.
-// - No call ever rejects: like blockingPermissions, capability state is an
-//   answer, not an error.
+// Every call branches on Platform.OS at CALL time (not cached at module-load
+// time) — same lesson as blocking-permissions.ts: caching a native-module
+// reference in a top-level const makes the seam unmockable in Jest, since
+// imports execute before any later test-file mutation of NativeModules.
 
 export interface SessionBlockerConfig {
   readonly sessionId: string;
@@ -72,9 +69,163 @@ export interface AppBlockerModule {
   addEventListener(listener: (event: BlockerEvent) => void): () => void;
 }
 
+interface NativeAppBlockerStartConfig {
+  readonly sessionId: string;
+  readonly endsAt: string | null;
+  readonly blockedCategories: string[];
+}
+
+interface NativeAppBlockerModule {
+  start(config: NativeAppBlockerStartConfig): Promise<void>;
+  stop(): Promise<void>;
+  getStatus(): Promise<unknown>;
+}
+
+// Read fresh on every call, never cached — see the file header note.
+const getNativeModule = (): NativeAppBlockerModule | undefined =>
+  (NativeModules as Record<string, unknown>).AppBlockerModule as NativeAppBlockerModule | undefined;
+
+const VIOLATION_REASONS = ['permission_revoked', 'service_killed', 'battery_critical'] as const;
+const BLOCKED_CATEGORY_VALUES = ['social', 'games', 'entertainment'] as const;
+const PERMISSION_VALUES = ['usage_access', 'overlay', 'family_controls', 'battery_optimization'] as const;
+
+// Runtime-validates whatever the native bridge sends back — never trust a
+// bridge payload as already-typed (typescript-strictness: boundary
+// validation on native-module data). An unrecognized shape always resolves
+// to the safest reading, never a false 'active'/'granted'-shaped claim.
+const toBlockerStatus = (raw: unknown): BlockerStatus => {
+  if (typeof raw !== 'object' || raw === null) {
+    return { state: 'inactive' };
+  }
+  const value = raw as Record<string, unknown>;
+  if (value.state === 'active' && typeof value.sessionId === 'string') {
+    return { state: 'active', sessionId: value.sessionId };
+  }
+  if (
+    value.state === 'violation' &&
+    typeof value.sessionId === 'string' &&
+    typeof value.reason === 'string' &&
+    (VIOLATION_REASONS as readonly string[]).includes(value.reason)
+  ) {
+    return {
+      state: 'violation',
+      sessionId: value.sessionId,
+      reason: value.reason as 'permission_revoked' | 'service_killed' | 'battery_critical',
+    };
+  }
+  return { state: 'inactive' };
+};
+
+const toBlockerEvent = (eventName: string, payload: unknown): BlockerEvent | null => {
+  if (typeof payload !== 'object' || payload === null) {
+    return null;
+  }
+  const value = payload as Record<string, unknown>;
+  const sessionId = value.sessionId;
+  if (typeof sessionId !== 'string') {
+    return null;
+  }
+
+  switch (eventName) {
+    case 'shield_triggered':
+      if (
+        typeof value.category === 'string' &&
+        (BLOCKED_CATEGORY_VALUES as readonly string[]).includes(value.category) &&
+        typeof value.at === 'string'
+      ) {
+        return {
+          type: 'shield_triggered',
+          sessionId,
+          category: value.category as BlockedCategory,
+          at: value.at,
+        };
+      }
+      return null;
+    case 'service_killed':
+      return typeof value.lastSeenAt === 'string'
+        ? { type: 'service_killed', sessionId, lastSeenAt: value.lastSeenAt }
+        : null;
+    case 'permission_revoked':
+      return typeof value.permission === 'string' &&
+        (PERMISSION_VALUES as readonly string[]).includes(value.permission)
+        ? {
+            type: 'permission_revoked',
+            sessionId,
+            permission: value.permission as (typeof PERMISSION_VALUES)[number],
+          }
+        : null;
+    case 'battery_critical':
+      return typeof value.level === 'number' ? { type: 'battery_critical', sessionId, level: value.level } : null;
+    case 'offline_cutoff_reached':
+      return typeof value.lastConnectedAt === 'string'
+        ? { type: 'offline_cutoff_reached', sessionId, lastConnectedAt: value.lastConnectedAt }
+        : null;
+    default:
+      return null;
+  }
+};
+
+const EVENT_NAMES = [
+  'shield_triggered',
+  'service_killed',
+  'permission_revoked',
+  'battery_critical',
+  'offline_cutoff_reached',
+] as const;
+
 export const appBlocker: AppBlockerModule = {
-  start: async (): Promise<void> => {},
-  stop: async (): Promise<void> => {},
-  getStatus: async (): Promise<BlockerStatus> => ({ state: 'inactive' }),
-  addEventListener: (): (() => void) => (): void => {},
+  start: async (config: SessionBlockerConfig): Promise<void> => {
+    if (Platform.OS !== 'android') {
+      // iOS placeholder until task 3.6 — nothing native exists yet to start.
+      return;
+    }
+    const native = getNativeModule();
+    if (native === undefined) {
+      return;
+    }
+    await native.start({
+      sessionId: config.sessionId,
+      endsAt: config.endsAt,
+      blockedCategories: [...config.blockedCategories],
+    });
+  },
+
+  stop: async (): Promise<void> => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+    const native = getNativeModule();
+    if (native === undefined) {
+      return;
+    }
+    await native.stop();
+  },
+
+  getStatus: async (): Promise<BlockerStatus> => {
+    if (Platform.OS !== 'android') {
+      return { state: 'inactive' };
+    }
+    const native = getNativeModule();
+    if (native === undefined) {
+      return { state: 'inactive' };
+    }
+    return toBlockerStatus(await native.getStatus());
+  },
+
+  addEventListener: (listener: (event: BlockerEvent) => void): (() => void) => {
+    if (Platform.OS !== 'android') {
+      return (): void => {};
+    }
+    const subscriptions = EVENT_NAMES.map((eventName) =>
+      DeviceEventEmitter.addListener(eventName, (payload: unknown) => {
+        const event = toBlockerEvent(eventName, payload);
+        if (event !== null) {
+          listener(event);
+        }
+      }),
+    );
+    return (): void => {
+      subscriptions.forEach((subscription) => subscription.remove());
+    };
+  },
 };
