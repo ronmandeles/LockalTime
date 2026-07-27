@@ -36,7 +36,14 @@ export interface SessionTiming {
 export interface ParticipantReward {
   readonly userId: string;
   readonly totalMinutesPresent: number;
+  // basePoints + groupBonusPoints + completionBonusPoints === pointsEarned,
+  // always — the breakdown exists for rewards_history's separate rows and
+  // Screen 10's "bonuses broken out separately" receipt (ARCHITECTURE.md
+  // §9), not as an independent computation from pointsEarned.
+  readonly basePoints: number;
   readonly groupBonusEarned: boolean;
+  readonly groupBonusPoints: number;
   readonly completionBonusEarned: boolean;
+  readonly completionBonusPoints: number;
   readonly pointsEarned: number;
 }

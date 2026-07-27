@@ -234,4 +234,74 @@ describe('sessions integration (local Supabase)', () => {
     const outcomes = [resultA.data, resultB.data].sort();
     expect(outcomes).toEqual(['at_capacity', 'joined']);
   });
+
+  it('create -> join -> end produces session_participants + rewards_history rows, readable only by their own user', async () => {
+    const host = await createTestUserAndToken('end-host');
+    const participant = await createTestUserAndToken('end-participant');
+
+    const createResponse = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ type: 'dynamic_qr', duration_mode: 'open_ended' });
+    const sessionId = createResponse.body.id as string;
+    const qrToken = createResponse.body.qrToken as string;
+
+    await request(app)
+      .post('/sessions/join')
+      .set('Authorization', `Bearer ${participant.token}`)
+      .send({ token: qrToken })
+      .expect(201);
+
+    const endResponse = await request(app)
+      .post(`/sessions/${sessionId}/end`)
+      .set('Authorization', `Bearer ${host.token}`);
+    expect(endResponse.status).toBe(200);
+    expect(endResponse.body.endedAt).toEqual(expect.any(String));
+
+    const { data: sessionRow } = await adminClient
+      .from('sessions')
+      .select('status, end_reason, ended_by')
+      .eq('id', sessionId)
+      .single();
+    expect(sessionRow).toMatchObject({
+      status: 'completed',
+      end_reason: 'host_ended',
+      ended_by: host.userId,
+    });
+
+    const { data: participants } = await adminClient
+      .from('session_participants')
+      .select('user_id, exit_reason, is_host, points_earned')
+      .eq('session_id', sessionId);
+    expect(participants).toHaveLength(2);
+    expect(participants).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ user_id: host.userId, exit_reason: 'completed', is_host: true }),
+        expect.objectContaining({
+          user_id: participant.userId,
+          exit_reason: 'completed',
+          is_host: false,
+        }),
+      ]),
+    );
+
+    // Ending closes every open interval -- a second /end call must find
+    // nothing left to do (already 'completed', not 'active').
+    const secondEnd = await request(app)
+      .post(`/sessions/${sessionId}/end`)
+      .set('Authorization', `Bearer ${host.token}`);
+    expect(secondEnd.status).toBe(409);
+
+    // RLS: each user reads only their own rewards_history rows.
+    const hostClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+      global: { headers: { Authorization: `Bearer ${host.token}` } },
+    });
+    const hostRewards = await hostClient
+      .from('rewards_history')
+      .select('user_id, bonus_type')
+      .eq('session_id', sessionId);
+    expect(hostRewards.data?.every((row) => row.user_id === host.userId)).toBe(true);
+    expect(hostRewards.data?.some((row) => row.bonus_type === 'base')).toBe(true);
+  });
 });

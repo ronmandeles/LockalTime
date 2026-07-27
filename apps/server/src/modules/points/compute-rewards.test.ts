@@ -30,8 +30,11 @@ describe('computeSessionRewards', () => {
     expect(reward).toEqual({
       userId: 'a',
       totalMinutesPresent: 45,
+      basePoints: 45,
       groupBonusEarned: false,
+      groupBonusPoints: 0,
       completionBonusEarned: false,
+      completionBonusPoints: 0,
       pointsEarned: 45,
     });
   });
@@ -52,7 +55,37 @@ describe('computeSessionRewards', () => {
       // same number here by coincidence of round(); the additive-vs-
       // compounded distinction is asserted directly on percent math below.
       expect(reward.pointsEarned).toBe(108);
+      expect(reward.basePoints).toBe(90);
+      // Both bonuses earned: the 18-point combined bonus (108 - 90) is
+      // split evenly between the two rows (equal 10% weights), remainder
+      // to group_bonus -- an allocation convention for rewards_history's
+      // separate rows, not a re-derivation of the authoritative total.
+      expect(reward.groupBonusPoints).toBe(9);
+      expect(reward.completionBonusPoints).toBe(9);
+      expect(reward.groupBonusPoints + reward.completionBonusPoints).toBe(
+        reward.pointsEarned - reward.basePoints,
+      );
     }
+  });
+
+  it('splits an odd combined bonus with the remainder going to the group bonus row', () => {
+    // base=65 -> pointsEarned = round(65 * 1.20) = 78, totalBonus = 13
+    // (odd) -- floor(13/2)=6 to completion, the remaining 7 to group.
+    const participants = ['a', 'b', 'c', 'd', 'e'].map((id) =>
+      participant(id, [wholeSessionInterval(65)]),
+    );
+
+    const rewards = computeSessionRewards(participants, timing(65));
+    const [reward] = rewards;
+    if (reward === undefined) {
+      throw new Error('expected at least one reward');
+    }
+
+    expect(reward.groupBonusEarned).toBe(true);
+    expect(reward.completionBonusEarned).toBe(true);
+    expect(reward.pointsEarned).toBe(78);
+    expect(reward.groupBonusPoints).toBe(7);
+    expect(reward.completionBonusPoints).toBe(6);
   });
 
   it('applies only the group bonus when completion criteria are not met', () => {
@@ -91,8 +124,11 @@ describe('computeSessionRewards', () => {
     expect(reward).toEqual({
       userId: 'a',
       totalMinutesPresent: 40,
+      basePoints: 40,
       groupBonusEarned: false,
+      groupBonusPoints: 0,
       completionBonusEarned: false,
+      completionBonusPoints: 0,
       pointsEarned: 40,
     });
   });
@@ -125,8 +161,11 @@ describe('computeForfeitedReward', () => {
     expect(computeForfeitedReward(intervals, 'a')).toEqual({
       userId: 'a',
       totalMinutesPresent: 23,
+      basePoints: 23,
       groupBonusEarned: false,
+      groupBonusPoints: 0,
       completionBonusEarned: false,
+      completionBonusPoints: 0,
       pointsEarned: 23,
     });
   });

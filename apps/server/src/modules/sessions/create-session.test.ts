@@ -62,6 +62,27 @@ const buildFakeStore = (): SessionsStore & {
     async closeOpenInterval(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async getSessionSummary(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async closeAllOpenIntervals(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getPresenceIntervals(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getFinalizedParticipantUserIds(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async writeSessionParticipants(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async insertRewardsHistory(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async markSessionEnded(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
   };
   return store;
 };

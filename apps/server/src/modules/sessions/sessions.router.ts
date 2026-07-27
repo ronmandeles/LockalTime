@@ -7,6 +7,7 @@ import type { AttestationProvider } from '../attestation/attestation-provider';
 import type { AttestationStore } from '../attestation/attestation-store';
 import { recordDeviceAttestation } from '../attestation/record-attestation';
 import { createSession } from './create-session';
+import { endSession } from './end-session';
 import { joinSession } from './join-session';
 import type { SessionsStore } from './sessions-store';
 
@@ -183,6 +184,32 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
           return;
         }
         res.status(200).json({ left: true });
+      })
+      .catch(next);
+  });
+
+  // Host-only. The auto-close sweep (Phase 4's session sweep worker) ends a
+  // session the same way but calls endSession() directly with a null
+  // endedBy — it never goes through this HTTP route, since there's no
+  // authenticated caller to check.
+  router.post('/:id/end', requireAuth, (req, res, next) => {
+    const userId = req.auth?.userId as string;
+
+    endSession(deps.store, req.params.id, { endedBy: userId, endReason: 'host_ended' })
+      .then((result) => {
+        if (result.outcome === 'ended') {
+          res.status(200).json({ endedAt: result.endedAt });
+          return;
+        }
+        if (result.outcome === 'not_found') {
+          next(new ApiError(404, 'session_not_found', 'Session not found'));
+          return;
+        }
+        if (result.outcome === 'not_active') {
+          next(new ApiError(409, 'session_not_active', 'Session is not active'));
+          return;
+        }
+        next(new ApiError(403, 'not_session_host', 'Only the session host can end it'));
       })
       .catch(next);
   });
