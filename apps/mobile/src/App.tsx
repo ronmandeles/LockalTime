@@ -8,10 +8,15 @@ import { I18nProvider } from './i18n/I18nProvider';
 import { initI18n } from './i18n/init-i18n';
 import type { SupportedLocale } from './i18n/resolve-device-locale';
 import { syncLayoutDirection } from './i18n/sync-layout-direction';
+import type { RootStackParamList } from './navigation/types';
+import ActiveSessionScreen from './screens/ActiveSessionScreen';
 import AuthScreen from './screens/AuthScreen';
+import CreateSessionScreen from './screens/CreateSessionScreen';
 import HomeScreen from './screens/HomeScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import PermissionPrimingScreen from './screens/PermissionPrimingScreen';
+import ScanSessionScreen from './screens/ScanSessionScreen';
+import SessionDetailsScreen from './screens/SessionDetailsScreen';
 import { attachAuthStateListener, useAuthStore } from './state/auth-store';
 import { hydrateOnboardingStatus, markOnboardingSeen, useOnboardingStore } from './state/onboarding-store';
 import {
@@ -22,10 +27,6 @@ import {
 
 // Testable app factory (the runtime shell is index.js, which only registers
 // this component) — mirrors the app.ts/server.ts split in apps/server.
-export type RootStackParamList = {
-  Home: undefined;
-};
-
 const RootStack = createNativeStackNavigator<RootStackParamList>();
 
 // Completing or skipping onboarding marks the persisted flag; the store flip
@@ -135,6 +136,10 @@ const App = (): React.JSX.Element | null => {
             user-facing copy. */}
         <RootStack.Navigator screenOptions={{ headerShown: false }}>
           <RootStack.Screen name="Home" component={HomeScreen} />
+          <RootStack.Screen name="CreateSession" component={CreateSessionScreen} />
+          <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
+          <RootStack.Screen name="SessionDetails" component={SessionDetailsScreen} />
+          <RootStack.Screen name="ActiveSession" component={ActiveSessionScreen} />
         </RootStack.Navigator>
       </NavigationContainer>
     </I18nProvider>

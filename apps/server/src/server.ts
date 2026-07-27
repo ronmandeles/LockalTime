@@ -1,9 +1,20 @@
+import dotenv from 'dotenv';
+
 import { createApp } from './app';
+import { loadEnv } from './config/env';
 
-const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+// Populates process.env from a local .env file (see .env.example) — a
+// no-op if one isn't present, e.g. in CI, where the real env vars are set
+// directly. Must run before loadEnv reads process.env below.
+dotenv.config();
 
-const app = createApp();
+// The only place process.env is read directly — everything downstream
+// receives the already-validated Env object (config/env.ts's fail-fast
+// contract).
+const env = loadEnv(process.env);
 
-app.listen(PORT, () => {
-  console.log(`Lockal Time API listening on port ${PORT}`);
+const app = createApp(env);
+
+app.listen(env.PORT, () => {
+  console.log(`Lockal Time API listening on port ${env.PORT}`);
 });

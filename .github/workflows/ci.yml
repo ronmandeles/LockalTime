@@ -66,8 +66,15 @@ jobs:
       # Boot what the pgTAP suite and the email-OTP integration test need;
       # Mailpit stays up because the integration test reads the OTP email
       # from its HTTP API.
-      - run: npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector,realtime,storage-api
+      # realtime stays in (unlike the other excluded services): the mobile
+      # session-channel integration test needs it (Postgres Changes +
+      # Broadcast, task 2.5).
+      - run: npx supabase start -x studio,imgproxy,edge-runtime,logflare,vector,storage-api
       - run: npx supabase test db
+      # Real create -> join -> leave, RLS, and concurrent-join-at-capacity
+      # checks against the stack just booted (apps/server is a root
+      # workspace, already installed by the npm ci above).
+      - run: npm run test:integration --workspace apps/server
       # Real email-OTP signup flow against the stack just booted (request ->
       # Mailpit -> verify -> trigger-created profile row). apps/mobile owns
       # its own lockfile outside the workspaces; uncached install keeps this

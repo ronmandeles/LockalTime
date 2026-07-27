@@ -20,6 +20,7 @@ Read before any task touching the database, auth, realtime, or migrations. The c
 - A user can read/write only their own rows unless a policy deliberately widens it (e.g. a participant reading co-participants in a shared session). Every widening policy gets a comment explaining why it's safe.
 - Write an RLS test for each policy: assert the owner can, and a non-owner cannot. (Phase 1 DoD requires this for `users`.)
 - **RLS policies are not enough on their own.** New tables carry no DML privileges for `anon`/`authenticated` by default (only `REFERENCES`/`TRIGGER`/`TRUNCATE`) — the underlying Postgres `GRANT` must exist, or every query fails with `permission denied` regardless of any policy. Every migration needs explicit grants alongside its policies, e.g. `grant select on public.<table> to authenticated;`.
+- **This applies to `service_role` too — it does not get free table privileges.** `service_role` bypasses RLS *policies*, but current Supabase CLI/platform default (`supabase/config.toml`'s `[api] auto_expose_new_tables` note: "new entities are NOT auto-exposed") means a brand-new table has **no** `GRANT` for any Data API role, `service_role` included. Found the hard way (Phase 2 task 2.3): the Node API's own service-role insert 500'd with `permission denied for table sessions` even though the code was correct — nothing was wrong except a missing `grant ... to service_role;`. Every table the Node API writes to needs both a client-facing grant (if any) AND a `service_role` grant, e.g. `grant select, insert, update on public.<table> to service_role;`.
 - To make one column unwritable while others are (e.g. a user editing their profile but not their own `role`), grant `UPDATE` **column-scoped** (`grant update (display_name, avatar_url) on ... to authenticated;`) rather than table-wide — don't grant table-wide `UPDATE` and try to claw back one column with a column-level `REVOKE`, since a table-wide grant always wins over a column-level revoke in Postgres.
 
 ## Types & client
@@ -34,6 +35,8 @@ Read before any task touching the database, auth, realtime, or migrations. The c
 - Auth state lives in the Zustand `auth-store` as a discriminated union; `attachAuthStateListener()` (attached/detached by the App bootstrap) is the only client-driven writer of auth state.
 
 ## Realtime specifics
-- Per-session channel naming: `session:{session_id}` (`ARCHITECTURE.md` §5).
+- Per-session channel naming: `session:{session_id}` (`ARCHITECTURE.md` §5). Implementation:
+  `apps/mobile/src/services/session-channel.ts`.
 - Presence heartbeat drives host-liveness detection; do not build a parallel persisted heartbeat table (`DATABASE.md` design note).
 - On reconnect, hydrate from an authoritative REST read first, then resume the CDC stream — don't assume in-memory Broadcast events survived the drop.
+- **Postgres Changes (CDC) enforces RLS on the subscribing connection**, exactly like a REST read — found the hard way (Phase 2 task 2.5) when an unauthenticated (anon-role) test client subscribed successfully (status `SUBSCRIBED`) but silently never received any change event. Any code subscribing to `postgres_changes` must do so with a signed-in client's session already established; there's no separate "realtime access" grant to reach for when this fails, it's the same RLS SELECT policy as everywhere else.

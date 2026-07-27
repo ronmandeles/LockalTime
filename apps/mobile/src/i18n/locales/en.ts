@@ -6,6 +6,75 @@
 export const en = {
   home: {
     title: 'Lockal Time',
+    createSession: 'Create Session',
+    scanQr: 'Scan QR',
+  },
+  // Phase 2 session screens (4-8 skeleton) — placeholder copy, flagged for
+  // the deferred copy pass. No native blocking yet; sessions are "virtual"
+  // (backlog Phase 2 DoD).
+  createSession: {
+    title: 'Create a session',
+    type: {
+      label: 'Who can join',
+      solo: 'Just me',
+      dynamicQr: 'Friends via QR code',
+    },
+    duration: {
+      label: 'Duration',
+      fixed: 'Set a time',
+      openEnded: 'Until I end it',
+      minutesPlaceholder: 'Minutes',
+    },
+    submit: 'Start session',
+    errors: {
+      minutesRequired: 'Enter how many minutes this session should run.',
+      requestFailed: "We couldn't create the session. Please try again.",
+    },
+  },
+  scanSession: {
+    title: 'Join a session',
+    body: "Enter the code from the host's QR to join their session.",
+    tokenPlaceholder: 'Session code',
+    continue: 'Continue',
+    errors: {
+      tokenRequired: 'Enter a session code to continue.',
+    },
+  },
+  sessionDetails: {
+    title: 'Join this session?',
+    body: "You're about to join a session. Distracting apps will stay blocked for everyone present until it ends.",
+    join: 'Join session',
+    joining: 'Joining…',
+    errors: {
+      session_not_found: "This session doesn't exist or has already ended.",
+      session_not_joinable: 'This session is no longer accepting new people.',
+      qr_token_expired: "This QR code has expired. Ask the host for a new one.",
+      session_at_capacity: 'This session is full.',
+      invalid_qr_token: "That code isn't valid. Check it and try again.",
+      unknown: "Something went wrong joining. Please try again.",
+    },
+  },
+  activeSession: {
+    title: 'Session in progress',
+    status: {
+      pending: 'Waiting to start',
+      active: 'Active',
+      host_disconnected: 'Host reconnecting…',
+      participant_reconnecting: 'Reconnecting…',
+      degraded_offline: 'Offline',
+      completed: 'Session ended',
+      force_terminated: 'Session ended',
+    },
+    participants: {
+      title: 'Who is here',
+      empty: 'Waiting for people to join…',
+      count: '{{count}} present',
+    },
+    timer: {
+      elapsed: 'Elapsed',
+      remaining: 'Remaining',
+    },
+    qrLabel: 'Share this code to let others join',
   },
   // Onboarding copy is PLACEHOLDER, flagged for the deferred copy pass. Each
   // page resolves one hesitation (DESIGN_GUIDELINES §9): why this app / how

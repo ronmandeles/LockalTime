@@ -7,6 +7,72 @@ import type { TranslationSchema } from './en';
 export const he: TranslationSchema = {
   home: {
     title: 'לוקאל טיים',
+    createSession: 'יצירת סשן',
+    scanQr: 'סריקת QR',
+  },
+  createSession: {
+    title: 'יצירת סשן',
+    type: {
+      label: 'מי יכול להצטרף',
+      solo: 'רק אני',
+      dynamicQr: 'חברים דרך קוד QR',
+    },
+    duration: {
+      label: 'משך',
+      fixed: 'קביעת זמן',
+      openEnded: 'עד שאסיים',
+      minutesPlaceholder: 'דקות',
+    },
+    submit: 'התחלת סשן',
+    errors: {
+      minutesRequired: 'הזינו כמה דקות הסשן יימשך.',
+      requestFailed: 'לא הצלחנו ליצור את הסשן. נסו שוב.',
+    },
+  },
+  scanSession: {
+    title: 'הצטרפות לסשן',
+    body: 'הזינו את הקוד מה-QR של המארח כדי להצטרף לסשן שלו.',
+    tokenPlaceholder: 'קוד סשן',
+    continue: 'המשך',
+    errors: {
+      tokenRequired: 'הזינו קוד סשן כדי להמשיך.',
+    },
+  },
+  sessionDetails: {
+    title: 'להצטרף לסשן הזה?',
+    body: 'אתם עומדים להצטרף לסשן. אפליקציות מסיחות דעת יישארו חסומות לכל הנוכחים עד לסיומו.',
+    join: 'הצטרפות לסשן',
+    joining: 'מצטרפים…',
+    errors: {
+      session_not_found: 'הסשן הזה לא קיים או שכבר הסתיים.',
+      session_not_joinable: 'הסשן הזה כבר לא מקבל אנשים חדשים.',
+      qr_token_expired: 'קוד ה-QR הזה פג תוקף. בקשו מהמארח קוד חדש.',
+      session_at_capacity: 'הסשן הזה מלא.',
+      invalid_qr_token: 'הקוד הזה לא תקין. בדקו אותו ונסו שוב.',
+      unknown: 'משהו השתבש בהצטרפות. נסו שוב.',
+    },
+  },
+  activeSession: {
+    title: 'סשן פעיל',
+    status: {
+      pending: 'ממתין להתחלה',
+      active: 'פעיל',
+      host_disconnected: 'המארח מתחבר מחדש…',
+      participant_reconnecting: 'מתחבר מחדש…',
+      degraded_offline: 'לא מקוון',
+      completed: 'הסשן הסתיים',
+      force_terminated: 'הסשן הסתיים',
+    },
+    participants: {
+      title: 'מי כאן',
+      empty: 'ממתינים שאנשים יצטרפו…',
+      count: '{{count}} נוכחים',
+    },
+    timer: {
+      elapsed: 'זמן שחלף',
+      remaining: 'זמן שנותר',
+    },
+    qrLabel: 'שתפו קוד זה כדי לאפשר לאחרים להצטרף',
   },
   onboarding: {
     pages: {

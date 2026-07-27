@@ -1,11 +1,51 @@
 import express, { Express } from 'express';
 
-export function createApp(): Express {
+import type { Env } from './config/env';
+import { createRequireAuth } from './middleware/require-auth';
+import { errorHandler } from './middleware/error-handler';
+import { unconfiguredAttestationProvider } from './modules/attestation/attestation-provider';
+import { createSupabaseAttestationStore } from './modules/attestation/attestation-store';
+import { createSessionsRouter } from './modules/sessions/sessions.router';
+import { createSupabaseSessionsStore } from './modules/sessions/sessions-store';
+import { getSupabaseAdminClient } from './services/supabase-admin';
+import { createSupabaseJwks } from './services/supabase-jwks';
+
+// env is threaded in explicitly (never read from process.env inside this
+// module) so every route/middleware this factory wires up gets its config
+// from one place, and tests can swap in a fixture without touching
+// process.env (.claude/skills/testing-standards/SKILL.md: no test depends
+// on ambient global state).
+export function createApp(env: Env): Express {
   const app = express();
+  app.use(express.json());
 
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
   });
+
+  // Built once per app instance — createRemoteJWKSet caches the fetched
+  // public key across requests, so every route sharing this instance
+  // benefits from the same cache.
+  const requireAuth = createRequireAuth(createSupabaseJwks(env.SUPABASE_URL));
+
+  const adminClient = getSupabaseAdminClient(env);
+  const sessionsStore = createSupabaseSessionsStore(adminClient);
+  const attestationStore = createSupabaseAttestationStore(adminClient);
+  app.use(
+    '/sessions',
+    createSessionsRouter({
+      store: sessionsStore,
+      qrSigningSecret: env.QR_SIGNING_SECRET,
+      requireAuth,
+      attestationProvider: unconfiguredAttestationProvider,
+      attestationStore,
+    }),
+  );
+
+  // Must be registered last — Express identifies error-handling middleware
+  // by its 4-argument arity, and only middleware registered after a route
+  // sees errors that route passes to next().
+  app.use(errorHandler);
 
   return app;
 }

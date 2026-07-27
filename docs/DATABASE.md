@@ -1,8 +1,8 @@
 # Lockal Time — Database Schema
 
-Status: planning blueprint, except `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
+Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. 63/63 pgTAP passing (`supabase/tests/venues_test.sql`, `supabase/tests/sessions_test.sql`, `supabase/tests/join_session_test.sql`), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, and true concurrent-join-at-capacity against the live local stack; production push pending (manual, per `CLAUDE.md`). This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
 
-Note on RLS in production: a table's RLS policies alone don't grant access — Postgres privileges (`GRANT`) must exist too, and new tables get none by default for `anon`/`authenticated`. See `.claude/skills/supabase-integration/SKILL.md` for the pattern (table-wide `SELECT`, column-scoped `UPDATE` to exclude fields like `role`).
+Note on RLS in production: a table's RLS policies alone don't grant access — Postgres privileges (`GRANT`) must exist too, and new tables get none by default for `anon`/`authenticated` **or `service_role`** (confirmed against the real local stack in Phase 2 task 2.3 — the Node API's own service-role writes 500'd until `service_role` got explicit grants too). See `.claude/skills/supabase-integration/SKILL.md` for the pattern (table-wide `SELECT`, column-scoped `UPDATE` to exclude fields like `role`, and a `service_role` grant for every table the Node API writes to).
 
 ## Design Principles
 
@@ -144,6 +144,53 @@ create index idx_participants_session on public.session_participants(session_id)
 create index idx_participants_user on public.session_participants(user_id);
 
 -- ============================================================
+-- DEVICE ATTESTATIONS (Play Integrity / App Attest — monitor-mode only,
+-- ARCHITECTURE.md §8 item 8; Node-internal, no client read path at all —
+-- no RLS policy and no grant, unlike every other table above)
+-- ============================================================
+create table public.device_attestations (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references public.users(id),
+  session_id   uuid references public.sessions(id) on delete cascade,
+  platform     text not null check (platform in ('android', 'ios')),
+  action       text not null check (action in ('create', 'join')),
+  verdict      text not null,
+  raw_response jsonb not null,   -- full provider payload, for Phase 6 re-analysis
+  created_at   timestamptz not null default now()
+);
+
+-- ============================================================
+-- RLS HELPER: is_session_participant(session_id) — true if the current
+-- auth.uid() is the session's host or has ever joined it (a presence
+-- interval exists). SECURITY DEFINER + search_path='' (same pattern as
+-- handle_new_user()) so the read policies on sessions/session_*  tables
+-- above can all call this without recursing into each other's policies.
+-- ============================================================
+create function public.is_session_participant(p_session_id uuid)
+  returns boolean language sql security definer set search_path = '' stable
+  as $$ ... $$;
+
+-- ============================================================
+-- JOIN_SESSION(): the one atomic entry point for joining a session —
+-- `select ... for update` row-locks the session so two devices racing the
+-- last open slot serialize here instead of both reading "49 present" from
+-- a separate SELECT and both inserting (a classic TOCTOU race). Also
+-- re-validates the token against the session's CURRENT qr_token column
+-- (not just its signature — a regenerated QR's old token still signs
+-- correctly but no longer matches). Returns one of: 'joined',
+-- 'already_joined' (idempotent rejoin), 'not_found', 'not_joinable',
+-- 'invalid_token', 'expired', 'at_capacity'. Node-only — EXECUTE is
+-- granted to service_role, revoked from public.
+-- ============================================================
+create function public.join_session(
+  p_session_id uuid, p_user_id uuid, p_token text, p_max_participants int
+) returns text language plpgsql security definer set search_path = ''
+  as $$ ... $$;
+
+create index idx_presence_open on public.session_presence_intervals(session_id)
+  where left_at is null;
+
+-- ============================================================
 -- USER STREAKS
 -- ============================================================
 create table public.user_streaks (
@@ -228,6 +275,8 @@ All rules above are confirmed final — see `docs/ARCHITECTURE.md` §7/§11.
 | Constant | Default | Notes |
 |---|---|---|
 | `BASE_POINTS_PER_MINUTE` | 1 | confirmed |
+| `QR_TOKEN_TTL_MINUTES` | 15 | dynamic_qr/static_qr session's signed token lifetime; host can regenerate on demand (`apps/server/src/config/constants.ts`) |
+| `SESSION_MAX_PARTICIPANTS` | 50 | server-enforced cap on concurrent (open-interval) participants; not yet a per-session/host-chosen value — no product decision exists for that, see `apps/server/src/config/constants.ts` |
 | `GROUP_BONUS_PERCENT` | 10 | fixed, not a formula |
 | `GROUP_BONUS_MIN_PARTICIPANTS` | 5 | |
 | `GROUP_BONUS_MIN_MINUTES` | 30 | continuous, resets on any drop below threshold |
