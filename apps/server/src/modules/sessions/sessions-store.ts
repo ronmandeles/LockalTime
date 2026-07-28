@@ -35,6 +35,31 @@ export type RejoinOutcome =
   | 'not_a_participant'
   | 'at_capacity';
 
+// Mirrors the return values of the public.join_venue_session() Postgres
+// function exactly (20260729000300_static_qr_venue_token.sql) — Phase 6
+// task 2's venue-scoped counterpart to join_session(). No 'expired' (a
+// venue token has no expiry by design); 'invalid_token' can still happen
+// at the DB layer even after Node's own signature check passes, if the
+// token no longer matches the venue's CURRENT qr_token column (the venue
+// owner regenerated it since this code was printed) -- same "checked
+// twice, for two different reasons" shape as join_session(). Adds
+// 'venue_not_found' and 'no_active_session' since resolving WHICH session
+// to join is this function's job, not the caller's.
+export type VenueJoinOutcome =
+  | 'joined'
+  | 'already_joined'
+  | 'invalid_token'
+  | 'venue_not_found'
+  | 'no_active_session'
+  | 'at_capacity';
+
+export interface VenueJoinResult {
+  readonly outcome: VenueJoinOutcome;
+  // Non-null on every outcome except venue_not_found/no_active_session —
+  // there's no session to identify until one's been resolved.
+  readonly sessionId: string | null;
+}
+
 export interface SessionRecord {
   readonly id: string;
   readonly hostId: string;
@@ -73,6 +98,30 @@ export interface ActiveSessionSummary {
   readonly startedAt: string | null;
 }
 
+// Phase 6 task 4: everything preview-session.ts needs to build a
+// SessionPreview — yet another narrower projection than SessionRecord,
+// matching that one caller's needs (no qrToken/qrExpiresAt/hostId, since a
+// preview must never reveal anything a non-participant shouldn't see).
+export interface SessionPreviewRow {
+  readonly id: string;
+  readonly type: SessionType;
+  readonly durationMode: DurationMode;
+  readonly plannedDurationMinutes: number | null;
+  readonly status: SessionStatus;
+  readonly startedAt: string | null;
+  readonly venueId: string | null;
+}
+
+// Phase 6 task 5: the raw shape get_venue_metrics() returns — aggregates
+// only, never individual customers (ARCHITECTURE.md §10's MVP scope).
+export interface VenueMetricsRow {
+  readonly concurrentActiveCustomers: number;
+  readonly sessionsInWindow: number;
+  readonly avgMinutesPerCustomer: number;
+}
+
+export type DeviceTrustTier = 'trusted' | 'unverified';
+
 export interface PresenceIntervalRow {
   readonly userId: string;
   readonly joinedAt: string;
@@ -81,6 +130,10 @@ export interface PresenceIntervalRow {
   readonly leftAt: string | null;
   readonly blockerReadyAt: string | null;
   readonly disconnectReason: DisconnectReason | null;
+  // Phase 6 tasks 8-9: already enforcement-gated at write time
+  // (markDeviceTrust -> attestation/trust-tier.ts) — 'trusted' unless
+  // attestation reported no integrity signal AND enforcement was enabled.
+  readonly deviceTrustTier: DeviceTrustTier;
 }
 
 export interface FinalizedParticipantInput {
@@ -91,6 +144,10 @@ export interface FinalizedParticipantInput {
   readonly groupBonusEarned: boolean;
   readonly completionBonusEarned: boolean;
   readonly pointsEarned: number;
+  // Phase 6 tasks 8-9: 'unverified' if ANY of the participant's intervals
+  // this session was unverified — feeds apply_session_stats()'s
+  // streak-exclusion gate (backlog's "exclude from bonus/streak only").
+  readonly deviceTrustTier: DeviceTrustTier;
 }
 
 export interface RewardsHistoryRowInput {
@@ -138,6 +195,41 @@ export interface SessionsStore {
   // instead of a QR token (see that migration's header for why a still-valid
   // token can't be assumed for this path).
   rejoinSession(sessionId: string, userId: string, maxParticipants: number): Promise<RejoinOutcome>;
+  // Delegates to the join_venue_session() DB function — Phase 6 task 2's
+  // venue-scoped counterpart to joinSession(). Resolves "the venue's
+  // currently active static_qr session" and joins it atomically; see that
+  // migration's header for why Node can't split resolve-then-join into two
+  // round trips.
+  joinVenueSession(
+    venueId: string,
+    token: string,
+    userId: string,
+    maxParticipants: number,
+  ): Promise<VenueJoinResult>;
+
+  // --- Phase 6 task 4: session preview (read-only, never joins) ---
+  // A plain read, never an RPC — unlike join, there's no capacity/token
+  // race to serialize against; a preview reflects a snapshot, not a
+  // decision. Read-only aggregates like this are the one place a direct
+  // Supabase read would normally be allowed (.claude/skills/
+  // supabase-integration/SKILL.md), but this needs both a signature check
+  // (venue vs. session token) and a JOIN across tables a non-participant's
+  // RLS can't see (is_session_participant() denies a stranger a session
+  // row entirely) — so it stays a Node endpoint.
+  getSessionPreview(sessionId: string): Promise<SessionPreviewRow | null>;
+  getOpenParticipantCount(sessionId: string): Promise<number>;
+  // Resolves a venue's CURRENTLY active static_qr session id, read-only —
+  // the preview counterpart to join_venue_session()'s own resolution, but
+  // without the row lock or the join side effect (a preview must never
+  // create a presence interval).
+  getActiveStaticQrSessionId(venueId: string): Promise<string | null>;
+
+  // --- Phase 6 task 5: B2B metrics ---
+  // Delegates to the get_venue_metrics() DB function — see that
+  // migration's header for why this is one SQL function rather than
+  // several round trips averaged in Node.
+  getVenueMetrics(venueId: string, windowStart: string): Promise<VenueMetricsRow>;
+
   // Closes the caller's own open presence interval. Returns false if there
   // was none to close (already left, or never joined) — a single UPDATE
   // scoped to one row, so no TOCTOU concern the way join has.
@@ -154,6 +246,11 @@ export interface SessionsStore {
   // threshold (ARCHITECTURE.md §7), never something that can fail a
   // request the way join/leave do.
   markBlockerReady(sessionId: string, userId: string, readyAt: string): Promise<void>;
+  // Phase 6 tasks 8-9: a follow-up update after join, exactly
+  // markBlockerReady's precedent — scoped to the caller's open interval,
+  // never blocks the join itself (called fire-and-forget after a
+  // successful join, only when an attestation token was provided).
+  markDeviceTrust(sessionId: string, userId: string, tier: DeviceTrustTier): Promise<void>;
 
   // --- Phase 4: session-end / finalization ---
   getSessionSummary(sessionId: string): Promise<SessionSummary | null>;
@@ -219,6 +316,7 @@ export interface SessionsStore {
     userId: string,
     finalizedAt: string,
     streakGraceHours: number,
+    deviceTrustTier: DeviceTrustTier,
   ): Promise<void>;
   // Zeroes current_streak for every user_streaks row whose grace window has
   // already passed as of `asOf` — the passage-of-time half of streak
@@ -320,6 +418,104 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
     return data as RejoinOutcome;
   },
 
+  async joinVenueSession(venueId, token, userId, maxParticipants) {
+    const { data, error } = await client
+      .rpc('join_venue_session', {
+        p_venue_id: venueId,
+        p_token: token,
+        p_user_id: userId,
+        p_max_participants: maxParticipants,
+      })
+      .single<{ outcome: string; session_id: string | null }>();
+
+    if (error !== null) {
+      throw new ApiError(500, 'venue_session_join_failed', error.message);
+    }
+    return { outcome: data.outcome as VenueJoinOutcome, sessionId: data.session_id };
+  },
+
+  async getSessionPreview(sessionId) {
+    const { data, error } = await client
+      .from('sessions')
+      .select('id, type, duration_mode, planned_duration_minutes, status, started_at, venue_id')
+      .eq('id', sessionId)
+      .maybeSingle<{
+        id: string;
+        type: SessionType;
+        duration_mode: DurationMode;
+        planned_duration_minutes: number | null;
+        status: SessionStatus;
+        started_at: string | null;
+        venue_id: string | null;
+      }>();
+
+    if (error !== null) {
+      throw new ApiError(500, 'session_preview_failed', error.message);
+    }
+    if (data === null) {
+      return null;
+    }
+    return {
+      id: data.id,
+      type: data.type,
+      durationMode: data.duration_mode,
+      plannedDurationMinutes: data.planned_duration_minutes,
+      status: data.status,
+      startedAt: data.started_at,
+      venueId: data.venue_id,
+    };
+  },
+
+  async getOpenParticipantCount(sessionId) {
+    const { count, error } = await client
+      .from('session_presence_intervals')
+      .select('*', { count: 'exact', head: true })
+      .eq('session_id', sessionId)
+      .is('left_at', null);
+
+    if (error !== null) {
+      throw new ApiError(500, 'session_preview_failed', error.message);
+    }
+    return count ?? 0;
+  },
+
+  async getActiveStaticQrSessionId(venueId) {
+    const { data, error } = await client
+      .from('sessions')
+      .select('id')
+      .eq('venue_id', venueId)
+      .eq('type', 'static_qr')
+      .eq('status', 'active')
+      .maybeSingle<{ id: string }>();
+
+    if (error !== null) {
+      throw new ApiError(500, 'session_preview_failed', error.message);
+    }
+    return data === null ? null : data.id;
+  },
+
+  async getVenueMetrics(venueId, windowStart) {
+    const { data, error } = await client
+      .rpc('get_venue_metrics', { p_venue_id: venueId, p_window_start: windowStart })
+      .single<{
+        concurrent_active_customers: number;
+        sessions_in_window: number;
+        avg_minutes_per_customer: number | string;
+      }>();
+
+    if (error !== null) {
+      throw new ApiError(500, 'venue_metrics_failed', error.message);
+    }
+    return {
+      concurrentActiveCustomers: data.concurrent_active_customers,
+      sessionsInWindow: data.sessions_in_window,
+      // Postgres numeric comes back as a string over the Data API to
+      // avoid float precision loss -- Number() here is safe (never
+      // money-equivalent, this is a display aggregate only).
+      avgMinutesPerCustomer: Number(data.avg_minutes_per_customer),
+    };
+  },
+
   async closeOpenInterval(sessionId, userId, reason) {
     const { data, error } = await client
       .from('session_presence_intervals')
@@ -364,6 +560,21 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
     }
   },
 
+  async markDeviceTrust(sessionId, userId, tier) {
+    const { error } = await client
+      .from('session_presence_intervals')
+      .update({ device_trust_tier: tier })
+      .eq('session_id', sessionId)
+      .eq('user_id', userId)
+      .is('left_at', null);
+
+    // Best-effort, same posture as markBlockerReady — a failure here never
+    // blocks the join it follows.
+    if (error !== null) {
+      throw new ApiError(500, 'device_trust_failed', error.message);
+    }
+  },
+
   async getSessionSummary(sessionId) {
     const { data, error } = await client
       .from('sessions')
@@ -400,7 +611,7 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
   async getPresenceIntervals(sessionId) {
     const { data, error } = await client
       .from('session_presence_intervals')
-      .select('user_id, joined_at, left_at, blocker_ready_at, disconnect_reason')
+      .select('user_id, joined_at, left_at, blocker_ready_at, disconnect_reason, device_trust_tier')
       .eq('session_id', sessionId);
 
     if (error !== null) {
@@ -412,13 +623,14 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
       leftAt: row.left_at as string | null,
       blockerReadyAt: row.blocker_ready_at as string | null,
       disconnectReason: row.disconnect_reason as DisconnectReason | null,
+      deviceTrustTier: row.device_trust_tier as DeviceTrustTier,
     }));
   },
 
   async getUserPresenceIntervals(sessionId, userId) {
     const { data, error } = await client
       .from('session_presence_intervals')
-      .select('user_id, joined_at, left_at, blocker_ready_at, disconnect_reason')
+      .select('user_id, joined_at, left_at, blocker_ready_at, disconnect_reason, device_trust_tier')
       .eq('session_id', sessionId)
       .eq('user_id', userId);
 
@@ -431,6 +643,7 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
       leftAt: row.left_at as string | null,
       blockerReadyAt: row.blocker_ready_at as string | null,
       disconnectReason: row.disconnect_reason as DisconnectReason | null,
+      deviceTrustTier: row.device_trust_tier as DeviceTrustTier,
     }));
   },
 
@@ -460,6 +673,7 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
         group_bonus_earned: row.groupBonusEarned,
         completion_bonus_earned: row.completionBonusEarned,
         points_earned: row.pointsEarned,
+        device_trust_tier: row.deviceTrustTier,
       })),
     );
 
@@ -547,12 +761,13 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
     }
   },
 
-  async applySessionStats(sessionId, userId, finalizedAt, streakGraceHours) {
+  async applySessionStats(sessionId, userId, finalizedAt, streakGraceHours, deviceTrustTier) {
     const { error } = await client.rpc('apply_session_stats', {
       p_session_id: sessionId,
       p_user_id: userId,
       p_finalized_at: finalizedAt,
       p_streak_grace_hours: streakGraceHours,
+      p_device_trust_tier: deviceTrustTier,
     });
 
     if (error !== null) {

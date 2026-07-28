@@ -5,6 +5,7 @@ const interval = (joinedAt: string, leftAt: string): PresenceInterval => ({
   joinedAt: new Date(joinedAt),
   leftAt: new Date(leftAt),
   blockerReadyAt: null,
+  deviceTrusted: true,
 });
 
 describe('computeTotalMinutesPresent', () => {

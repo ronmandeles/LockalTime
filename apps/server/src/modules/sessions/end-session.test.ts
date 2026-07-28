@@ -58,11 +58,27 @@ const buildFakeStore = (
     async rejoinSession(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async joinVenueSession(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getSessionPreview(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getOpenParticipantCount(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getActiveStaticQrSessionId(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getVenueMetrics(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
     async closeOpenInterval(): Promise<never> {
       throw new Error('not used in these tests');
     },
     async insertPresenceInterval() {},
     async markBlockerReady() {},
+    async markDeviceTrust() {},
     async getSessionSummary() {
       return options.session;
     },
@@ -127,6 +143,7 @@ const interval = (
   leftAt,
   blockerReadyAt: joinedAt,
   disconnectReason,
+  deviceTrustTier: 'trusted',
 });
 
 describe('endSession', () => {

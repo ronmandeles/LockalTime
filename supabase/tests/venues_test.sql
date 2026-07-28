@@ -1,8 +1,16 @@
 -- pgTAP test for public.venues.
 -- Run with: supabase test db
+--
+-- Phase 6 task 1 tightened the read policy from "any authenticated user"
+-- to "owner only" (supabase/migrations/20260729000200_venues_ownership_and_grants.sql)
+-- -- a deliberate hardening tighten, not a feature removal: nothing in the
+-- app ever depended on a non-owner reading a venue row directly (a
+-- joining participant learns a venue's name via the server-computed
+-- session-preview endpoint, task 4, not RLS). This file's assertions
+-- reflect that new behavior.
 
 begin;
-select plan(8);
+select plan(9);
 
 select has_table('public', 'venues', 'public.venues table exists');
 select col_is_pk('public', 'venues', 'id', 'id is the primary key');
@@ -15,13 +23,12 @@ select is(
   'row-level security is enabled on public.venues'
 );
 
--- Display-only, no money-equivalent data: any authenticated user may read
--- venue rows (needed to show a venue name before joining a static_qr
--- session), but writes are Node-API-only (no INSERT/UPDATE grant exists).
 insert into auth.users (id, email) values
-  ('33333333-3333-3333-3333-333333333333', 'venue-owner@test.dev');
-insert into public.venues (id, owner_id, name) values
-  ('44444444-4444-4444-4444-444444444444', '33333333-3333-3333-3333-333333333333', 'Test Cafe');
+  ('33333333-3333-3333-3333-333333333333', 'venue-owner@test.dev'),
+  ('55555555-5555-5555-5555-555555555555', 'someone-else@test.dev');
+insert into public.venues (id, owner_id, name, qr_token) values
+  ('44444444-4444-4444-4444-444444444444', '33333333-3333-3333-3333-333333333333',
+   'Test Cafe', 'fixture-venue-qr-token');
 
 set local role authenticated;
 set local "request.jwt.claims" to
@@ -29,7 +36,7 @@ set local "request.jwt.claims" to
 
 select is(
   (select count(*) from public.venues where id = '44444444-4444-4444-4444-444444444444')::int,
-  1, 'any authenticated user can read a venue row'
+  1, 'the owner can read their own venue row'
 );
 
 select throws_ok(
@@ -37,6 +44,18 @@ select throws_ok(
        ('33333333-3333-3333-3333-333333333333', 'Rogue Venue') $$,
   NULL,
   'authenticated cannot insert a venue directly (no grant — API-only)'
+);
+
+-- Switch to the OTHER user — must not see the first user's venue at all
+-- (Phase 6 task 1's tightened policy).
+reset role;
+set local role authenticated;
+set local "request.jwt.claims" to
+  '{"sub":"55555555-5555-5555-5555-555555555555","role":"authenticated"}';
+
+select is(
+  (select count(*) from public.venues where id = '44444444-4444-4444-4444-444444444444')::int,
+  0, 'a non-owner cannot read another host''s venue row'
 );
 
 select * from finish();

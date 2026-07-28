@@ -1,5 +1,6 @@
 import type {
   ActiveSessionSummary,
+  DeviceTrustTier,
   DisconnectReason,
   DurationMode,
   EndReason,
@@ -36,6 +37,7 @@ export interface FakeInterval {
   leftAt: string | null;
   blockerReadyAt: string | null;
   disconnectReason: DisconnectReason | null;
+  deviceTrustTier: DeviceTrustTier;
 }
 
 export interface FakeHostAssignment {
@@ -105,6 +107,21 @@ export const buildFakeSessionsStore = (
     async rejoinSession(): Promise<never> {
       throw new Error('not used by sweep.test.ts');
     },
+    async joinVenueSession(): Promise<never> {
+      throw new Error('not used by sweep.test.ts');
+    },
+    async getSessionPreview(): Promise<never> {
+      throw new Error('not used by sweep.test.ts');
+    },
+    async getOpenParticipantCount(): Promise<never> {
+      throw new Error('not used by sweep.test.ts');
+    },
+    async getActiveStaticQrSessionId(): Promise<never> {
+      throw new Error('not used by sweep.test.ts');
+    },
+    async getVenueMetrics(): Promise<never> {
+      throw new Error('not used by sweep.test.ts');
+    },
     async closeOpenInterval(sessionId, userId, reason) {
       const interval = state.intervals.find(
         (row) => row.sessionId === sessionId && row.userId === userId && row.leftAt === null,
@@ -120,6 +137,9 @@ export const buildFakeSessionsStore = (
       throw new Error('not used by sweep.test.ts');
     },
     async markBlockerReady(): Promise<never> {
+      throw new Error('not used by sweep.test.ts');
+    },
+    async markDeviceTrust(): Promise<never> {
       throw new Error('not used by sweep.test.ts');
     },
     async getSessionSummary(sessionId) {
@@ -151,6 +171,7 @@ export const buildFakeSessionsStore = (
           leftAt: row.leftAt,
           blockerReadyAt: row.blockerReadyAt,
           disconnectReason: row.disconnectReason,
+          deviceTrustTier: row.deviceTrustTier,
         }));
     },
     async getUserPresenceIntervals(): Promise<never> {
@@ -209,7 +230,7 @@ export const buildFakeSessionsStore = (
         unassignedAt: null,
       });
     },
-    async applySessionStats(sessionId, userId) {
+    async applySessionStats(sessionId, userId, _finalizedAt, _streakGraceHours, _deviceTrustTier) {
       const key = `${sessionId}:${userId}`;
       if (state.appliedStats.has(key)) {
         return;

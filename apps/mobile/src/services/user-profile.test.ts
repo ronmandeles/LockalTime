@@ -25,13 +25,16 @@ jest.mock('react-native-localize', () => ({ getTimeZone: () => mockGetTimeZone()
 
 const mockEq = jest.fn();
 const mockUpdate = jest.fn(() => ({ eq: mockEq }));
-const mockFrom = jest.fn(() => ({ update: mockUpdate }));
+const mockMaybeSingle = jest.fn();
+const mockSelectEq = jest.fn(() => ({ maybeSingle: mockMaybeSingle }));
+const mockSelect = jest.fn(() => ({ eq: mockSelectEq }));
+const mockFrom = jest.fn(() => ({ update: mockUpdate, select: mockSelect }));
 
 jest.mock('./supabase-client', () => ({
   getSupabaseClient: () => ({ from: mockFrom }),
 }));
 
-import { REPORTED_TIMEZONE_STORAGE_KEY, reportTimezoneIfChanged } from './user-profile';
+import { REPORTED_TIMEZONE_STORAGE_KEY, fetchUserProfile, reportTimezoneIfChanged } from './user-profile';
 
 const USER_ID = 'user-1';
 
@@ -112,5 +115,41 @@ describe('reportTimezoneIfChanged', () => {
 
     await expect(reportTimezoneIfChanged(USER_ID)).resolves.toBeUndefined();
     expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchUserProfile', () => {
+  beforeEach(() => {
+    mockFrom.mockClear();
+    mockSelect.mockClear();
+    mockSelectEq.mockClear();
+    mockMaybeSingle.mockReset();
+  });
+
+  it("reads the user's role from the users table", async () => {
+    mockMaybeSingle.mockResolvedValue({ data: { role: 'verified_host' }, error: null });
+
+    const result = await fetchUserProfile(USER_ID);
+
+    expect(mockFrom).toHaveBeenCalledWith('users');
+    expect(mockSelect).toHaveBeenCalledWith('role');
+    expect(mockSelectEq).toHaveBeenCalledWith('id', USER_ID);
+    expect(result).toEqual({ ok: true, value: { role: 'verified_host' } });
+  });
+
+  it('returns null (not an error) for a user with no profile row yet', async () => {
+    mockMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const result = await fetchUserProfile(USER_ID);
+
+    expect(result).toEqual({ ok: true, value: null });
+  });
+
+  it('maps a Supabase error to a typed failure', async () => {
+    mockMaybeSingle.mockResolvedValue({ data: null, error: { message: 'network error' } });
+
+    const result = await fetchUserProfile(USER_ID);
+
+    expect(result).toEqual({ ok: false, error: { message: 'network error' } });
   });
 });

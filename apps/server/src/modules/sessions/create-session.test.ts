@@ -55,12 +55,28 @@ const buildFakeStore = (): SessionsStore & {
       store.hostPresenceInterval = { sessionId, userId, joinedAt };
     },
     async markBlockerReady(): Promise<void> {},
+    async markDeviceTrust(): Promise<void> {},
     // Not exercised by createSession — present only to satisfy the
     // SessionsStore interface.
     async joinSession(): Promise<never> {
       throw new Error('not used in these tests');
     },
     async rejoinSession(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async joinVenueSession(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getSessionPreview(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getOpenParticipantCount(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getActiveStaticQrSessionId(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getVenueMetrics(): Promise<never> {
       throw new Error('not used in these tests');
     },
     async closeOpenInterval(): Promise<never> {

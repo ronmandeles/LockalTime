@@ -30,4 +30,14 @@ export type RootStackParamList = {
   // achieved milestones. No params: it reads entirely off the
   // authenticated user, same as History.
   Stats: undefined;
+  // Phase 6 (B2B) — verified_host/admin only, reached from Home's
+  // manageVenuesCta link (itself gated on useProfileStore's role). No
+  // params: reads/writes entirely through the requireRole-gated /venues
+  // endpoints for the authenticated user.
+  VenueManagement: undefined;
+  // Phase 6 task 6 (B2B dashboard, ARCHITECTURE.md §10) — same gate as
+  // VenueManagement. No params: picks among the caller's own venues
+  // in-screen, same "local UI state, not a route param" convention as
+  // History's filter.
+  VenueDashboard: undefined;
 };

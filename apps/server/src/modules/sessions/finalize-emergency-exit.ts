@@ -31,9 +31,18 @@ export const finalizeEmergencyExit = async (
       // it before finalizeEmergencyExit() was ever called.
       leftAt: new Date(row.leftAt as string),
       blockerReadyAt: row.blockerReadyAt === null ? null : new Date(row.blockerReadyAt),
+      deviceTrusted: row.deviceTrustTier === 'trusted',
     })),
     userId,
   );
+
+  // Phase 6 tasks 8-9: 'unverified' if any of this user's intervals this
+  // session was unverified — same rule as end-session.ts's
+  // deriveParticipantDeviceTrustTier, just inline (a single participant,
+  // no other rows to reconstruct a timeline from).
+  const deviceTrustTier = intervals.some((row) => row.deviceTrustTier === 'unverified')
+    ? 'unverified'
+    : 'trusted';
 
   await store.writeSessionParticipants(sessionId, [
     {
@@ -44,11 +53,18 @@ export const finalizeEmergencyExit = async (
       groupBonusEarned: false,
       completionBonusEarned: false,
       pointsEarned: reward.pointsEarned,
+      deviceTrustTier,
     },
   ]);
   await store.insertRewardsHistory([
     { userId, sessionId, points: reward.pointsEarned, bonusType: 'base' },
   ]);
 
-  await store.applySessionStats(sessionId, userId, now().toISOString(), STREAK_GRACE_HOURS);
+  await store.applySessionStats(
+    sessionId,
+    userId,
+    now().toISOString(),
+    STREAK_GRACE_HOURS,
+    deviceTrustTier,
+  );
 };

@@ -4,6 +4,7 @@ import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 
+import StatusBanner from '../components/StatusBanner';
 import { BLOCKED_CATEGORIES } from '../config/blocked-categories';
 import { useAppBlocker } from '../hooks/use-app-blocker';
 import { useHostMigrationToast } from '../hooks/use-host-migration-toast';
@@ -11,7 +12,27 @@ import { useSession } from '../hooks/use-session';
 import type { RootStackParamList } from '../navigation/types';
 import { setActiveSession } from '../state/active-session-store';
 import { useAuthStore } from '../state/auth-store';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { sizing, spacing, typography } from '../theme/tokens';
+
+// Phase 6 task 7: statuses whose own realtime-connectivity meaning
+// deserves a dedicated banner, distinct from host_disconnected (which
+// already gets the quieter status label alone — the host-migration toast
+// is the only dedicated surface for THAT state, and only for the newly-
+// promoted host). degraded_offline is the native blocker's own 30-minute
+// cutoff having fired; participant_reconnecting is the socket-health
+// signal from session-channel.ts. Weight escalates from quiet to
+// prominent as the situation gets more severe.
+const OFFLINE_BANNER_WEIGHT: Partial<Record<string, 'quiet' | 'prominent'>> = {
+  participant_reconnecting: 'quiet',
+  degraded_offline: 'prominent',
+};
+
+// Phase 6 task 7: a session that ended while this screen was open must not
+// strand the participant on a dead in-session view — every OTHER
+// participant besides the one who triggered the end (host-ended, duration-
+// reached, or the 24h force-terminated cap) only ever learns about it via
+// this same CDC-delivered status transition, never their own action.
+const TERMINAL_STATUSES = new Set(['completed', 'force_terminated']);
 
 // Session statuses in which the blocker should keep running — everything
 // short of a terminal/not-yet-started status. host_disconnected /
@@ -63,6 +84,20 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
   useEffect(() => {
     setActiveSession(route.params.sessionId);
   }, [route.params.sessionId]);
+
+  // Phase 6 task 7: reset (never navigate) into the receipt the instant the
+  // machine reports a terminal status — matches EmergencyExitScreen's own
+  // navigation.reset so a finished session is never reachable again via
+  // back-gesture, and this is the only place that transition is observed
+  // for every participant besides whoever caused it.
+  useEffect(() => {
+    if (TERMINAL_STATUSES.has(status)) {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'SessionCompletion', params: { sessionId: route.params.sessionId } }],
+      });
+    }
+  }, [status, navigation, route.params.sessionId]);
 
   // Absolute server timestamp, never "now + duration" (ARCHITECTURE.md §8
   // item 5) — derived from the server-issued started_at, not the device
@@ -120,22 +155,28 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
       <Text style={styles.status}>{statusLabel}</Text>
 
       {showHostMigrationToast && (
-        <View style={styles.hostMigrationToast} testID="active-session-host-migration-toast">
-          <Text style={styles.hostMigrationToastText}>{t('activeSession.hostMigrationToast')}</Text>
-        </View>
+        <StatusBanner
+          message={t('activeSession.hostMigrationToast')}
+          testID="active-session-host-migration-toast"
+        />
+      )}
+
+      {OFFLINE_BANNER_WEIGHT[status] !== undefined && (
+        <StatusBanner
+          message={t(`activeSession.offlineBanner.${status}` as never)}
+          weight={OFFLINE_BANNER_WEIGHT[status]}
+          testID="active-session-offline-banner"
+        />
       )}
 
       {violation !== null && (
-        <View style={styles.violationBanner} testID="active-session-blocker-violation">
-          <Text style={styles.violationMessage}>
-            {t(`activeSession.blockerViolation.message.${violation.reason}`)}
-          </Text>
-          <TouchableOpacity onPress={() => Linking.openSettings()} testID="active-session-open-settings">
-            <Text style={styles.violationOpenSettings}>
-              {t('activeSession.blockerViolation.openSettings')}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <StatusBanner
+          message={t(`activeSession.blockerViolation.message.${violation.reason}`)}
+          weight="prominent"
+          actionLabel={t('activeSession.blockerViolation.openSettings')}
+          onAction={() => Linking.openSettings()}
+          testID="active-session-blocker-violation"
+        />
       )}
 
       {timerValue !== null && (
@@ -216,17 +257,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     textAlignVertical: 'center',
   },
-  hostMigrationToast: {
-    alignItems: 'center',
-    backgroundColor: '#F5F5F5',
-    borderRadius: radius.md,
-    marginTop: spacing.sm,
-    padding: spacing.sm,
-  },
-  hostMigrationToastText: {
-    ...typography.caption,
-    color: '#222222',
-  },
   participantRow: {
     ...typography.body,
     color: '#222222',
@@ -278,22 +308,6 @@ const styles = StyleSheet.create({
   title: {
     ...typography.heading,
     color: '#222222',
-  },
-  violationBanner: {
-    backgroundColor: '#F5F5F5',
-    borderRadius: radius.md,
-    marginTop: spacing.lg,
-    padding: spacing.md,
-  },
-  violationMessage: {
-    ...typography.body,
-    color: '#222222',
-  },
-  violationOpenSettings: {
-    ...typography.bodyStrong,
-    color: '#222222',
-    marginTop: spacing.sm,
-    minHeight: sizing.minTouchTarget,
   },
 });
 

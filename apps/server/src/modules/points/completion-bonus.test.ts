@@ -17,6 +17,7 @@ const wholeSessionInterval = (
   joinedAt: addSeconds(START, joinOffsetSeconds),
   leftAt: addMinutes(START, durationMinutes),
   blockerReadyAt: addSeconds(START, joinOffsetSeconds),
+  deviceTrusted: true,
 });
 
 const participant = (
@@ -58,11 +59,17 @@ describe('computeCompletionBonusEligibility', () => {
 
   it('disqualifies a participant with more than one presence interval (any gap)', () => {
     const p = participant('a', [
-      { joinedAt: START, leftAt: addMinutes(START, 30), blockerReadyAt: START },
+      {
+        joinedAt: START,
+        leftAt: addMinutes(START, 30),
+        blockerReadyAt: START,
+        deviceTrusted: true,
+      },
       {
         joinedAt: addMinutes(START, 31),
         leftAt: addMinutes(START, 90),
         blockerReadyAt: addMinutes(START, 31),
+        deviceTrusted: true,
       },
     ]);
 
@@ -71,7 +78,12 @@ describe('computeCompletionBonusEligibility', () => {
 
   it('disqualifies a participant who left before the session actually ended', () => {
     const p = participant('a', [
-      { joinedAt: START, leftAt: addMinutes(START, 70), blockerReadyAt: START },
+      {
+        joinedAt: START,
+        leftAt: addMinutes(START, 70),
+        blockerReadyAt: START,
+        deviceTrusted: true,
+      },
     ]);
 
     expect(computeCompletionBonusEligibility([p], timing(90))).toEqual(new Set());
