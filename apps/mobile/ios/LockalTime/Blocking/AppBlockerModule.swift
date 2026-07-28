@@ -163,8 +163,17 @@ class AppBlockerModule: RCTEventEmitter {
     store.shield.webDomainCategories = .specific(selection.categoryTokens)
   }
 
+  // ManagedSettingsStore.clearAllSettings() needs iOS 16+ (caught by the
+  // real ios-build CI compile, Phase 7 -- this project's deployment target
+  // is 15.1, the earliest iOS version FamilyControls itself supports, so
+  // clearing exactly the two shield properties applyShield() sets, rather
+  // than bumping the whole app's minimum iOS version for one call, is the
+  // narrower fix). Semantically equivalent here since this module never
+  // sets anything else on the store.
   private func clearShield() {
-    ManagedSettingsStore().clearAllSettings()
+    let store = ManagedSettingsStore()
+    store.shield.applicationCategories = nil
+    store.shield.webDomainCategories = nil
   }
 
   // DeviceActivitySchedule describes a time-of-day window (e.g. "9:00 to

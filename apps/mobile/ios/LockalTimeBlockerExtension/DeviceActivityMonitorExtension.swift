@@ -29,7 +29,13 @@ class DeviceActivityMonitorExtension: DeviceActivityMonitor {
     super.intervalDidEnd(for: activity)
     // Guaranteed cleanup even if the main app was suspended/killed when the
     // session's scheduled end arrived — see the file header.
-    store.clearAllSettings()
+    // clearAllSettings() needs iOS 16+ (caught by the real ios-build CI
+    // compile, Phase 7); this project's deployment target is 15.1, so
+    // clearing exactly the two shield properties intervalDidStart() sets
+    // is the narrower fix, same reasoning as AppBlockerModule.swift's
+    // clearShield().
+    store.shield.applicationCategories = nil
+    store.shield.webDomainCategories = nil
     SharedAppGroup.clearActiveSession()
   }
 
