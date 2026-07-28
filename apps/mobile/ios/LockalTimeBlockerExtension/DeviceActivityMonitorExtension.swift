@@ -2,13 +2,13 @@ import DeviceActivity
 import Foundation
 import ManagedSettings
 
-// Phase 3 task 3.6 (backlog.md): this file is NOT part of any Xcode target
-// yet — per the decision to avoid hand-editing project.pbxproj blind, a
-// real "Device Activity Monitor Extension" target must be created manually
-// in Xcode (File > New > Target…) once a Mac is available, and this file
-// (plus SharedAppGroup.swift, given "Target Membership" in both the main
-// app and this extension) added to it. Full steps in docs/MANUAL_QA.md's
-// "iOS extension target setup" section. NOT compiled anywhere in this repo.
+// Phase 3 task 3.6 (backlog.md): the "Device Activity Monitor Extension"
+// target (LockalTimeBlockerExtension) is created by Phase 7's scripted
+// Xcode wiring (apps/mobile/ios/scripts/wire-blocking-target.rb), which
+// also gives this file's target the App Groups capability and shares
+// SharedAppGroup.swift into it — see docs/MANUAL_QA.md's iOS section and
+// that script's own comments for the full mechanics. Compiled for the
+// first time in Phase 7 via cloud macOS CI.
 //
 // Runs as a SEPARATE OS PROCESS from the main app (ARCHITECTURE.md §4's
 // "critical constraint") — the system guarantees this class's callbacks

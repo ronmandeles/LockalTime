@@ -12,9 +12,10 @@ import UIKit
 // authorization alone isn't enough to actually shield anything, since
 // there's no FamilyActivitySelection to apply yet.
 //
-// NOT compiled or run anywhere in this repo (no Mac) — written to match
-// FamilyControls' documented async/await authorization API as precisely as
-// possible, but unverified; treat as a strong first draft.
+// Compiled for the first time in Phase 7 via cloud macOS CI (see
+// SharedAppGroup.swift's header) — written to match FamilyControls'
+// documented async/await authorization API as precisely as possible; a real
+// device is still needed for functional verification (docs/MANUAL_QA.md).
 @objc(BlockingPermissionsModule)
 class BlockingPermissionsModule: NSObject {
 

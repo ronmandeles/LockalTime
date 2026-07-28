@@ -4,16 +4,17 @@ import Foundation
 // Phase 3 task 3.6 (backlog.md): the App Group bridge (ARCHITECTURE.md §4)
 // between the main app target and the DeviceActivityMonitor extension —
 // they run as separate OS processes and cannot call each other directly,
-// so a shared UserDefaults suite is the only channel. Both targets must
-// have the "App Groups" capability added in Xcode with this exact group
-// identifier (see docs/MANUAL_QA.md's "iOS extension target setup" for the
-// manual steps — not wired via project.pbxproj in this change, per the
-// decision to avoid hand-editing that file blind).
+// so a shared UserDefaults suite is the only channel. Both targets get the
+// "App Groups" capability with this exact group identifier via Phase 7's
+// scripted Xcode wiring (apps/mobile/ios/scripts/wire-blocking-target.rb),
+// not a manual Xcode-GUI step anymore — see docs/MANUAL_QA.md's iOS section.
 //
-// NOT compiled or run anywhere in this repo (no Mac) — written to match
+// Compiled for the first time in Phase 7 via cloud macOS CI
+// (.github/workflows/ci.yml's ios-build job) — written to match
 // FamilyControls/ManagedSettings/DeviceActivityMonitor's documented APIs as
-// precisely as possible, but unverified. Treat as a strong first draft, not
-// a "worked once" implementation, when a Mac becomes available.
+// precisely as possible; see that job's status for the current build result.
+// A real Mac/device is still needed for the functional (not just
+// compile-time) verification in docs/MANUAL_QA.md.
 enum SharedAppGroup {
   static let identifier = "group.com.lockaltime.app"
 

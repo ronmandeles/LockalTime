@@ -171,11 +171,19 @@ class AppBlockerModule: RCTEventEmitter {
   // 17:00 every day it's scheduled for"), not an arbitrary absolute
   // start/end — Apple's framework interprets intervalEnd < intervalStart as
   // "wraps into the next day", which correctly handles a session that
-  // happens to cross midnight, but has NOT been reasoned through fully for
-  // sessions that might span more than 24h (shouldn't happen: fixed
-  // sessions are bounded by product design, and open-ended ones are capped
-  // at exactly 24h below). Treat this as an accepted rough edge pending
-  // real-device verification.
+  // happens to cross midnight. A session longer than 24h would silently
+  // truncate to (duration mod 24h) here (only hour/minute/second survive
+  // the round trip below, the day is discarded) -- Phase 7's code review
+  // (backlog.md) found this was NOT actually enforced anywhere despite this
+  // comment's original assumption, and closed it server-side:
+  // FIXED_SESSION_MAX_DURATION_MINUTES (apps/server/src/config/constants.ts)
+  // now caps a fixed session's planned_duration_minutes at 24h, matching
+  // OPEN_ENDED_SESSION_MAX_HOURS' existing bound for open-ended sessions
+  // below -- so every session this module ever schedules is now guaranteed
+  // <= 24h. The exact-24h boundary itself (start and end landing on the
+  // identical time-of-day) is still an accepted rough edge pending
+  // real-device verification, same as it already was for the open-ended
+  // cap before this phase.
   private func scheduleMonitoring(endsAt: Date?) {
     let calendar = Calendar.current
     let now = Date()

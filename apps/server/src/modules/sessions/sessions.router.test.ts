@@ -227,6 +227,38 @@ describe('POST /sessions', () => {
     expect(response.body.error.code).toBe('invalid_request');
   });
 
+  // Phase 7 code-review finding: AppBlockerModule.swift's scheduleMonitoring
+  // extracts only the hour/minute/second components of the session's start
+  // and end times (DeviceActivitySchedule models a time-of-day window, not
+  // an absolute duration) -- so a session longer than 24h is silently
+  // truncated to (duration mod 24h) on iOS, firing the extension's
+  // guaranteed shield-clearing cleanup far too early. That Swift code's own
+  // comment already assumed "fixed sessions are bounded by product design"
+  // -- this cap is what actually makes that assumption true, matching
+  // OPEN_ENDED_SESSION_MAX_HOURS' existing 24h bound for open-ended sessions.
+  it('rejects a fixed-duration session whose planned_duration_minutes exceeds 24 hours', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ type: 'solo', duration_mode: 'fixed', planned_duration_minutes: 1441 });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('invalid_request');
+  });
+
+  it('accepts a fixed-duration session at exactly the 24-hour cap', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ type: 'solo', duration_mode: 'fixed', planned_duration_minutes: 1440 });
+
+    expect(response.status).toBe(201);
+  });
+
   it('creates a solo session with no QR token', async () => {
     const token = await mintAuthToken(HOST_ID);
 

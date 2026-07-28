@@ -66,17 +66,44 @@ Items that cannot be verified on this development machine (no Android SDK platfo
 
 ## Phase 3 — iOS native blocker bridge (task 3.6)
 
-Everything in this section requires a Mac (standing constraint, `CLAUDE.md`) and is currently **written but never compiled**. `apps/mobile/ios/LockalTime/Blocking/` (`BlockingPermissionsModule.swift`, `AppBlockerModule.swift`, `ActivityPickerHostView.swift`, `SharedAppGroup.swift`) plus `apps/mobile/ios/LockalTimeBlockerExtension/` (`DeviceActivityMonitorExtension.swift`, reference `Info.plist`/`.entitlements`) exist as source files only — none of them are referenced by `LockalTime.xcodeproj/project.pbxproj`, deliberately (hand-editing that file blind risks silently corrupting the iOS project with no way to catch it here). The JS side (`blocking-permissions.ts`, `app-blocker.ts`) is fully wired and unit-tested against mocked native modules — swapping in the real Swift only requires the Xcode-side wiring below, no JS changes.
+Written since Phase 3, **compiled for the first time in Phase 7** via
+cloud macOS CI (`.github/workflows/ci.yml`'s `ios-build` job) — see that
+job's status for whether it currently passes. `apps/mobile/ios/LockalTime/Blocking/`
+(`BlockingPermissionsModule.swift`, `AppBlockerModule.swift`,
+`ActivityPickerHostView.swift`, `SharedAppGroup.swift`) plus
+`apps/mobile/ios/LockalTimeBlockerExtension/` (`DeviceActivityMonitorExtension.swift`,
+reference `Info.plist`/`.entitlements`) exist as source files; the
+one-time Xcode project wiring below (add files to targets, bridging
+header, capabilities, the extension target itself) is now **scripted**
+(`apps/mobile/ios/scripts/wire-blocking-target.rb`, run by CI via the
+`xcodeproj` gem) rather than a manual Xcode-GUI checklist — hand-editing
+`project.pbxproj` blind was the original risk this section was written to
+avoid; scripting it and verifying via a real `xcodebuild` run in CI closes
+that gap without ever needing to open Xcode by hand. The JS side
+(`blocking-permissions.ts`, `app-blocker.ts`) is fully wired and unit-tested
+against mocked native modules — nothing there changes.
 
-### One-time Xcode project setup (do this before anything else builds/links)
+CI builds unsigned, for the Simulator (`CODE_SIGNING_ALLOWED=NO`,
+`-sdk iphonesimulator`) — this proves the Swift compiles and links, not
+that it's ready for a signed device/App Store build. That still needs (both
+owner-actioned, tracked in the Phase 7 credentials section below):
 
-- [ ] **Add the Blocking/ Swift + Obj-C files to the LockalTime target** — drag `apps/mobile/ios/LockalTime/Blocking/*.swift` and `*.m` into the Xcode project navigator under the LockalTime group, checking "LockalTime" as the target membership. Xcode will offer to create a bridging header the first time it adds a Swift file next to Objective-C — instead, point Build Settings → Swift Compiler - General → "Objective-C Bridging Header" at the already-written `apps/mobile/ios/LockalTime/LockalTime-Bridging-Header.h` (don't let Xcode generate a second one).
-- [ ] **Add the en.lproj/he.lproj Localizable.strings files** — drag `apps/mobile/ios/LockalTime/en.lproj/Localizable.strings` and `he.lproj/Localizable.strings` into the project; Xcode should offer to link them as localization variants of the same logical file (accept that). `CFBundleLocalizations` (`en`, `he`) is already in `Info.plist`.
-- [ ] **Add capabilities to the LockalTime target** — Signing & Capabilities → "+ Capability" → App Groups (create/select `group.com.lockaltime.app`) and → Family Controls. Point the target's entitlements file at `apps/mobile/ios/LockalTime/LockalTime.entitlements` (already written) rather than letting Xcode generate a fresh one, or merge the two.
-- [ ] **Create the DeviceActivityMonitor extension target** — File → New → Target… → search "Device Activity Monitor Extension" → name it `LockalTimeBlockerExtension`. Xcode generates a starter Swift file and Info.plist for the new target; **delete both** and instead add the already-written `apps/mobile/ios/LockalTimeBlockerExtension/DeviceActivityMonitorExtension.swift` and `Info.plist` to the new target (target membership: `LockalTimeBlockerExtension` only).
-- [ ] **Give the extension target the same App Group** — Signing & Capabilities on the `LockalTimeBlockerExtension` target → App Groups → select the same `group.com.lockaltime.app` (must match the main app exactly) → Family Controls. Point its entitlements file at `apps/mobile/ios/LockalTimeBlockerExtension/LockalTimeBlockerExtension.entitlements`.
-- [ ] **Share SharedAppGroup.swift with the extension** — select `apps/mobile/ios/LockalTime/Blocking/SharedAppGroup.swift` in the project navigator → File Inspector → Target Membership → check `LockalTimeBlockerExtension` in addition to `LockalTime` (one file, two targets — do not duplicate it).
-- [ ] **`pod install`** in `apps/mobile/ios` after all of the above (new target present) — confirm CocoaPods handles the extension target without errors (it may need `use_frameworks!`/`platform :ios` adjustments for the extension's Podfile target block; none exists yet since the extension itself didn't exist when the Podfile was last touched).
+- [ ] **The real Family Controls entitlement approved by Apple** (`docs/apple-family-controls-entitlement-application.md`) — without it, `FamilyControls`/`ManagedSettings`/`DeviceActivityMonitor` API calls fail at runtime on a real device even though the code compiles.
+- [ ] **A distribution certificate + provisioning profile** once the entitlement is approved and Apple Developer Program enrollment is confirmed (confirmed active as of this phase, see the Phase 7 credentials section) — needed for any signed build (TestFlight, ad hoc, or device install), not for the CI compile check above.
+
+If `wire-blocking-target.rb` needs a real Xcode-GUI touch-up (e.g. the
+`xcodeproj` gem produced something Xcode itself would reformat/re-resolve
+differently), the original manual steps it replaces were: add the
+Blocking/ files to the LockalTime target with the bridging header pointed
+at the existing `.h` file; add `en.lproj`/`he.lproj` `Localizable.strings`
+as one variant group; add App Groups (`group.com.lockaltime.app`) +
+Family Controls capabilities to LockalTime, entitlements file already
+written; create a "Device Activity Monitor Extension" target named
+`LockalTimeBlockerExtension`, delete Xcode's generated starter files, add
+the already-written `DeviceActivityMonitorExtension.swift`/`Info.plist`
+instead; give the extension the same App Group + Family Controls,
+entitlements file already written; share `SharedAppGroup.swift` across
+both targets (one file, two target memberships, never duplicated).
 
 ### Functional verification (after the above, on a real device with the Family Controls entitlement approved)
 
@@ -120,3 +147,57 @@ Everything below is implemented, unit-tested, and proven against the live local 
 - [ ] **Apple Push key/cert (iOS)** — obtain an APNs auth key from the Apple Developer account (the same account `docs/apple-family-controls-entitlement-application.md` is waiting on), and extend the same adapter for APNs.
 - [ ] **Link a real native push SDK on both platforms** (`@react-native-firebase/messaging` or equivalent) and replace `pushRegistration`'s placeholder (`apps/mobile/src/services/push-registration.ts`) with real token acquisition — currently deterministically reports `'unavailable'`, so `registerPushTokenIfChanged()` never actually writes a `device_tokens` row on a real device yet.
 - [ ] **An actual on-device push receipt** — once both adapters above exist, let a real streak sit within the 6-hour window and confirm the device actually receives the notification, in both English and Hebrew (the locale is read from `users.locale`, reported by `reportLocaleIfChanged()`).
+
+## Phase 7 — Release Prep credentials & beta ring
+
+Confirmed with the owner during this phase (2026-07-29): **Apple Developer
+Program and Google Play Console enrollment are both already active** —
+this unblocks the iOS/Android/store-listing tracks below procedurally, but
+the actual portal actions (certificates, listing content, submission) are
+still owner-actioned since this environment has no login to either.
+**Not yet set up**: a PaaS account (Railway), a Sentry account, and
+Firebase/APNs credentials — all built fully wired this phase and left
+inert per the items below, same posture as Play Integrity/App Attest.
+
+- [ ] **Physical Android device availability** — still unconfirmed as of this
+  phase. This blocks nearly every Phase 3 native-enforcement item above
+  (actual blocking, boot persistence, permission round-trips) — it is a
+  release-blocking prerequisite per the Phase 7 DoD, not optional polish.
+  Confirm status and, once available, work through every unchecked Phase 3
+  item above before a public submission.
+- [ ] **Sentry account + project** — create one at sentry.io (a React Native
+  + Node project, or two separate projects). Set the resulting DSN as:
+  - Server: `SENTRY_DSN` env var (Railway → Settings → Variables; see
+    `docs/DEPLOYMENT.md`).
+  - Mobile: edit `apps/mobile/src/config/monitoring-config.ts`'s
+    `SENTRY_DSN` constant directly (no build-time env-injection exists yet
+    for the mobile app — same "hardcoded pending real per-environment
+    config" status as `supabase-config.ts`).
+  Once set, trigger a real error in each (e.g. a deliberately-thrown error
+  behind a debug-only button) and confirm it appears in the Sentry
+  dashboard within a minute or two.
+- [ ] **Sentry native build-time plugins (source maps / dSYMs)** — NOT
+  wired this phase (needs a real Sentry auth token to configure the
+  Android Gradle plugin / Xcode build phase for source-map and debug-symbol
+  upload). Without this, crash reports still arrive but stack traces show
+  minified/obfuscated frames instead of real file/line — follow Sentry's
+  own React Native wizard (`npx @sentry/wizard@latest -i reactNative`) once
+  the account exists; it edits the native project files directly.
+- [ ] **Railway account** — create at railway.app, connect this repo, set
+  the env vars `docs/DEPLOYMENT.md`'s "Production API hosting" section
+  lists, and deploy. Confirm `GET /health` responds and the server logs
+  show the sweep/streak-expiry/streak-risk-notification pollers ticking
+  (they log a warning only on failure, per `server.ts` — silence on that
+  cadence is the healthy state).
+- [ ] **Staging Supabase project (`LockalTime-staging`)** — see
+  `docs/DEPLOYMENT.md`'s "Staging Supabase project" section for the exact
+  commands; confirm `scripts/verify-service-role-grants.sql` reports zero
+  missing grants before considering it done.
+- [ ] **TestFlight + Play internal testing beta ring** — once a signed iOS
+  build (real Family Controls entitlement + distribution cert/profile) and
+  a signed Android release build both exist: upload to App Store Connect
+  (TestFlight) and Google Play Console (internal testing track), invite a
+  small group of real testers on real hardware, and work through every
+  outstanding item in this checklist against their actual devices before
+  any public submission — this is what actually closes this document's
+  "no physical device"/"no Mac" gaps, not further JS-side work.

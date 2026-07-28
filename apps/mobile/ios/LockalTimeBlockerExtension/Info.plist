@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Phase 3 task 3.6 (backlog.md): reference Info.plist for the
-  DeviceActivityMonitor extension target — NOT wired into any real Xcode
-  target in this repo (see DeviceActivityMonitorExtension.swift's header).
-  When the real target is created via Xcode's "Device Activity Monitor
-  Extension" template, Xcode generates its own Info.plist with this same
-  NSExtension shape; this file exists so the required keys are documented
-  and version-controlled even before a Mac is available to generate them.
+  Phase 3 task 3.6 (backlog.md): Info.plist for the LockalTimeBlockerExtension
+  target, created by Phase 7's scripted Xcode wiring
+  (apps/mobile/ios/scripts/wire-blocking-target.rb) rather than Xcode's
+  "Device Activity Monitor Extension" template GUI flow -- the script points
+  the target straight at this file instead of using a template-generated one.
 -->
 <plist version="1.0">
 <dict>

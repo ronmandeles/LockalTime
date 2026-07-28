@@ -6,6 +6,21 @@
 // qr-token.ts's nonce).
 export const QR_TOKEN_TTL_MINUTES = 15;
 
+// Phase 7 code-review finding: a fixed-duration session's planned_duration_minutes
+// had no upper bound, but the iOS native module
+// (apps/mobile/ios/LockalTime/Blocking/AppBlockerModule.swift's
+// scheduleMonitoring) builds its DeviceActivitySchedule from only the
+// hour/minute/second of the start and end times — a time-of-day window, not
+// an absolute duration — so any session longer than 24h is silently
+// truncated to (duration mod 24h) on iOS, firing the extension's guaranteed
+// cleanup far too early. That Swift comment already assumed fixed sessions
+// "are bounded by product design"; this constant, enforced at the API
+// boundary (sessions.router.ts's createSessionBodySchema), is what actually
+// makes that assumption true. Matches OPEN_ENDED_SESSION_MAX_HOURS below —
+// the two must stay equal, since the iOS scheduling assumption applies to
+// every session regardless of duration_mode.
+export const FIXED_SESSION_MAX_DURATION_MINUTES = 24 * 60;
+
 // Server-enforced cap on concurrent (open-interval) participants in a
 // session. Not yet a per-session/host-chosen value — DATABASE.md has no
 // column for that and no product decision exists for a host-chosen cap;
