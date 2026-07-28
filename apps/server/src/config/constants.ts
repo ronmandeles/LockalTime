@@ -95,3 +95,11 @@ export const STREAK_RISK_NOTIFICATION_INTERVAL_SECONDS = 300;
 // username space one character at a time, not full abuse-prevention
 // infra. Consumed by friends.router.ts.
 export const MIN_FRIEND_SEARCH_QUERY_LENGTH = 2;
+
+// Phase 7 (Release Prep) API hardening — src/middleware/security.ts.
+// A single per-IP window applied to every route except /health (PaaS
+// liveness checks must never 429). 100 req/15 min is generous for a real
+// user driving the app by hand, tight enough to blunt a scripted client
+// hammering session-join or friend-search enumeration.
+export const RATE_LIMIT_WINDOW_MINUTES = 15;
+export const RATE_LIMIT_MAX_REQUESTS = 100;

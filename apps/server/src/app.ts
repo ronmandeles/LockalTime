@@ -4,6 +4,7 @@ import type { Env } from './config/env';
 import { createRequireAuth } from './middleware/require-auth';
 import { createRequireRole } from './middleware/require-role';
 import { errorHandler } from './middleware/error-handler';
+import { rateLimiter, securityHeaders } from './middleware/security';
 import { unconfiguredAttestationProvider } from './modules/attestation/attestation-provider';
 import { createSupabaseAttestationStore } from './modules/attestation/attestation-store';
 import { createFriendsRouter } from './modules/friends/friends.router';
@@ -23,11 +24,16 @@ import { createSupabaseJwks } from './services/supabase-jwks';
 // on ambient global state).
 export function createApp(env: Env): Express {
   const app = express();
+  app.use(securityHeaders);
   app.use(express.json());
 
   app.get('/health', (_req, res) => {
     res.status(200).json({ status: 'ok' });
   });
+
+  // Mounted after /health so PaaS liveness checks are never rate-limited —
+  // every route registered below this line is subject to the per-IP limit.
+  app.use(rateLimiter);
 
   // Built once per app instance — createRemoteJWKSet caches the fetched
   // public key across requests, so every route sharing this instance
