@@ -1,6 +1,6 @@
 import React from 'react';
 
-import { act, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 const mockUseSession = jest.fn();
 jest.mock('../hooks/use-session', () => ({
@@ -39,7 +39,10 @@ import ActiveSessionScreen from './ActiveSessionScreen';
 // (simulated here as the mocked hook's return value changing across a
 // rerender). Phase 3 task 3.1 adds the blocker-violation banner.
 
-const navigationStub = {} as unknown as Parameters<typeof ActiveSessionScreen>[0]['navigation'];
+const mockNavigate = jest.fn();
+const navigationStub = {
+  navigate: mockNavigate,
+} as unknown as Parameters<typeof ActiveSessionScreen>[0]['navigation'];
 const routeStub = {
   key: 'ActiveSession',
   name: 'ActiveSession' as const,
@@ -83,6 +86,7 @@ describe('ActiveSessionScreen', () => {
     jest.useFakeTimers({ now: new Date('2026-07-26T12:05:00.000Z') });
     mockUseSession.mockReset();
     mockUseAppBlocker.mockReset().mockReturnValue({ violation: null });
+    mockNavigate.mockReset();
   });
 
   afterEach(() => {
@@ -253,6 +257,33 @@ describe('ActiveSessionScreen', () => {
       expect(mockUseAppBlocker).toHaveBeenCalledWith(
         expect.objectContaining({ sessionId: null, isSessionActive: false }),
       );
+    });
+  });
+
+  describe('Emergency Exit link (Screen 9 entry point)', () => {
+    it('shows the link while the session is active and navigates to EmergencyExit on press', async () => {
+      mockSession({}, 'active');
+
+      await renderScreen();
+      fireEvent.press(screen.getByTestId('active-session-emergency-exit'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('EmergencyExit', { sessionId: 'session-1' });
+    });
+
+    it('still shows the link during host_disconnected — an ongoing session, not a terminal one', async () => {
+      mockSession({}, 'host_disconnected');
+
+      await renderScreen();
+
+      expect(screen.getByTestId('active-session-emergency-exit')).toBeOnTheScreen();
+    });
+
+    it('hides the link once the session has completed', async () => {
+      mockSession({}, 'completed');
+
+      await renderScreen();
+
+      expect(screen.queryByTestId('active-session-emergency-exit')).toBeNull();
     });
   });
 });

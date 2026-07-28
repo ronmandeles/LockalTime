@@ -79,6 +79,7 @@ export const he: TranslationSchema = {
       remaining: 'זמן שנותר',
     },
     qrLabel: 'שתפו קוד זה כדי לאפשר לאחרים להצטרף',
+    emergencyExit: 'יציאת חירום',
     blockerViolation: {
       message: {
         permission_revoked: 'הרשאת החסימה בוטלה — הסשן הזה כבר לא נאכף.',

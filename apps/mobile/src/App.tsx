@@ -12,6 +12,7 @@ import type { RootStackParamList } from './navigation/types';
 import ActiveSessionScreen from './screens/ActiveSessionScreen';
 import AuthScreen from './screens/AuthScreen';
 import CreateSessionScreen from './screens/CreateSessionScreen';
+import EmergencyExitScreen from './screens/EmergencyExitScreen';
 import HomeScreen from './screens/HomeScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import PermissionPrimingScreen from './screens/PermissionPrimingScreen';
@@ -141,6 +142,7 @@ const App = (): React.JSX.Element | null => {
           <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
           <RootStack.Screen name="SessionDetails" component={SessionDetailsScreen} />
           <RootStack.Screen name="ActiveSession" component={ActiveSessionScreen} />
+          <RootStack.Screen name="EmergencyExit" component={EmergencyExitScreen} />
           <RootStack.Screen name="SessionCompletion" component={SessionCompletionScreen} />
         </RootStack.Navigator>
       </NavigationContainer>

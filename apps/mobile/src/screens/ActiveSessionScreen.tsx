@@ -39,7 +39,7 @@ const formatClock = (totalSeconds: number): string => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
-const ActiveSessionScreen = ({ route }: ActiveSessionScreenProps): React.JSX.Element => {
+const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): React.JSX.Element => {
   const { t } = useTranslation();
   const { session, openIntervals, status, reportOfflineTimeout } = useSession(route.params.sessionId);
   const [now, setNow] = useState(() => Date.now());
@@ -154,6 +154,15 @@ const ActiveSessionScreen = ({ route }: ActiveSessionScreenProps): React.JSX.Ele
           </>
         )}
       </View>
+
+      {BLOCKING_STATUSES.has(status) && (
+        <TouchableOpacity
+          onPress={() => navigation.navigate('EmergencyExit', { sessionId: route.params.sessionId })}
+          testID="active-session-emergency-exit"
+        >
+          <Text style={styles.emergencyExitLabel}>{t('activeSession.emergencyExit')}</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 };
@@ -177,6 +186,14 @@ const styles = StyleSheet.create({
     paddingEnd: spacing.xl,
     paddingStart: spacing.xl,
     paddingTop: spacing.xl,
+  },
+  emergencyExitLabel: {
+    ...typography.caption,
+    color: '#999999',
+    marginTop: spacing['2xl'],
+    minHeight: sizing.minTouchTarget,
+    textAlign: 'center',
+    textAlignVertical: 'center',
   },
   participantRow: {
     ...typography.body,

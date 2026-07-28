@@ -30,6 +30,8 @@ Known edge-case screens still needed but not yet designed (tracked in backlog): 
 
 **Implemented Phase 2 task 2.7** (skeleton — no native blocking, sessions are "virtual"): Screens 4–8 all real navigator routes (`apps/mobile/src/navigation/types.ts`). Screen 7's QR Scan was manual token entry only in Phase 2 (no camera dependency); the actual `POST /sessions/join` call happens on Screen 8 (pre-join confirmation), not Screen 7, so a bad/expired/full code surfaces its specific error where the user can act on it. The edge-case screens listed above (QR expired/invalid/at-capacity) are *not* separate screens — they're error states rendered inline on Screen 8, keyed off the join outcome's failure code. **Implemented Phase 3 task 3.5:** Screen 7 now defaults to a real camera scan (`react-native-vision-camera` — pinned to the stable `^4.0.0` line, not the newer Nitro-Modules-based `5.x`) once permission is granted, with manual entry always one tap away; a scanned code and a typed one both still resolve on Screen 8, unchanged.
 
+**Implemented Phase 4 tasks 8/9:** Screen 10 (`SessionCompletionScreen.tsx`) reads the already-finalized `session_participants`/`rewards_history` rows and renders the receipt, reached from either a normal session end or a successful Emergency Exit — both write the same shape, so the screen only branches on `exit_reason`. Screen 9 (`EmergencyExitScreen.tsx`) is reached via a subdued link on Active Session, shown only while the session is genuinely ongoing; confirmation is a 1500ms hold (a plain timer driving a state-toggled style, not `Animated.timing` — see backlog.md task 8 for why), and a successful exit resets navigation into Screen 10.
+
 ## 3. Tech Stack & Service Boundaries
 
 | Layer | Responsibility | Rule |

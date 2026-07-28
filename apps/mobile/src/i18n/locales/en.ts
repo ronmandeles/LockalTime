@@ -81,6 +81,7 @@ export const en = {
       remaining: 'Remaining',
     },
     qrLabel: 'Share this code to let others join',
+    emergencyExit: 'Emergency exit',
     blockerViolation: {
       message: {
         permission_revoked: 'Blocking permission was turned off — this session is no longer enforced.',
