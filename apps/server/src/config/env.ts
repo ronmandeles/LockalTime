@@ -13,6 +13,13 @@ const envSchema = z.object({
   // its public JWKS (services/supabase-jwks.ts), not a shared secret.
   QR_SIGNING_SECRET: z.string().min(1),
   PORT: z.coerce.number().int().positive().default(3000),
+  // Phase 7 (Release Prep): crash/error monitoring. Optional and undefined
+  // by default -- no Sentry account exists yet (same posture as
+  // unconfiguredNotificationSender/unconfiguredAttestationProvider).
+  // services/monitoring.ts's createMonitoring() no-ops entirely when this
+  // is absent; setting it in production activates real reporting with no
+  // code change.
+  SENTRY_DSN: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { i18n as I18nInstance } from 'i18next';
 
+import { SENTRY_DSN } from './config/monitoring-config';
 import { I18nProvider } from './i18n/I18nProvider';
 import { initI18n } from './i18n/init-i18n';
 import type { SupportedLocale } from './i18n/resolve-device-locale';
@@ -40,7 +41,15 @@ import {
   markPermissionStepHandled,
   usePermissionStore,
 } from './state/permission-store';
+import { initMonitoring } from './services/monitoring';
 import { hydrateProfile, resetProfile } from './state/profile-store';
+
+// Phase 7 (Release Prep): crash/error monitoring, initialized once at
+// module load — as early as possible, so it can capture errors that occur
+// before the first render, not inside a useEffect. A true no-op today
+// (SENTRY_DSN is empty, config/monitoring-config.ts) — safe to run
+// unconditionally, including under every test that imports this module.
+initMonitoring(SENTRY_DSN);
 
 // Testable app factory (the runtime shell is index.js, which only registers
 // this component) — mirrors the app.ts/server.ts split in apps/server.

@@ -3,6 +3,11 @@ import { I18nManager } from 'react-native';
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
+// See App.spec.tsx's identical mock for why: @sentry/react-native ships
+// untranspiled ESM, and initMonitoring is a true no-op while SENTRY_DSN is
+// empty anyway.
+jest.mock('./services/monitoring', () => ({ initMonitoring: () => undefined }));
+
 import App from './App';
 import { useAuthStore } from './state/auth-store';
 

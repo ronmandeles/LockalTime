@@ -193,7 +193,7 @@ Task order (grouped by track; a track's tasks are prerequisites for later tracks
 - [ ] App icon design (all required iOS sizes + Android adaptive icon) — currently just React Native's empty placeholder `AppIcon.appiconset`
 - [ ] Privacy nutrition label (Apple) / Data Safety form (Google) — now backed by a real data-collected audit (points/rewards, device tokens, attestation `raw_response`, friend graph, username, venue data) and the retention policy above
 - [ ] App Store Connect / Google Play Console listing content: screenshots, description, keywords, support URL, category, age rating
-- [ ] Crash/error monitoring (Sentry or equivalent) wired into both `apps/server` and `apps/mobile`
+- [x] Crash/error monitoring (Sentry or equivalent) wired into both `apps/server` and `apps/mobile` — `services/monitoring.ts` in each, ports-and-adapters same posture as attestation/push: a real, tested seam, no-op until a `SENTRY_DSN` exists (`SENTRY_DSN` optional server env var; `config/monitoring-config.ts` on mobile, empty pending real per-environment config). Native Android/iOS build-time plugin wiring (source map/dSYM upload) is NOT done — needs a real Sentry auth token; deferred to the Credentials runbook
 
 **Credentials** *(owner-actioned account/credential creation; the code and runbook side is buildable now, real activation is not)*
 - [ ] Confirm Apple Developer Program + Google Play Console account enrollment status — prerequisite to nearly everything in the iOS/Android/store tracks above
