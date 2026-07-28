@@ -20,7 +20,7 @@ import type {
   UserStreakRow,
 } from '../services/stats-repository';
 import { useAuthStore } from '../state/auth-store';
-import { radius, spacing, typography } from '../theme/tokens';
+import { colors, radius, spacing, typography } from '../theme/tokens';
 
 // Stats (Screen 12), DESIGN_GUIDELINES §0: an acquisition surface. Lifetime
 // aggregates (`user_stats` — proven server-side to equal
@@ -175,20 +175,20 @@ const StatsScreen = (_props: StatsScreenProps): React.JSX.Element => {
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   chartBarColumn: {
     alignItems: 'center',
     flex: 1,
   },
   chartBarFill: {
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.sm,
     width: '60%',
   },
   chartBarLabel: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   chartBarTrack: {
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.lg,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingEnd: spacing.xl,
     paddingStart: spacing.xl,
@@ -211,16 +211,16 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.body,
-    color: '#666666',
+    color: colors.textMuted,
   },
   lifetimeCaption: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   lifetimeCard: {
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: radius.xl,
     flex: 1,
     paddingVertical: spacing.lg,
@@ -232,16 +232,16 @@ const styles = StyleSheet.create({
   },
   lifetimeValue: {
     ...typography.display,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   milestoneRow: {
     ...typography.body,
-    color: '#222222',
+    color: colors.textPrimary,
     paddingVertical: spacing.xs,
   },
   sectionTitle: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginBottom: spacing.md,
   },
   streakBlock: {
@@ -255,11 +255,11 @@ const styles = StyleSheet.create({
   },
   streakValue: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   title: {
     ...typography.display,
-    color: '#222222',
+    color: colors.textPrimary,
     marginBottom: spacing['2xl'],
     textAlign: 'center',
   },

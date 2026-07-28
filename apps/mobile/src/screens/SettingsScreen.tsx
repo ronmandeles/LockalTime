@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { API_BASE_URL } from '../config/api-config';
 import { deleteAccount } from '../services/api-client';
 import { signOut } from '../services/auth-service';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Settings (Phase 7, Release Prep) — the app's first settings/account
 // surface. Two responsibilities: sign-out (auth-service's signOut() has
@@ -144,10 +144,10 @@ const SettingsScreen = (): React.JSX.Element => {
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -156,15 +156,15 @@ const styles = StyleSheet.create({
   },
   dangerBody: {
     ...typography.body,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   dangerTitle: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   dangerZone: {
-    borderColor: '#E0E0E0',
+    borderColor: colors.border,
     borderRadius: radius.md,
     borderTopWidth: 1,
     marginTop: spacing['2xl'],
@@ -172,23 +172,23 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.caption,
-    color: '#B00020',
+    color: colors.danger,
     marginTop: spacing.xs,
   },
   holdButton: {
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
     marginTop: spacing.lg,
   },
   holdButtonActive: {
-    backgroundColor: '#DDDDDD',
+    backgroundColor: colors.surfaceActive,
   },
   holdLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   row: {
     marginTop: spacing.lg,
@@ -197,16 +197,16 @@ const styles = StyleSheet.create({
   },
   rowLabel: {
     ...typography.body,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   sectionTitle: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing['2xl'],
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
     marginBottom: spacing.lg,
   },
 });

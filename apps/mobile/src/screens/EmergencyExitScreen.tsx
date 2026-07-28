@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 
 import type { RootStackParamList } from '../navigation/types';
 import { leaveSession } from '../services/api-client';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Emergency Exit (Screen 9), DESIGN_GUIDELINES §0: an in-session surface —
 // deliberately quiet, no stimulation beyond what's functionally necessary.
@@ -105,24 +105,24 @@ const EmergencyExitScreen = ({ route, navigation }: EmergencyExitScreenProps): R
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 // In-session surface: no elevation, no bright accents.
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.sm,
   },
   cancelLabel: {
     ...typography.body,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.lg,
     minHeight: sizing.minTouchTarget,
     textAlign: 'center',
     textAlignVertical: 'center',
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     justifyContent: 'center',
     paddingEnd: spacing.xl,
@@ -130,27 +130,27 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.caption,
-    color: '#B00020',
+    color: colors.danger,
     marginTop: spacing.md,
   },
   holdButton: {
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
     marginTop: spacing['2xl'],
   },
   holdButtonActive: {
-    backgroundColor: '#DDDDDD',
+    backgroundColor: colors.surfaceActive,
   },
   holdLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

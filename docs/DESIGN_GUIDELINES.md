@@ -1,6 +1,6 @@
 # Lockal Time — Design Guidelines
 
-Status: structural design system, pre-implementation. Purpose: keep every screen built across separate phases/sessions looking like one coherent product, not a patchwork of one-off decisions. **Color palette is intentionally deferred** — this doc governs sizing, shape, motion, and haptic consistency only; colors get their own pass later.
+Status: structural design system. Purpose: keep every screen built across separate phases/sessions looking like one coherent product, not a patchwork of one-off decisions. **Color palette landed in Phase 7 (Release Prep)** — see §12; every screen's ad-hoc neutral-grayscale literal was swept to the tokens there (`apps/mobile/src/theme/tokens.ts`'s `colors` export).
 
 Read this before starting any screen-building task, the same way `.claude/skills/` conventions get read before other code tasks.
 
@@ -122,5 +122,60 @@ iOS and Android share the exact same tokens above — React Native's shared styl
 
 ## 11. Open / deferred
 
-- Color palette (background, text, accent, semantic colors for success/warning states) — explicitly deferred per product owner's direction, needs its own pass.
-- Dark mode — not yet discussed; when colors are defined, decide then whether dark mode is in scope.
+- Dark mode — not yet discussed; no theme-switching infrastructure exists (the app has one fixed light palette, §12). Revisit if/when it comes up.
+
+## 12. Color palette (Phase 7)
+
+Landed this phase, replacing every screen's independently-picked neutral
+literal — several near-duplicate grays (`#444444`/`#666666`/`#888888`/
+`#999999` all meaning roughly "de-emphasized text" in different files) were
+consolidated into one named scale, and one real accent color was
+introduced (previously every "primary" element — CTA buttons, progress
+fills, selected/active states — used the same flat neutral as body text,
+indistinguishable from it). All of it lives in `apps/mobile/src/theme/tokens.ts`'s
+`colors` export (`tokens.test.ts` pins the exact values) — screens import
+from there, never a raw hex literal.
+
+**Surfaces**
+| Token | Value | Use |
+|---|---|---|
+| `background` | `#FFFFFF` | Page background |
+| `surface` | `#F5F5F5` | Cards, summary blocks |
+| `surfaceActive` | `#DDDDDD` | Pressed/active state of a surface element |
+| `border` | `#E0E0E0` | Dividers, subtle borders |
+| `borderStrong` | `#CCCCCC` | Input borders, more visible dividers |
+| `black` | `#000000` | Camera viewfinder letterboxing only — a technical necessity, not part of the semantic scale |
+
+**Text** (darkest/strongest to lightest/most muted)
+| Token | Value | Use |
+|---|---|---|
+| `textPrimary` | `#222222` | Titles, primary values, strong emphasis |
+| `textSecondary` | `#444444` | Body copy |
+| `textMuted` | `#666666` | Captions, secondary labels |
+| `textFaint` | `#999999` | Lowest-emphasis text |
+| `placeholder` | `#888888` | Input placeholder text |
+
+**Brand accent** — a calm, grounded teal. This is a distraction-blocking/
+wellbeing app, not a game; the accent reads as focused, not stimulating.
+Used for primary CTAs, selected/active states, and progress fills —
+**never** for plain body text (that stays `textPrimary`/`textSecondary`).
+| Token | Value | Use |
+|---|---|---|
+| `primary` | `#0F6B5C` | Primary CTA fill, active/selected state, progress fill |
+| `primaryPressed` | `#0B554A` | Reserved for a pressed-state treatment if one is added later |
+| `onPrimary` | `#FFFFFF` | Text/icon color on a `primary`-filled surface |
+
+**Semantic** (§11's original deferred ask — "success/warning colors")
+| Token | Value | Use |
+|---|---|---|
+| `danger` | `#B00020` | Error text |
+| `warning` | `#B25E09` | Attention-worthy-but-not-fatal states (e.g. `StatusBanner`'s "prominent" weight) |
+| `success` | `#1E8E3E` | Reserved — no caller yet |
+
+**Overlay**
+| Token | Value | Use |
+|---|---|---|
+| `overlay` | `#44444488` | Semi-transparent dialog scrim |
+
+No dark mode variant exists (§11) — these are the only values, used
+identically regardless of OS theme setting.

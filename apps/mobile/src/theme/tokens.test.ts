@@ -1,15 +1,15 @@
-import { radius, sizing, spacing, typography } from './tokens';
+import { colors, radius, sizing, spacing, typography } from './tokens';
 
 // Locks the numeric design language of docs/DESIGN_GUIDELINES.md into
 // executable form: §2 spacing scale, §3 radius scale, §5 typography ramp with
-// the 1.4x line-height rule, §6 component sizing standards. Screens consume
-// these tokens instead of ad-hoc values; any drift from the guideline numbers
-// fails here. Whole-object toEqual assertions double as completeness checks —
-// a token silently added, removed, or renamed outside the documented scale
-// fails the exact-shape match. Deliberately absent: color tokens (palette is
-// deferred, §11) and the elevation scale (§4's "subtle shadow" definition is
-// palette-dependent — added with the color pass, or when the first
-// elevation-1 component lands, whichever comes first).
+// the 1.4x line-height rule, §6 component sizing standards, §12 color
+// palette. Screens consume these tokens instead of ad-hoc values; any drift
+// from the guideline numbers fails here. Whole-object toEqual assertions
+// double as completeness checks — a token silently added, removed, or
+// renamed outside the documented scale fails the exact-shape match.
+// Deliberately absent: the elevation scale (§4's "subtle shadow" definition
+// hasn't been needed by any screen yet — added when the first elevation-1
+// component lands).
 
 describe('spacing scale (DESIGN_GUIDELINES §2)', () => {
   it('matches the documented six-step scale exactly, with no extra or missing steps', () => {
@@ -79,6 +79,31 @@ describe('component sizing standards (DESIGN_GUIDELINES §6)', () => {
       iconStandard: 24,
       iconLarge: 28,
       avatarParticipant: 36,
+    });
+  });
+});
+
+describe('color palette (DESIGN_GUIDELINES §12)', () => {
+  it('matches the documented palette exactly', () => {
+    expect(colors).toEqual({
+      background: '#FFFFFF',
+      surface: '#F5F5F5',
+      surfaceActive: '#DDDDDD',
+      border: '#E0E0E0',
+      borderStrong: '#CCCCCC',
+      black: '#000000',
+      textPrimary: '#222222',
+      textSecondary: '#444444',
+      textMuted: '#666666',
+      textFaint: '#999999',
+      placeholder: '#888888',
+      primary: '#0F6B5C',
+      primaryPressed: '#0B554A',
+      onPrimary: '#FFFFFF',
+      danger: '#B00020',
+      warning: '#B25E09',
+      success: '#1E8E3E',
+      overlay: '#44444488',
     });
   });
 });

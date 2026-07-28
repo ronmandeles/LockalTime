@@ -14,7 +14,7 @@ import {
   type AuthSession,
 } from '../services/auth-service';
 import { nativeSignIn, type NativeSignInResult } from '../services/native-sign-in';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Auth screen (Screen 3), backlog: "Auth error states: wrong OTP, network
 // failure, OAuth account-linking dialog". Two-step passwordless email flow
@@ -274,15 +274,15 @@ const AuthScreen = (): React.JSX.Element => {
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.sm,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -294,12 +294,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dialog: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: radius.xl,
     padding: spacing.lg,
   },
   dialogOverlay: {
-    backgroundColor: '#44444488',
+    backgroundColor: colors.overlay,
     bottom: 0,
     end: 0,
     justifyContent: 'center',
@@ -310,26 +310,26 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...typography.caption,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.sm,
   },
   legalDisclosure: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.lg,
     textAlign: 'center',
   },
   legalLink: {
     ...typography.caption,
-    color: '#222222',
+    color: colors.textPrimary,
     textDecorationLine: 'underline',
   },
   input: {
     ...typography.body,
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
-    color: '#222222',
+    color: colors.textPrimary,
     height: sizing.inputHeight,
     marginTop: spacing.md,
     paddingEnd: spacing.md,
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
@@ -345,11 +345,11 @@ const styles = StyleSheet.create({
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   providerCta: {
     alignItems: 'center',
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
     justifyContent: 'center',
@@ -358,16 +358,16 @@ const styles = StyleSheet.create({
   },
   providerCtaLabel: {
     ...typography.body,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   stepTitle: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.md,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

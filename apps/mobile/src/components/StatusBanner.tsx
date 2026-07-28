@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Phase 6 task 7: the app's first shared UI primitive besides QrCodeCamera
 // — three call sites justify it (blocker violation, host-migration toast,
@@ -47,27 +47,27 @@ const StatusBanner = ({
   </View>
 );
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   actionLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.sm,
     minHeight: sizing.minTouchTarget,
   },
   container: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: radius.md,
     marginTop: spacing.sm,
     padding: spacing.md,
   },
   containerProminent: {
-    borderColor: '#999999',
+    borderColor: colors.warning,
     borderWidth: 1,
   },
   message: {
     ...typography.body,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   messageProminent: {
     ...typography.bodyStrong,
