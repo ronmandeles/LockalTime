@@ -89,3 +89,9 @@ export const STREAK_RISK_NOTIFICATION_WINDOW_HOURS = 6;
 // debounce-window concern (the claim function itself is what prevents a
 // double-send), just "don't hammer the DB".
 export const STREAK_RISK_NOTIFICATION_INTERVAL_SECONDS = 300;
+
+// Phase 6.5 (Social & Comparison Surfaces) — GET /friends/search's floor.
+// A proportionate mitigation against trivially enumerating the whole
+// username space one character at a time, not full abuse-prevention
+// infra. Consumed by friends.router.ts.
+export const MIN_FRIEND_SEARCH_QUERY_LENGTH = 2;
