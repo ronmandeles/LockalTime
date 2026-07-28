@@ -27,6 +27,7 @@ import VenueDashboardScreen from './screens/VenueDashboardScreen';
 import VenueManagementScreen from './screens/VenueManagementScreen';
 import WelcomeBackScreen from './screens/WelcomeBackScreen';
 import {
+  acceptTosIfNeeded,
   registerPushTokenIfChanged,
   reportLocaleIfChanged,
   reportTimezoneIfChanged,
@@ -119,6 +120,13 @@ const App = (): React.JSX.Element | null => {
       // linked yet, push-registration.ts) but wired for when one lands.
       reportLocaleIfChanged(authenticatedUserId);
       registerPushTokenIfChanged(authenticatedUserId);
+      // Phase 7: records ToS/Privacy acceptance the first time this user
+      // ever reaches an authenticated session — AuthScreen shows the
+      // disclosure with links on every entry step, this is what stamps a
+      // server-side timestamp once (idempotent: a no-op after the first
+      // successful call, see user-profile.ts's `.is('tos_accepted_at',
+      // null)` condition).
+      acceptTosIfNeeded(authenticatedUserId);
       // Phase 6: re-hydrated fresh every authenticated session (never
       // persisted) so a manual runbook role flip is picked up on next
       // sign-in without a stale cached value.

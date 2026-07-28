@@ -7,9 +7,21 @@
 -- not just that the constraint definitions changed — since the whole point
 -- of this migration is "deleting a real user with real history no longer
 -- fails with a foreign-key violation."
+--
+-- Task: ToS/Privacy acceptance (20260801000100_users_tos_acceptance.sql).
 
 begin;
-select plan(15);
+select plan(18);
+
+select has_column('public', 'users', 'tos_accepted_at', 'public.users gains tos_accepted_at');
+select ok(
+  has_column_privilege('authenticated', 'public.users', 'tos_accepted_at', 'update'),
+  'authenticated can update their own tos_accepted_at (direct client write, same posture as timezone/locale)'
+);
+select ok(
+  not has_column_privilege('authenticated', 'public.users', 'role', 'update'),
+  'the tos_accepted_at grant did not accidentally widen to role (self-escalation must still be impossible)'
+);
 
 insert into auth.users (id, email) values
   ('70000000-0000-0000-0000-000000000001', 'p7-host@test.dev'),

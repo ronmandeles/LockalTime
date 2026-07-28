@@ -322,6 +322,18 @@ export const en = {
       body: 'This email is already registered with a different sign-in method. Sign in with your email to keep everything in one account.',
       useEmail: 'Sign in with email',
     },
+    // Phase 7 (Release Prep): a passive disclosure, not a blocking
+    // checkbox — this screen handles both new and returning users through
+    // the same flow (Supabase email-OTP creates the account on first
+    // verify), so there is no separate "sign up" moment to gate. Tapping
+    // either link opens the corresponding server-hosted route
+    // (GET /legal/terms, /legal/privacy) via Linking.openURL.
+    legalDisclosure: {
+      prefix: 'By continuing, you agree to our',
+      termsOfService: 'Terms of Service',
+      and: 'and',
+      privacyPolicy: 'Privacy Policy',
+    },
   },
   // Phase 6 (B2B) — verified_host/admin only, gated at the route by
   // useProfileStore's role. Copy is PLACEHOLDER, flagged for the deferred

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Linking, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useTranslation } from 'react-i18next';
 
+import { API_BASE_URL } from '../config/api-config';
 import {
   requestEmailOtp,
   signInWithApple,
@@ -205,6 +206,30 @@ const AuthScreen = (): React.JSX.Element => {
             >
               <Text style={styles.providerCtaLabel}>{t('auth.providers.apple')}</Text>
             </TouchableOpacity>
+
+            <Text style={styles.legalDisclosure} testID="auth-legal-disclosure">
+              {t('auth.legalDisclosure.prefix')}{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => {
+                  Linking.openURL(`${API_BASE_URL}/legal/terms`).catch(() => undefined);
+                }}
+                testID="auth-terms-link"
+              >
+                {t('auth.legalDisclosure.termsOfService')}
+              </Text>{' '}
+              {t('auth.legalDisclosure.and')}{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => {
+                  Linking.openURL(`${API_BASE_URL}/legal/privacy`).catch(() => undefined);
+                }}
+                testID="auth-privacy-link"
+              >
+                {t('auth.legalDisclosure.privacyPolicy')}
+              </Text>
+              .
+            </Text>
           </>
         ) : (
           <>
@@ -287,6 +312,17 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: '#222222',
     marginTop: spacing.sm,
+  },
+  legalDisclosure: {
+    ...typography.caption,
+    color: '#666666',
+    marginTop: spacing.lg,
+    textAlign: 'center',
+  },
+  legalLink: {
+    ...typography.caption,
+    color: '#222222',
+    textDecorationLine: 'underline',
   },
   input: {
     ...typography.body,

@@ -9,6 +9,7 @@ import { unconfiguredAttestationProvider } from './modules/attestation/attestati
 import { createSupabaseAttestationStore } from './modules/attestation/attestation-store';
 import { createFriendsRouter } from './modules/friends/friends.router';
 import { createSupabaseFriendsStore } from './modules/friends/friends-store';
+import { createLegalRouter } from './modules/legal/legal.router';
 import { createSessionsRouter } from './modules/sessions/sessions.router';
 import { createSupabaseSessionsStore } from './modules/sessions/sessions-store';
 import { createUsersRouter } from './modules/users/users.router';
@@ -88,6 +89,8 @@ export function createApp(env: Env): Express {
       requireAuth,
     }),
   );
+
+  app.use('/legal', createLegalRouter());
 
   // Must be registered last — Express identifies error-handling middleware
   // by its 4-argument arity, and only middleware registered after a route

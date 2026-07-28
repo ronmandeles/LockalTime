@@ -272,6 +272,12 @@ export const he: TranslationSchema = {
       body: 'האימייל הזה כבר רשום עם אמצעי התחברות אחר. התחברו עם האימייל כדי לשמור על חשבון אחד.',
       useEmail: 'התחברות עם אימייל',
     },
+    legalDisclosure: {
+      prefix: 'בהמשך השימוש, אתם מסכימים ל',
+      termsOfService: 'תנאי השימוש',
+      and: 'ול',
+      privacyPolicy: 'מדיניות הפרטיות',
+    },
   },
   venueManagement: {
     title: 'מקומות העסק שלכם',

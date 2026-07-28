@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Linking, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
@@ -246,6 +246,26 @@ describe('email entry state', () => {
 
     expect(mockRequestEmailOtp).not.toHaveBeenCalled();
     expect(screen.queryByTestId('auth-code-input')).toBeNull();
+  });
+
+  // Phase 7 (Release Prep): a passive disclosure (not a blocking checkbox
+  // — see legalDisclosure's locale comment for why), shown once on this
+  // first-seen step.
+  it('renders the ToS/Privacy disclosure and opens each link via Linking', async () => {
+    jest.spyOn(Linking, 'openURL').mockResolvedValue(true);
+    await renderAuthIn('en');
+
+    expect(screen.getByTestId('auth-legal-disclosure')).toBeOnTheScreen();
+    expect(screen.getByText(en.auth.legalDisclosure.termsOfService)).toBeOnTheScreen();
+    expect(screen.getByText(en.auth.legalDisclosure.privacyPolicy)).toBeOnTheScreen();
+
+    await fireEvent.press(screen.getByTestId('auth-terms-link'));
+    expect(Linking.openURL).toHaveBeenCalledWith(expect.stringContaining('/legal/terms'));
+
+    await fireEvent.press(screen.getByTestId('auth-privacy-link'));
+    expect(Linking.openURL).toHaveBeenCalledWith(expect.stringContaining('/legal/privacy'));
+
+    jest.restoreAllMocks();
   });
 });
 
