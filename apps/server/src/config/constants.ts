@@ -77,3 +77,15 @@ export const STREAK_GRACE_HOURS = 48;
 // here only means a broken streak is detected slightly later, not any
 // correctness issue, so it runs far less often.
 export const STREAK_EXPIRY_INTERVAL_SECONDS = 300;
+
+// Phase 5.5 (Push Notification Infrastructure, docs/RETENTION_STRATEGY.md
+// §5) — owner decision: the streak-risk push fires once
+// streak_grace_expires_at is within this many hours (~12.5% of
+// STREAK_GRACE_HOURS — late enough that most people who were going to have
+// a session today already did, early enough to still act on it). Consumed
+// by claim_streak_risk_notifications() via streak-risk-notifier.ts.
+export const STREAK_RISK_NOTIFICATION_WINDOW_HOURS = 6;
+// Dispatch cadence — same reasoning as STREAK_EXPIRY_INTERVAL_SECONDS: no
+// debounce-window concern (the claim function itself is what prevents a
+// double-send), just "don't hammer the DB".
+export const STREAK_RISK_NOTIFICATION_INTERVAL_SECONDS = 300;
