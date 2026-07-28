@@ -32,7 +32,23 @@ raise "LockalTime group not found" if lockaltime_group.nil?
 # ---------------------------------------------------------------------
 # 1. Blocking/ Swift + Obj-C files -> LockalTime target
 # ---------------------------------------------------------------------
-blocking_group = lockaltime_group['Blocking'] || lockaltime_group.new_group('Blocking', 'Blocking')
+# Phase 7 debugging note: this used to be
+# `lockaltime_group['Blocking'] || lockaltime_group.new_group('Blocking', 'Blocking')`
+# (a group nested under lockaltime_group, with a path relative to it). Real
+# xcodebuild CI caught it: "Build input files cannot be found:
+# .../ios/Blocking/AppBlockerModule.swift" etc. (missing the LockalTime/
+# path segment) -- the build got far enough to actually check these Sources
+# once the other path-resolution bugs this file documents were fixed one at
+# a time, revealing this group had the exact same problem all along.
+# lockaltime_group (project.main_group['LockalTime']) apparently does not
+# reliably contribute its own path when a *new* child group's path is
+# composed relative to it -- whatever this project's original scaffolding
+# set for its `path` attribute, new_group-relative-to-it doesn't resolve the
+# way a plain nested folder would. Anchoring directly at project.main_group
+# with an explicit full path (the same pattern that already worked for
+# LockalTimeBlockerExtension's own group below) sidesteps the issue instead
+# of depending on a group whose path behavior isn't fully understood.
+blocking_group = project.main_group['Blocking'] || project.main_group.new_group('Blocking', 'LockalTime/Blocking')
 
 blocking_files = Dir.glob('LockalTime/Blocking/*.{swift,m}').sort
 shared_app_group_ref = nil
