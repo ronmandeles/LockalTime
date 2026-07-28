@@ -201,7 +201,7 @@ Task order (grouped by track; a track's tasks are prerequisites for later tracks
 - [ ] Play Integrity service account + App Attest DeviceCheck key: obtain, then wire real adapters (replacing `unconfiguredAttestationProvider`), review `verdictToTrustTier()`'s denylist against real verdict data, and flip `ATTESTATION_ENFORCEMENT_ENABLED=true`
 
 **Quality gates**
-- [ ] Detox/Maestro E2E suite across golden paths (create → join → complete; create → emergency exit), run in CI against the new staging deployment (carried over from the original draft)
+- [x] Detox/Maestro E2E suite across golden paths (create → join → complete; create → emergency exit), run in CI against the new staging deployment (carried over from the original draft) — `apps/mobile/e2e/` (6 Maestro flows + `run.sh` + a Mailpit-OTP-reading helper); join uses a same-device two-account stand-in via "enter code manually" (real cross-device QR scanning stays manual QA). **Written, not executed** — this machine has no Android emulator/iOS Simulator/Maestro CLI (see `e2e/README.md`); running these against a real device/CI runner is the next step, not done here
 - [ ] Load-test the Realtime channel — proposed default target: 500 concurrent connections (modeling a launch-day mix of ~10 simultaneous venue-scale `static_qr` sessions near their 200-participant `VENUE_SESSION_MAX_PARTICIPANTS` cap); confirm/adjust the number before running
 - [ ] TestFlight + Play internal testing track: real beta users on real devices, closing the manual-QA gap hardware constraints have left open across the whole project
 

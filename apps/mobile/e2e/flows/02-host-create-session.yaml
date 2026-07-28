@@ -1,0 +1,49 @@
+appId: com.lockaltime.app
+---
+# Golden path 1/2, flow 2 of 4: verify the OTP just requested (01), create a
+# 1-minute fixed dynamic_qr session (short duration so the "...complete"
+# part of this golden path is reachable in real time, not a long wait),
+# copy the QR token to the OS clipboard so 04 (a different test account, run
+# after this one signs out) can paste it into "enter code manually" — see
+# e2e/README.md for why this stays a same-device stand-in for a real
+# two-device join. Waits out the full minute for the host's OWN completion
+# (not an emergency exit — nothing here is being tested early), then signs
+# out so the device is free for the participant account in 03/04.
+- tapOn:
+    id: 'auth-code-input'
+- inputText: '${OTP_CODE}'
+- tapOn:
+    id: 'auth-code-verify-cta'
+- assertVisible:
+    id: 'home-screen'
+- tapOn:
+    id: 'home-create-session-cta'
+- assertVisible:
+    id: 'create-session-screen'
+- tapOn:
+    id: 'create-session-type-dynamic_qr'
+- tapOn:
+    id: 'create-session-minutes-input'
+- inputText: '1'
+- tapOn:
+    id: 'create-session-submit'
+- assertVisible:
+    id: 'active-session-screen'
+- copyTextFrom:
+    id: 'active-session-qr-value'
+- extendedWaitUntil:
+    visible:
+      id: 'session-completion-screen'
+    timeout: 90000
+- tapOn:
+    id: 'session-completion-done'
+- assertVisible:
+    id: 'home-screen'
+- tapOn:
+    id: 'home-settings-cta'
+- assertVisible:
+    id: 'settings-screen'
+- tapOn:
+    id: 'settings-sign-out'
+- assertVisible:
+    id: 'auth-screen'

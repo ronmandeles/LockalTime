@@ -191,7 +191,9 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
       {route.params.qrToken !== undefined && (
         <View style={styles.qrCard}>
           <Text style={styles.qrLabel}>{t('activeSession.qrLabel')}</Text>
-          <Text style={styles.qrValue}>{route.params.qrToken}</Text>
+          <Text style={styles.qrValue} testID="active-session-qr-value">
+            {route.params.qrToken}
+          </Text>
         </View>
       )}
 
