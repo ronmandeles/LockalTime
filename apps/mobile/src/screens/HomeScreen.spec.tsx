@@ -1,24 +1,23 @@
 import React from 'react';
 
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
-import { I18nProvider } from '../i18n/I18nProvider';
-import { initI18n } from '../i18n/init-i18n';
-import { en } from '../i18n/locales/en';
-import { he } from '../i18n/locales/he';
-import HomeScreen from './HomeScreen';
+const mockFetchUserStats = jest.fn();
+const mockFetchUserStreak = jest.fn();
+const mockFetchMilestoneProgress = jest.fn();
+jest.mock('../services/stats-repository', () => ({
+  fetchMilestoneProgress: (...args: unknown[]) => mockFetchMilestoneProgress(...args),
+  fetchUserStats: (...args: unknown[]) => mockFetchUserStats(...args),
+  fetchUserStreak: (...args: unknown[]) => mockFetchUserStreak(...args),
+}));
 
-// Phase 1 i18n foundation: the Home placeholder migrates onto the i18n layer.
-// Rendering under the he locale and finding the Hebrew string is the
-// strongest "no hardcoded UI strings" assertion available at test level — a
-// literal in the component cannot change language. Assertions reference the
-// locale modules, never re-typed literals, so copy edits don't break specs.
-// react-native-localize is mocked virtually (not installed until Stage B);
-// no test reads the machine's real locale.
-//
-// Phase 2 task 2.7: DESIGN_GUIDELINES §1's reference model — two entry
-// points (create/join), no session-lookup on mount (see HomeScreen.tsx's
-// header comment for why).
+// Mocked directly, same seam pattern as SessionCompletionScreen.spec.tsx —
+// sidesteps a real store's state racing a still-settling fetch effect from
+// the previous test.
+const mockUseAuthStore = jest.fn();
+jest.mock('../state/auth-store', () => ({
+  useAuthStore: (selector: (state: unknown) => unknown) => mockUseAuthStore(selector),
+}));
 
 interface DeviceLocaleStub {
   readonly countryCode: string;
@@ -44,6 +43,37 @@ jest.mock(
   { virtual: true },
 );
 
+import { I18nProvider } from '../i18n/I18nProvider';
+import { initI18n } from '../i18n/init-i18n';
+import { en } from '../i18n/locales/en';
+import { he } from '../i18n/locales/he';
+import HomeScreen from './HomeScreen';
+
+// Phase 1 i18n foundation: the Home placeholder migrates onto the i18n layer.
+// Rendering under the he locale and finding the Hebrew string is the
+// strongest "no hardcoded UI strings" assertion available at test level — a
+// literal in the component cannot change language. Assertions reference the
+// locale modules, never re-typed literals, so copy edits don't break specs.
+//
+// Phase 5 adds a gamification summary card (streak/points/milestone
+// progress) above the original two CTAs (ARCHITECTURE.md §9: quiet, no
+// prize-dangling framing) — this screen now fetches on mount for the first
+// time, but deliberately does not gate the CTAs behind that fetch (see
+// HomeScreen.tsx's header comment).
+
+const AUTHENTICATED_USER_ID = 'user-1';
+const AUTHENTICATED_STATE = {
+  auth: {
+    status: 'authenticated' as const,
+    session: {
+      accessToken: 'token',
+      refreshToken: 'refresh',
+      user: { id: AUTHENTICATED_USER_ID, email: 'a@b.com' },
+    },
+  },
+};
+const UNAUTHENTICATED_STATE = { auth: { status: 'unauthenticated' as const } };
+
 const mockNavigate = jest.fn();
 const navigationStub = { navigate: mockNavigate } as unknown as Parameters<typeof HomeScreen>[0]['navigation'];
 const routeStub = { key: 'Home', name: 'Home' as const, params: undefined };
@@ -65,6 +95,13 @@ describe('HomeScreen', () => {
     mockGetLocales.mockReset();
     mockGetLocales.mockReturnValue([EN_US]);
     mockNavigate.mockClear();
+    mockUseAuthStore.mockReset().mockImplementation((selector) => selector(AUTHENTICATED_STATE));
+    mockFetchUserStats.mockReset().mockResolvedValue({ ok: true, value: null });
+    mockFetchUserStreak.mockReset().mockResolvedValue({ ok: true, value: null });
+    mockFetchMilestoneProgress.mockReset().mockResolvedValue({
+      ok: true,
+      value: { milestones: [], achievedMilestoneIds: new Set() },
+    });
   });
 
   it('renders its title from the en bundle when the locale is en', async () => {
@@ -98,5 +135,143 @@ describe('HomeScreen', () => {
     fireEvent.press(screen.getByTestId('home-scan-qr-cta'));
 
     expect(mockNavigate).toHaveBeenCalledWith('ScanSession');
+  });
+
+  it('navigates to History when the history link is pressed', async () => {
+    await renderHomeScreenIn('en');
+
+    fireEvent.press(screen.getByTestId('home-history-cta'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('History');
+  });
+
+  it('navigates to Stats when the stats link is pressed', async () => {
+    await renderHomeScreenIn('en');
+
+    fireEvent.press(screen.getByTestId('home-stats-cta'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('Stats');
+  });
+
+  it('renders real zeros for a brand-new user before the fetch resolves, never blocking the CTAs', async () => {
+    let resolveStats: (value: unknown) => void = () => undefined;
+    mockFetchUserStats.mockReturnValue(new Promise((resolve) => (resolveStats = resolve)));
+
+    await renderHomeScreenIn('en');
+
+    expect(screen.getByTestId('home-total-points')).toHaveTextContent('0');
+    expect(screen.getByTestId('home-create-session-cta')).toBeOnTheScreen();
+
+    resolveStats({ ok: true, value: { total_points: 90 } });
+    await waitFor(() => expect(screen.getByTestId('home-total-points')).toHaveTextContent('90'));
+  });
+
+  it('shows total points once fetched', async () => {
+    mockFetchUserStats.mockResolvedValue({
+      ok: true,
+      value: {
+        total_minutes: 90,
+        total_points: 90,
+        sessions_completed: 3,
+        sessions_emergency_exit: 0,
+        sessions_disconnected: 0,
+      },
+    });
+
+    await renderHomeScreenIn('en');
+
+    await waitFor(() => expect(screen.getByTestId('home-total-points')).toHaveTextContent('90'));
+  });
+
+  it('shows the streak count when the user has an active streak', async () => {
+    mockFetchUserStreak.mockResolvedValue({
+      ok: true,
+      value: { current_streak: 4, longest_streak: 9, streak_grace_expires_at: null },
+    });
+
+    await renderHomeScreenIn('en');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('home-streak')).toHaveTextContent(
+        en.home.summary.streakCount.replace('{{count}}', '4'),
+      ),
+    );
+  });
+
+  it('shows the no-streak-yet copy when current_streak is 0', async () => {
+    mockFetchUserStreak.mockResolvedValue({
+      ok: true,
+      value: { current_streak: 0, longest_streak: 0, streak_grace_expires_at: null },
+    });
+
+    await renderHomeScreenIn('en');
+
+    await waitFor(() =>
+      expect(screen.getByText(en.home.summary.streakNone)).toBeOnTheScreen(),
+    );
+  });
+
+  it('shows a milestone progress bar naming the next uncrossed milestone', async () => {
+    mockFetchUserStats.mockResolvedValue({
+      ok: true,
+      value: {
+        total_minutes: 20,
+        total_points: 20,
+        sessions_completed: 2,
+        sessions_emergency_exit: 0,
+        sessions_disconnected: 0,
+      },
+    });
+    mockFetchMilestoneProgress.mockResolvedValue({
+      ok: true,
+      value: {
+        milestones: [
+          { id: 'm1', slug: 'sessions_5', sessions_required: 5, bonus_points: 50 },
+          { id: 'm2', slug: 'sessions_10', sessions_required: 10, bonus_points: 100 },
+        ],
+        achievedMilestoneIds: new Set(),
+      },
+    });
+
+    await renderHomeScreenIn('en');
+
+    await waitFor(() =>
+      expect(screen.getByTestId('home-milestone-progress')).toHaveTextContent(
+        `3 more sessions to ${en.milestones.sessions_5}`,
+      ),
+    );
+  });
+
+  it('shows an all-milestones-reached message once every milestone is crossed', async () => {
+    mockFetchMilestoneProgress.mockResolvedValue({
+      ok: true,
+      value: {
+        milestones: [{ id: 'm1', slug: 'sessions_5', sessions_required: 5, bonus_points: 50 }],
+        achievedMilestoneIds: new Set(['m1']),
+      },
+    });
+
+    await renderHomeScreenIn('en');
+
+    await waitFor(() =>
+      expect(screen.getByText(en.home.summary.allMilestonesReached)).toBeOnTheScreen(),
+    );
+  });
+
+  it('fetches nothing and shows zeros when unauthenticated', async () => {
+    mockUseAuthStore.mockImplementation((selector) => selector(UNAUTHENTICATED_STATE));
+
+    await renderHomeScreenIn('en');
+
+    expect(mockFetchUserStats).not.toHaveBeenCalled();
+    expect(screen.getByTestId('home-total-points')).toHaveTextContent('0');
+  });
+
+  it('shows zeros, not an error, when the stats fetch fails', async () => {
+    mockFetchUserStats.mockResolvedValue({ ok: false, error: { message: 'network error' } });
+
+    await renderHomeScreenIn('en');
+
+    await waitFor(() => expect(screen.getByTestId('home-total-points')).toHaveTextContent('0'));
   });
 });

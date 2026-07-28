@@ -204,6 +204,20 @@ jest.mock('./services/session-repository', () => ({
   fetchRewardsHistory: (...args: unknown[]) => mockFetchRewardsHistory(...args),
 }));
 
+// Phase 5: HomeScreen (the initial route this whole suite lands on) now
+// fetches its gamification summary on mount. Mocked the same way as
+// session-repository above — this suite only needs App's gate wiring
+// proven, not these functions' own contracts (stats-repository.test.ts
+// owns those).
+const mockFetchUserStats = jest.fn();
+const mockFetchUserStreak = jest.fn();
+const mockFetchMilestoneProgress = jest.fn();
+jest.mock('./services/stats-repository', () => ({
+  fetchUserStats: (...args: unknown[]) => mockFetchUserStats(...args),
+  fetchUserStreak: (...args: unknown[]) => mockFetchUserStreak(...args),
+  fetchMilestoneProgress: (...args: unknown[]) => mockFetchMilestoneProgress(...args),
+}));
+
 interface PermissionStatusStub {
   readonly status: 'granted' | 'denied' | 'undetermined';
 }
@@ -249,6 +263,11 @@ describe('App', () => {
     mockFetchSession.mockReset();
     mockFetchSessionParticipant.mockReset().mockResolvedValue({ ok: true, value: null });
     mockFetchRewardsHistory.mockReset().mockResolvedValue({ ok: true, value: [] });
+    mockFetchUserStats.mockReset().mockResolvedValue({ ok: true, value: null });
+    mockFetchUserStreak.mockReset().mockResolvedValue({ ok: true, value: null });
+    mockFetchMilestoneProgress
+      .mockReset()
+      .mockResolvedValue({ ok: true, value: { milestones: [], achievedMilestoneIds: new Set() } });
     // The real store is a module singleton — without resetting it, one
     // test's resolved Welcome Back outcome (a real button press updating
     // real state) would leak into the next test's fresh App render.

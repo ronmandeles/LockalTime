@@ -22,4 +22,12 @@ export type RootStackParamList = {
   // successful Emergency Exit; the exit_reason on the fetched row is what
   // tells the two apart, not a route param.
   SessionCompletion: { readonly sessionId: string };
+  // Screen 11 (Phase 5 task 8) — the Solo/Group/All filter is local screen
+  // state, not a route param (matching every other screen's own UI-state
+  // convention in this codebase), so no params are needed here.
+  History: undefined;
+  // Screen 12 (Phase 5 task 9) — lifetime aggregates, streak, 7-day chart,
+  // achieved milestones. No params: it reads entirely off the
+  // authenticated user, same as History.
+  Stats: undefined;
 };
