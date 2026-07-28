@@ -202,6 +202,32 @@ export interface SessionsStore {
     newHostId: string,
     migratedAt: string,
   ): Promise<void>;
+
+  // --- Phase 5: gamification & stats ---
+  // Delegates to the apply_session_stats() DB function — accumulates one
+  // finalized session_participants row into user_stats/user_stats_daily/
+  // user_streaks/user_milestones (+ a rewards_history row for any milestone
+  // crossed). See that migration's header for why this can't be a Node-side
+  // read-modify-write: it's called from two independent finalization paths
+  // (end-session.ts, finalize-emergency-exit.ts) that can race each other
+  // and the sweep worker for the same user across different sessions.
+  // Exactly-once per (sessionId, userId) — a second call is a silent no-op,
+  // never an error, so callers don't need to track whether they already
+  // applied a given row.
+  applySessionStats(
+    sessionId: string,
+    userId: string,
+    finalizedAt: string,
+    streakGraceHours: number,
+  ): Promise<void>;
+  // Zeroes current_streak for every user_streaks row whose grace window has
+  // already passed as of `asOf` — the passage-of-time half of streak
+  // bookkeeping that apply_session_stats() (an event-driven function) can
+  // never do on its own. A plain scoped UPDATE, not a SECURITY DEFINER
+  // function: there's nothing atomicity-sensitive about zeroing an
+  // already-expired streak (unlike apply_session_stats()'s cross-table
+  // read-decide-write), so the extra machinery isn't warranted.
+  expireStreaks(asOf: string): Promise<void>;
 }
 
 interface SessionRow {
@@ -518,6 +544,31 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
       .insert({ session_id: sessionId, user_id: newHostId, reason: 'migration' });
     if (assignError !== null) {
       throw new ApiError(500, 'host_migration_failed', assignError.message);
+    }
+  },
+
+  async applySessionStats(sessionId, userId, finalizedAt, streakGraceHours) {
+    const { error } = await client.rpc('apply_session_stats', {
+      p_session_id: sessionId,
+      p_user_id: userId,
+      p_finalized_at: finalizedAt,
+      p_streak_grace_hours: streakGraceHours,
+    });
+
+    if (error !== null) {
+      throw new ApiError(500, 'stats_apply_failed', error.message);
+    }
+  },
+
+  async expireStreaks(asOf) {
+    const { error } = await client
+      .from('user_streaks')
+      .update({ current_streak: 0 })
+      .lt('streak_grace_expires_at', asOf)
+      .gt('current_streak', 0);
+
+    if (error !== null) {
+      throw new ApiError(500, 'streak_expiry_failed', error.message);
     }
   },
 });

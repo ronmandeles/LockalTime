@@ -17,10 +17,12 @@ const buildFakeStore = (
 ): SessionsStore & {
   writtenParticipants: readonly FinalizedParticipantInput[] | null;
   writtenRewards: readonly RewardsHistoryRowInput[] | null;
+  appliedStats: { sessionId: string; userId: string; finalizedAt: string }[];
 } => {
   const store = {
     writtenParticipants: null as readonly FinalizedParticipantInput[] | null,
     writtenRewards: null as readonly RewardsHistoryRowInput[] | null,
+    appliedStats: [] as { sessionId: string; userId: string; finalizedAt: string }[],
     async insertSession(): Promise<never> {
       throw new Error('not used in these tests');
     },
@@ -64,6 +66,12 @@ const buildFakeStore = (
       throw new Error('not used in these tests');
     },
     async migrateHost(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async applySessionStats(sessionId: string, userId: string, finalizedAt: string) {
+      store.appliedStats.push({ sessionId, userId, finalizedAt });
+    },
+    async expireStreaks(): Promise<never> {
       throw new Error('not used in these tests');
     },
   };
@@ -136,6 +144,27 @@ describe('finalizeEmergencyExit', () => {
 
     expect(store.writtenRewards).toEqual([
       { userId: USER_ID, sessionId: SESSION_ID, points: 23, bonusType: 'base' },
+    ]);
+  });
+
+  it('applies gamification stats immediately, using the injected clock', async () => {
+    const store = buildFakeStore(session, [
+      interval('2026-01-01T10:00:00.000Z', '2026-01-01T10:23:00.000Z'),
+    ]);
+
+    await finalizeEmergencyExit(
+      store,
+      SESSION_ID,
+      USER_ID,
+      () => new Date('2026-01-01T10:23:00.000Z'),
+    );
+
+    expect(store.appliedStats).toEqual([
+      {
+        sessionId: SESSION_ID,
+        userId: USER_ID,
+        finalizedAt: '2026-01-01T10:23:00.000Z',
+      },
     ]);
   });
 });

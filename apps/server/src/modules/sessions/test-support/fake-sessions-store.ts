@@ -45,12 +45,36 @@ export interface FakeHostAssignment {
   unassignedAt: string | null;
 }
 
+// Phase 5: a minimal in-memory model of apply_session_stats()'s targets —
+// deliberately NOT a reimplementation of that function's streak/milestone
+// logic (that's proven by pgTAP against the real Postgres function, see
+// supabase/tests/apply_session_stats_test.sql). This fake only needs to
+// (a) accumulate totals so a test could assert on them and (b) enforce the
+// same exactly-once idempotency real callers depend on, since sweep.test.ts
+// exercises auto-close paths that call through to endSession(), which now
+// calls this for every newly-finalized participant.
+export interface FakeUserStats {
+  userId: string;
+  totalMinutes: number;
+  totalPoints: number;
+}
+
+export interface FakeStreak {
+  userId: string;
+  currentStreak: number;
+  longestStreak: number;
+  streakGraceExpiresAt: string | null;
+}
+
 export interface FakeStoreState {
   readonly sessions: FakeSession[];
   readonly intervals: FakeInterval[];
   readonly hostAssignments: FakeHostAssignment[];
   readonly participants: (FinalizedParticipantInput & { sessionId: string })[];
   readonly rewards: RewardsHistoryRowInput[];
+  readonly userStats: FakeUserStats[];
+  readonly appliedStats: Set<string>; // `${sessionId}:${userId}`
+  readonly streaks: FakeStreak[];
 }
 
 export const buildFakeSessionsStore = (
@@ -62,6 +86,9 @@ export const buildFakeSessionsStore = (
     hostAssignments: initial.hostAssignments ?? [],
     participants: initial.participants ?? [],
     rewards: initial.rewards ?? [],
+    userStats: initial.userStats ?? [],
+    appliedStats: initial.appliedStats ?? new Set(),
+    streaks: initial.streaks ?? [],
   };
 
   return {
@@ -181,6 +208,43 @@ export const buildFakeSessionsStore = (
         reason: 'migration',
         unassignedAt: null,
       });
+    },
+    async applySessionStats(sessionId, userId) {
+      const key = `${sessionId}:${userId}`;
+      if (state.appliedStats.has(key)) {
+        return;
+      }
+      state.appliedStats.add(key);
+
+      const participant = state.participants.find(
+        (row) => row.sessionId === sessionId && row.userId === userId,
+      );
+      if (participant === undefined) {
+        return;
+      }
+      const existing = state.userStats.find((row) => row.userId === userId);
+      if (existing === undefined) {
+        state.userStats.push({
+          userId,
+          totalMinutes: participant.totalMinutesPresent,
+          totalPoints: participant.pointsEarned,
+        });
+      } else {
+        existing.totalMinutes += participant.totalMinutesPresent;
+        existing.totalPoints += participant.pointsEarned;
+      }
+    },
+    async expireStreaks(asOf) {
+      const asOfMs = new Date(asOf).getTime();
+      for (const streak of state.streaks) {
+        if (
+          streak.currentStreak > 0 &&
+          streak.streakGraceExpiresAt !== null &&
+          new Date(streak.streakGraceExpiresAt).getTime() < asOfMs
+        ) {
+          streak.currentStreak = 0;
+        }
+      }
     },
   };
 };

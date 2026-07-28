@@ -35,6 +35,8 @@ const buildFakeStore = (
     markSessionEnded: jest.fn(),
     listActiveSessions: jest.fn(),
     migrateHost: jest.fn(),
+    applySessionStats: jest.fn(),
+    expireStreaks: jest.fn(),
   };
   return store;
 };

@@ -38,3 +38,16 @@ export const OPEN_ENDED_SESSION_MAX_HOURS = 24;
 // an in-process poller (Phase 4 decision: no separate deployment/scheduling
 // infra exists yet), not a distributed job queue.
 export const SESSION_SWEEP_INTERVAL_SECONDS = 10;
+
+// Gamification & stats (ARCHITECTURE.md §9, docs/RETENTION_STRATEGY.md §1,
+// Phase 5) — consumed by end-session.ts / finalize-emergency-exit.ts when
+// calling apply_session_stats(), and by the streak-expiry job below.
+export const STREAK_GRACE_HOURS = 48;
+// Streak-expiry job (streak-expiry.ts) cadence — nothing at session-close
+// time can BREAK a streak (a break is caused by the passage of time, not
+// an event), so this poller is what actually zeroes current_streak once
+// streak_grace_expires_at passes. No debounce-window concern the way
+// SESSION_SWEEP_INTERVAL_SECONDS has (host migration) -- a slower cadence
+// here only means a broken streak is detected slightly later, not any
+// correctness issue, so it runs far less often.
+export const STREAK_EXPIRY_INTERVAL_SECONDS = 300;
