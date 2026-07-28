@@ -125,6 +125,38 @@ describe('useSession', () => {
     expect(result.current.session).toEqual({ ...SESSION_ROW, status: 'active' });
   });
 
+  it('a realtime disconnect drives the machine to participant_reconnecting, and reconnecting drives it back to active', async () => {
+    const { result } = await renderHook(() => useSession(SESSION_ID));
+    await waitFor(() => expect(result.current.status).toBe('active'));
+
+    const handlers = mockSubscribeToSessionChannel.mock.calls[0]?.[1] as {
+      onConnectionStateChange: (state: 'connected' | 'disconnected') => void;
+    };
+    await act(async () => {
+      handlers.onConnectionStateChange('disconnected');
+    });
+    await waitFor(() => expect(result.current.status).toBe('participant_reconnecting'));
+
+    await act(async () => {
+      handlers.onConnectionStateChange('connected');
+    });
+    await waitFor(() => expect(result.current.status).toBe('active'));
+  });
+
+  it('the initial subscribe-time "connected" report is a safe no-op from active (already there)', async () => {
+    const { result } = await renderHook(() => useSession(SESSION_ID));
+    await waitFor(() => expect(result.current.status).toBe('active'));
+
+    const handlers = mockSubscribeToSessionChannel.mock.calls[0]?.[1] as {
+      onConnectionStateChange: (state: 'connected' | 'disconnected') => void;
+    };
+    await act(async () => {
+      handlers.onConnectionStateChange('connected');
+    });
+
+    expect(result.current.status).toBe('active');
+  });
+
   it('unsubscribes the channel on unmount — no listener leaks', async () => {
     const { unmount } = await renderHook(() => useSession(SESSION_ID));
     await waitFor(() => expect(mockSubscribeToSessionChannel).toHaveBeenCalled());
@@ -135,14 +167,13 @@ describe('useSession', () => {
   });
 
   // Phase 3 task 3.1: reportOfflineTimeout is the seam useAppBlocker forwards
-  // the native-enforced 30-min offline cutoff through (ARCHITECTURE.md §4;
-  // the cutoff-detection timer itself is Phase 4 backlog work — this task
-  // only wires the plumbing that will consume it). useSession stays "the
-  // only driver" of the machine: this exposes a send, not the actor itself.
-  // CONNECTION_LOST isn't wired yet (a separate, not-yet-scheduled task), so
-  // participant_reconnecting is unreachable through this hook today — this
-  // asserts the currently-reachable case: 'active' has no OFFLINE_TIMEOUT
-  // handler, so the call is a documented no-op, not a crash.
+  // the native-enforced 30-min offline cutoff through (ARCHITECTURE.md §4).
+  // useSession stays "the only driver" of the machine: this exposes a send,
+  // not the actor itself. This asserts the case reachable directly from
+  // 'active' (no OFFLINE_TIMEOUT handler there — see the machine's own
+  // table-driven tests for the full path via participant_reconnecting,
+  // reachable since Phase 4 task 11 wired CONNECTION_LOST above), so the
+  // call here is a documented no-op, not a crash.
   it('reportOfflineTimeout is a safe no-op from a state with no handler for it', async () => {
     const { result } = await renderHook(() => useSession(SESSION_ID));
     await waitFor(() => expect(result.current.status).toBe('active'));

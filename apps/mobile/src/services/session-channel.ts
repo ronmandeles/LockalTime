@@ -24,6 +24,14 @@ export interface SessionChannelHandlers {
   readonly onBroadcast?: (event: SessionBroadcastEvent, payload: unknown) => void;
   readonly onSessionRowChange?: (payload: unknown) => void;
   readonly onPresenceIntervalChange?: (payload: unknown) => void;
+  // Realtime socket health — 'connected' on every successful (re)subscribe,
+  // 'disconnected' on error/timeout/close. Drives the session-lifecycle
+  // machine's CONNECTION_LOST/RECONNECTED events (ARCHITECTURE.md §6). This
+  // is client-observed socket health, a different concern from the native
+  // layer's own 30-minute offline-cutoff enforcement (§4) — that one keeps
+  // running even while JS/React Native is suspended by the OS, this one
+  // doesn't.
+  readonly onConnectionStateChange?: (state: 'connected' | 'disconnected') => void;
 }
 
 export interface TrackPresenceInput {
@@ -74,7 +82,13 @@ export const subscribeToSessionChannel = (
     },
   );
 
-  channel.subscribe();
+  channel.subscribe((status: string) => {
+    if (status === 'SUBSCRIBED') {
+      handlers.onConnectionStateChange?.('connected');
+    } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+      handlers.onConnectionStateChange?.('disconnected');
+    }
+  });
 
   return {
     trackPresence: async ({ userId, isHost }) => {

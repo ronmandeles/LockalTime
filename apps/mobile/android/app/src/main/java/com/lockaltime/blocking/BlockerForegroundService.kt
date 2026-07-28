@@ -12,6 +12,8 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ApplicationInfo
 import android.graphics.PixelFormat
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.BatteryManager
 import android.os.Build
 import android.os.Handler
@@ -50,6 +52,14 @@ class BlockerForegroundService : Service() {
     private const val NOTIFICATION_CHANNEL_ID = "lockal_time_session"
     private const val NOTIFICATION_ID = 1001
     private const val POLL_INTERVAL_MS = 2000L
+
+    // ARCHITECTURE.md §4 "Offline mode": the 30-minute offline enforcement
+    // window is owned by this native layer, not JS, since React Native can
+    // be suspended by the OS while this foreground service keeps polling.
+    // Checked every poll cycle against ConnectivityManager rather than via
+    // a registered NetworkCallback — simpler, and precise enough at a 2s
+    // poll interval for a 30-minute threshold.
+    private const val OFFLINE_CUTOFF_MS = 30 * 60 * 1000L
     private const val EXTRA_SESSION_ID = "sessionId"
     private const val EXTRA_ENDS_AT = "endsAt"
     private const val EXTRA_BLOCKED_CATEGORIES = "blockedCategories"
@@ -93,6 +103,11 @@ class BlockerForegroundService : Service() {
   private var blockedAndroidCategories: Set<Int> = emptySet()
   private var overlayView: View? = null
   private var batteryReceiver: BroadcastReceiver? = null
+
+  // Assumes connected at service start — a device that's already offline
+  // when a session starts gets the same 30-minute grace as one that drops
+  // mid-session, rather than an instant cutoff.
+  private var lastConnectedAtMillis: Long = System.currentTimeMillis()
 
   private val pollRunnable: Runnable =
     object : Runnable {
@@ -179,6 +194,27 @@ class BlockerForegroundService : Service() {
       return
     }
 
+    if (isCurrentlyConnected()) {
+      lastConnectedAtMillis = System.currentTimeMillis()
+    } else if (System.currentTimeMillis() - lastConnectedAtMillis >= OFFLINE_CUTOFF_MS) {
+      // Self-enforces the cutoff by lifting the block, per ARCHITECTURE.md
+      // §4 — JS only surfaces the resulting state when it wakes, it never
+      // decides this. Deliberately does NOT decide session end_reason or
+      // points (Money-Equivalent Logic Rule) — that's the server's job
+      // once connectivity resumes and the client reconciles.
+      AppBlockerModule.emitEvent(
+        "offline_cutoff_reached",
+        Arguments.createMap().apply {
+          putString("sessionId", sessionId)
+          putString("lastConnectedAt", Instant.ofEpochMilli(lastConnectedAtMillis).toString())
+        },
+      )
+      markDeliberateStop()
+      removeOverlay()
+      stopSelf()
+      return
+    }
+
     if (!PermissionChecks.hasUsageAccess(this)) {
       emitPermissionRevoked("usage_access")
       return
@@ -205,6 +241,15 @@ class BlockerForegroundService : Service() {
     } else {
       removeOverlay()
     }
+  }
+
+  private fun isCurrentlyConnected(): Boolean {
+    val manager =
+      runCatching { getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager }
+        .getOrNull() ?: return true // fail-open: never cut off blocking over an inability to check
+    val network = manager.activeNetwork ?: return false
+    val capabilities = manager.getNetworkCapabilities(network) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
   }
 
   private fun emitPermissionRevoked(permission: String) {

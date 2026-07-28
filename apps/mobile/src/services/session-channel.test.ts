@@ -120,4 +120,41 @@ describe('subscribeToSessionChannel', () => {
 
     expect(mockClient.removeChannel).toHaveBeenCalledWith(mockChannel);
   });
+
+  describe('onConnectionStateChange', () => {
+    it('reports connected once the channel subscribes successfully', () => {
+      const onConnectionStateChange = jest.fn();
+      subscribeToSessionChannel(SESSION_ID, { onConnectionStateChange });
+
+      const statusCallback = mockChannel.subscribe.mock.calls[0]?.[0];
+      statusCallback('SUBSCRIBED');
+
+      expect(onConnectionStateChange).toHaveBeenCalledWith('connected');
+    });
+
+    it.each(['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'])(
+      'reports disconnected on %s',
+      (status) => {
+        const onConnectionStateChange = jest.fn();
+        subscribeToSessionChannel(SESSION_ID, { onConnectionStateChange });
+
+        const statusCallback = mockChannel.subscribe.mock.calls[0]?.[0];
+        statusCallback(status);
+
+        expect(onConnectionStateChange).toHaveBeenCalledWith('disconnected');
+      },
+    );
+
+    it('reports connected again on a later resubscribe (auto-reconnect)', () => {
+      const onConnectionStateChange = jest.fn();
+      subscribeToSessionChannel(SESSION_ID, { onConnectionStateChange });
+
+      const statusCallback = mockChannel.subscribe.mock.calls[0]?.[0];
+      statusCallback('TIMED_OUT');
+      statusCallback('SUBSCRIBED');
+
+      expect(onConnectionStateChange).toHaveBeenNthCalledWith(1, 'disconnected');
+      expect(onConnectionStateChange).toHaveBeenNthCalledWith(2, 'connected');
+    });
+  });
 });

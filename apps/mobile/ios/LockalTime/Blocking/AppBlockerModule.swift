@@ -2,6 +2,7 @@ import DeviceActivity
 import FamilyControls
 import Foundation
 import ManagedSettings
+import Network
 
 // Phase 3 task 3.6 (backlog.md): the real iOS AppBlockerModule
 // (apps/mobile/src/services/app-blocker.ts's native seam). Applies the
@@ -31,6 +32,26 @@ class AppBlockerModule: RCTEventEmitter {
   // — mirrored here as the schedule length when no endsAt was given, since
   // DeviceActivitySchedule needs a concrete end.
   private static let openEndedCapSeconds: TimeInterval = 24 * 60 * 60
+
+  // ARCHITECTURE.md §4 "Offline mode": 30-minute offline enforcement
+  // window. IMPORTANT PLATFORM DIFFERENCE from Android (documented, not an
+  // oversight): Android's foreground service keeps polling while fully
+  // backgrounded, so its cutoff detection (BlockerForegroundService.kt) is
+  // reliable for the whole session. iOS has no equivalent always-on
+  // background primitive available here — DeviceActivityMonitorExtension's
+  // callbacks are schedule-start/end/threshold events, not a continuous
+  // polling hook, so they can't drive a live network check either. This
+  // NWPathMonitor-based timer only runs while this module's process is
+  // alive (foreground, or the brief window iOS grants a backgrounded app
+  // before suspension) — a genuine accepted limitation for now, the same
+  // category as §4's documented Android Safe Mode gap, not something to
+  // paper over. A more complete fix (e.g. a background network extension)
+  // is future work once real-device testing is possible.
+  private static let offlineCutoffSeconds: TimeInterval = 30 * 60
+  private let pathMonitor = NWPathMonitor()
+  private let pathMonitorQueue = DispatchQueue(label: "com.lockaltime.blocking.pathMonitor")
+  private var lastConnectedAt = Date()
+  private var offlineCheckTimer: Timer?
 
   override static func requiresMainQueueSetup() -> Bool {
     false
@@ -63,6 +84,7 @@ class AppBlockerModule: RCTEventEmitter {
     applyShield(selection: selection)
     SharedAppGroup.saveActiveSession(sessionId: sessionId, endsAt: endsAt)
     scheduleMonitoring(endsAt: endsAt)
+    startOfflineMonitoring(sessionId: sessionId)
     resolve(nil)
   }
 
@@ -71,7 +93,53 @@ class AppBlockerModule: RCTEventEmitter {
     clearShield()
     DeviceActivityCenter().stopMonitoring([Self.activityName])
     SharedAppGroup.clearActiveSession()
+    stopOfflineMonitoring()
     resolve(nil)
+  }
+
+  // See the offlineCutoffSeconds doc comment above for the platform
+  // difference from Android this accepts. Assumes connected at start — a
+  // device already offline when a session starts gets the same 30-minute
+  // grace as one that drops mid-session.
+  private func startOfflineMonitoring(sessionId: String) {
+    lastConnectedAt = Date()
+    pathMonitor.pathUpdateHandler = { [weak self] path in
+      if path.status == .satisfied {
+        self?.lastConnectedAt = Date()
+      }
+    }
+    pathMonitor.start(queue: pathMonitorQueue)
+
+    offlineCheckTimer?.invalidate()
+    let timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+      self?.checkOfflineCutoff(sessionId: sessionId)
+    }
+    RunLoop.main.add(timer, forMode: .common)
+    offlineCheckTimer = timer
+  }
+
+  private func stopOfflineMonitoring() {
+    pathMonitor.cancel()
+    offlineCheckTimer?.invalidate()
+    offlineCheckTimer = nil
+  }
+
+  private func checkOfflineCutoff(sessionId: String) {
+    guard Date().timeIntervalSince(lastConnectedAt) >= Self.offlineCutoffSeconds else { return }
+
+    // Self-enforces the cutoff by lifting the block, per ARCHITECTURE.md
+    // §4 — JS only surfaces the resulting state when it wakes, it never
+    // decides this. Deliberately does NOT decide session end_reason or
+    // points (Money-Equivalent Logic Rule) — that's the server's job once
+    // connectivity resumes and the client reconciles.
+    sendEvent(
+      withName: "offline_cutoff_reached",
+      body: ["sessionId": sessionId, "lastConnectedAt": ISO8601DateFormatter().string(from: lastConnectedAt)]
+    )
+    clearShield()
+    DeviceActivityCenter().stopMonitoring([Self.activityName])
+    SharedAppGroup.clearActiveSession()
+    stopOfflineMonitoring()
   }
 
   @objc(getStatus:rejecter:)

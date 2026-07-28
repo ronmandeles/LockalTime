@@ -111,6 +111,13 @@ export const useSession = (sessionId: string): UseSessionResult => {
           // transition of their own — the CDC handler above is what
           // actually updates openIntervals when a join/leave lands.
         },
+        // Client-observed realtime socket health (distinct from the
+        // native layer's own 30-min offline-cutoff enforcement, §4) —
+        // the machine itself decides which states these apply to
+        // (both are no-ops from most states), so no guard is needed here.
+        onConnectionStateChange: (state) => {
+          actor.send({ type: state === 'disconnected' ? 'CONNECTION_LOST' : 'RECONNECTED' });
+        },
       });
     };
 

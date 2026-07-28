@@ -2,6 +2,10 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Phase 4 task 11: BlockerForegroundService polls ConnectivityManager
+         each cycle to detect the 30-minute offline cutoff (ARCHITECTURE.md
+         §4). Normal-protection-level permission, no runtime prompt needed. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- react-native-vision-camera (Phase 3 task 3.5): real QR-code
          scanning on the Scan screen. Normal runtime permission, requested
          via useCameraPermission()'s requestPermission() — not a Settings
