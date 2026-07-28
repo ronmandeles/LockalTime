@@ -142,3 +142,16 @@ once the staging Supabase project and Railway account exist above.
 See the Credentials runbook for Apple Developer Program status and the
 Family Controls entitlement, and `.github/workflows/ci.yml`'s new
 `ios-build` job (macOS CI) for the compile step.
+
+## Realtime connection capacity (Supabase plan tier)
+
+`apps/server/loadtest/realtime-load-test.js` (Phase 7 quality gate) found a
+real Supabase Realtime **server-side connection cap** well below the
+backlog's 500-concurrent target when run against the local stack
+(`ConnectionRateLimitReached: Too many connected users` starting around
+~200-300 concurrent connections) — not a bug, a plan-tier limit. Before
+launch: confirm the production Supabase project's plan tier has a Realtime
+concurrent-connection limit that actually supports the expected launch-day
+scale (`loadtest/README.md` has the full finding and how to re-run this
+against staging once it exists), and upgrade the plan or revise the target
+down if not — see `backlog.md`'s Phase 7 quality-gates entry.
