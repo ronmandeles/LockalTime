@@ -1,3 +1,4 @@
+import { STREAK_GRACE_HOURS } from '../../config/constants';
 import { computeSessionRewards } from '../points/compute-rewards';
 import type { ParticipantSummary, PresenceInterval } from '../points/types';
 import type {
@@ -180,6 +181,20 @@ export const endSession = async (
 
   await store.writeSessionParticipants(sessionId, participantRows);
   await store.insertRewardsHistory(rewardsHistoryRows);
+
+  // Phase 5: accumulate each newly-finalized participant's row into their
+  // lifetime stats/streak/milestones. Deliberately after the writes above —
+  // apply_session_stats() reads the session_participants row this call just
+  // wrote. Already-finalized participants (emergency exit) are excluded by
+  // construction: participantRows never contains them (see the loop above),
+  // since their own finalize-emergency-exit.ts call already applied stats
+  // at their own exit moment.
+  await Promise.all(
+    participantRows.map((row) =>
+      store.applySessionStats(sessionId, row.userId, endedAt, STREAK_GRACE_HOURS),
+    ),
+  );
+
   await store.markSessionEnded({
     sessionId,
     endedAt,

@@ -1,3 +1,4 @@
+import { STREAK_GRACE_HOURS } from '../../config/constants';
 import { computeForfeitedReward } from '../points/compute-rewards';
 import type { SessionsStore } from './sessions-store';
 
@@ -13,6 +14,10 @@ export const finalizeEmergencyExit = async (
   store: SessionsStore,
   sessionId: string,
   userId: string,
+  // Injectable clock (testing-standards skill), same pattern as
+  // end-session.ts — Phase 5's apply_session_stats() call needs a
+  // deterministic finalized-at timestamp for its local-day bucketing.
+  now: () => Date = () => new Date(),
 ): Promise<void> => {
   const [session, intervals] = await Promise.all([
     store.getSessionSummary(sessionId),
@@ -44,4 +49,6 @@ export const finalizeEmergencyExit = async (
   await store.insertRewardsHistory([
     { userId, sessionId, points: reward.pointsEarned, bonusType: 'base' },
   ]);
+
+  await store.applySessionStats(sessionId, userId, now().toISOString(), STREAK_GRACE_HOURS);
 };

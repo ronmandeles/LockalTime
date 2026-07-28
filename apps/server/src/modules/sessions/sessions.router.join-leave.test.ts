@@ -120,6 +120,10 @@ const buildFakeStore = (options: {
     async migrateHost(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async applySessionStats() {},
+    async expireStreaks(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
   };
   return store;
 };

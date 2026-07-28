@@ -96,6 +96,12 @@ const buildFakeStore = (): SessionsStore & {
     async migrateHost(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async applySessionStats(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async expireStreaks(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
   };
   return store;
 };

@@ -29,6 +29,7 @@ const buildFakeStore = (
   closedAllAt: string | null;
   writtenParticipants: readonly FinalizedParticipantInput[] | null;
   writtenRewards: readonly RewardsHistoryRowInput[] | null;
+  appliedStats: { sessionId: string; userId: string; finalizedAt: string }[];
   markedEnded: {
     sessionId: string;
     endedAt: string;
@@ -40,6 +41,7 @@ const buildFakeStore = (
     closedAllAt: null as string | null,
     writtenParticipants: null as readonly FinalizedParticipantInput[] | null,
     writtenRewards: null as readonly RewardsHistoryRowInput[] | null,
+    appliedStats: [] as { sessionId: string; userId: string; finalizedAt: string }[],
     markedEnded: null as {
       sessionId: string;
       endedAt: string;
@@ -94,6 +96,12 @@ const buildFakeStore = (
       throw new Error('not used in these tests');
     },
     async migrateHost(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async applySessionStats(sessionId: string, userId: string, finalizedAt: string) {
+      store.appliedStats.push({ sessionId, userId, finalizedAt });
+    },
+    async expireStreaks(): Promise<never> {
       throw new Error('not used in these tests');
     },
   };
@@ -340,6 +348,38 @@ describe('endSession', () => {
       endedBy: HOST_ID,
       endReason: 'host_ended',
     });
+  });
+
+  it('applies gamification stats for every newly-finalized participant, using the same endedAt', async () => {
+    const store = buildFakeStore({
+      session: activeSession(),
+      intervals: [
+        interval(HOST_ID, '2026-01-01T11:00:00.000Z', 'session_ended'),
+        interval('participant-1', '2026-01-01T11:00:00.000Z', 'session_ended'),
+      ],
+    });
+
+    await endSession(store, SESSION_ID, { endedBy: HOST_ID, endReason: 'host_ended' }, DEFAULT_NOW);
+
+    expect(store.appliedStats.sort((a, b) => a.userId.localeCompare(b.userId))).toEqual([
+      { sessionId: SESSION_ID, userId: HOST_ID, finalizedAt: store.closedAllAt },
+      { sessionId: SESSION_ID, userId: 'participant-1', finalizedAt: store.closedAllAt },
+    ]);
+  });
+
+  it('does not re-apply stats for a participant already finalized inline (emergency exit)', async () => {
+    const store = buildFakeStore({
+      session: activeSession(),
+      intervals: [
+        interval(HOST_ID, '2026-01-01T11:00:00.000Z', 'session_ended'),
+        interval('participant-1', '2026-01-01T10:20:00.000Z', 'emergency_exit'),
+      ],
+      finalizedUserIds: ['participant-1'],
+    });
+
+    await endSession(store, SESSION_ID, { endedBy: HOST_ID, endReason: 'host_ended' }, DEFAULT_NOW);
+
+    expect(store.appliedStats).toEqual([expect.objectContaining({ userId: HOST_ID })]);
   });
 
   it('skips finalization entirely for a session with no presence intervals at all', async () => {
