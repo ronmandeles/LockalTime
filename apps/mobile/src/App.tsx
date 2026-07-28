@@ -13,13 +13,16 @@ import ActiveSessionScreen from './screens/ActiveSessionScreen';
 import AuthScreen from './screens/AuthScreen';
 import CreateSessionScreen from './screens/CreateSessionScreen';
 import EmergencyExitScreen from './screens/EmergencyExitScreen';
+import HistoryScreen from './screens/HistoryScreen';
 import HomeScreen from './screens/HomeScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
 import PermissionPrimingScreen from './screens/PermissionPrimingScreen';
 import ScanSessionScreen from './screens/ScanSessionScreen';
 import SessionCompletionScreen from './screens/SessionCompletionScreen';
 import SessionDetailsScreen from './screens/SessionDetailsScreen';
+import StatsScreen from './screens/StatsScreen';
 import WelcomeBackScreen from './screens/WelcomeBackScreen';
+import { reportTimezoneIfChanged } from './services/user-profile';
 import { hydrateActiveSessionStatus, useActiveSessionStore } from './state/active-session-store';
 import { attachAuthStateListener, useAuthStore } from './state/auth-store';
 import { hydrateOnboardingStatus, markOnboardingSeen, useOnboardingStore } from './state/onboarding-store';
@@ -54,6 +57,7 @@ const App = (): React.JSX.Element | null => {
   const onboarding = useOnboardingStore((state) => state.onboarding);
   const permissionStep = usePermissionStore((state) => state.permissionStep);
   const auth = useAuthStore((state) => state.auth);
+  const authenticatedUserId = auth.status === 'authenticated' ? auth.session.user.id : null;
   const activeSession = useActiveSessionStore((state) => state.activeSession);
   const pendingWelcomeBackNavigation = useActiveSessionStore(
     (state) => state.pendingWelcomeBackNavigation,
@@ -89,6 +93,18 @@ const App = (): React.JSX.Element | null => {
       detachAuthListener();
     };
   }, []);
+
+  // Phase 5: reports the device timezone once per authenticated session
+  // (see services/user-profile.ts — never rejects, so no .catch() needed
+  // here) so the server can bucket this user's finalized sessions into
+  // their LOCAL day rather than UTC. Keyed on the user id specifically,
+  // not just "is authenticated", so it fires again on a genuine user
+  // switch but not on every unrelated re-render while signed in.
+  useEffect(() => {
+    if (authenticatedUserId !== null) {
+      reportTimezoneIfChanged(authenticatedUserId);
+    }
+  }, [authenticatedUserId]);
 
   if (
     i18nInstance === null ||
@@ -171,6 +187,8 @@ const App = (): React.JSX.Element | null => {
             user-facing copy. */}
         <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
           <RootStack.Screen name="Home" component={HomeScreen} />
+          <RootStack.Screen name="History" component={HistoryScreen} />
+          <RootStack.Screen name="Stats" component={StatsScreen} />
           <RootStack.Screen name="CreateSession" component={CreateSessionScreen} />
           <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
           <RootStack.Screen

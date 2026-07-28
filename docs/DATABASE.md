@@ -1,6 +1,6 @@
 # Lockal Time — Database Schema
 
-Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. **Phase 4 task 7** (`supabase/migrations/20260728130000_grant_host_assignments_update.sql`): `session_host_assignments` gains a `service_role` `UPDATE` grant — the original Phase 2 migration only granted `select, insert`, missed until the sweep worker's real integration test tried to close a migrated-away host's assignment row and hit `permission denied`. **Phase 4 task 12** (`supabase/migrations/20260728140000_create_rejoin_session_function.sql`): `rejoin_session()`, the token-free counterpart to `join_session()` for Screen 13's Welcome Back rejoin. 80/80 pgTAP passing (`supabase/tests/venues_test.sql`, `supabase/tests/sessions_test.sql`, `supabase/tests/join_session_test.sql`, `supabase/tests/phase4_lifecycle_test.sql`, `supabase/tests/rejoin_session_test.sql`), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, true concurrent-join-at-capacity, and create→join→disconnect→rejoin→end (proving the disconnect gap disqualifies the Completion Bonus while base points are still credited — the Phase 4 DoD's disconnect-and-rejoin line) against the live local stack; production push pending (manual, per `CLAUDE.md`). This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
+Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. **Phase 4 task 7** (`supabase/migrations/20260728130000_grant_host_assignments_update.sql`): `session_host_assignments` gains a `service_role` `UPDATE` grant — the original Phase 2 migration only granted `select, insert`, missed until the sweep worker's real integration test tried to close a migrated-away host's assignment row and hit `permission denied`. **Phase 4 task 12** (`supabase/migrations/20260728140000_create_rejoin_session_function.sql`): `rejoin_session()`, the token-free counterpart to `join_session()` for Screen 13's Welcome Back rejoin. **Phase 5 task 2** (`supabase/migrations/20260728150000_phase5_gamification_and_stats.sql`): `user_streaks`, `user_stats`, `user_stats_daily`, `milestones` (seeded, 6 tiers), `user_milestones` created; `users.timezone` and `session_participants.stats_applied_at` added. Three deliberate deviations from this file's original blueprint below it (see the "Bonus Computation"/"Gamification" sections for why): `user_stats.sessions_disconnected`, `user_streaks.last_session_day`, `milestones.slug`. 108/108 pgTAP passing (adds `supabase/tests/phase5_gamification_test.sql`, 28 new), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, true concurrent-join-at-capacity, and create→join→disconnect→rejoin→end (proving the disconnect gap disqualifies the Completion Bonus while base points are still credited — the Phase 4 DoD's disconnect-and-rejoin line) against the live local stack; production push pending (manual, per `CLAUDE.md`). This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
 
 Note on RLS in production: a table's RLS policies alone don't grant access — Postgres privileges (`GRANT`) must exist too, and new tables get none by default for `anon`/`authenticated` **or `service_role`** (confirmed against the real local stack in Phase 2 task 2.3 — the Node API's own service-role writes 500'd until `service_role` got explicit grants too). See `.claude/skills/supabase-integration/SKILL.md` for the pattern (table-wide `SELECT`, column-scoped `UPDATE` to exclude fields like `role`, and a `service_role` grant for every table the Node API writes to).
 
@@ -24,6 +24,10 @@ create table public.users (
   avatar_url      text,
   role            text not null default 'user'
                     check (role in ('user', 'verified_host', 'admin')),
+  timezone        text,        -- Phase 5: IANA zone name, client-reported,
+                                -- used to bucket sessions into the
+                                -- participant's LOCAL day (see
+                                -- apply_session_stats() below)
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -141,6 +145,11 @@ create table public.session_participants (
   group_bonus_earned        boolean not null default false,
   completion_bonus_earned   boolean not null default false,
   points_earned             int not null default 0,
+  stats_applied_at          timestamptz,  -- Phase 5: set by
+                                           -- apply_session_stats() -- the
+                                           -- exactly-once guard against
+                                           -- double-accumulating into
+                                           -- user_stats/user_streaks
 
   unique (session_id, user_id)
 );
@@ -219,7 +228,14 @@ create table public.user_streaks (
   current_streak          int not null default 0,
   longest_streak          int not null default 0,
   last_session_at         timestamptz,
-  streak_grace_expires_at timestamptz   -- last_session_at + 48h
+  last_session_day        date,         -- Phase 5 deviation: the resolved
+                                          -- LOCAL day of last_session_at
+                                          -- (users.timezone), stored rather
+                                          -- than re-derived on every
+                                          -- comparison -- same-day repeat
+                                          -- sessions must not double-
+                                          -- increment current_streak
+  streak_grace_expires_at timestamptz   -- last_session_at + STREAK_GRACE_HOURS
 );
 
 -- ============================================================
@@ -231,6 +247,15 @@ create table public.user_stats (
   total_points            int not null default 0,
   sessions_completed      int not null default 0,
   sessions_emergency_exit int not null default 0,
+  sessions_disconnected   int not null default 0,  -- Phase 5 deviation: the
+                                                      -- original blueprint
+                                                      -- only had two exit-
+                                                      -- reason counters, but
+                                                      -- Phase 4 added a third
+                                                      -- exit_reason
+                                                      -- ('disconnected') that
+                                                      -- counted toward
+                                                      -- neither
   updated_at              timestamptz not null default now()
 );
 
@@ -262,10 +287,20 @@ create table public.rewards_history (
 create index idx_rewards_user_time on public.rewards_history(user_id, created_at desc);
 
 -- ============================================================
--- MILESTONES (global, periodic — not per-session)
+-- MILESTONES (global, periodic — not per-session). Seeded, fixed product
+-- config -- 6 tiers, decided during Phase 5 planning
+-- (docs/RETENTION_STRATEGY.md §2): 5/10/25/50/100/250 sessions,
+-- 50/100/250/500/1000/2500 bonus points.
 -- ============================================================
 create table public.milestones (
   id                uuid primary key default gen_random_uuid(),
+  slug              text not null unique,  -- Phase 5 deviation: `name`
+                                             -- below is a DB string, which
+                                             -- would be an untranslatable
+                                             -- hardcoded UI string --
+                                             -- `slug` is the i18n key
+                                             -- instead (t('milestones.' +
+                                             -- slug))
   name              text not null,
   sessions_required int not null,
   bonus_points      int not null
@@ -298,6 +333,22 @@ Implemented as pure functions in `apps/server/src/modules/points/` (`base-points
 
 All rules above are confirmed final — see `docs/ARCHITECTURE.md` §7/§11.
 
+## Stats/Streak/Milestone Accumulation (Phase 5)
+
+Unlike the bonus computation above (pure functions, computed by Node and written once), streak/milestone/lifetime-aggregate accumulation is a **Postgres function**, `public.apply_session_stats(p_session_id, p_user_id, p_finalized_at, p_streak_grace_hours)` (`supabase/migrations/20260728160000_create_apply_session_stats_function.sql`). Why the split: `computeSessionRewards()` only ever needs data from the one session it's closing, so a pure Node function is the right shape. Accumulation needs to read-modify-write a *cross-session* row (`user_stats`, `user_streaks`) from **two independent Node call sites** (`end-session.ts` and `finalize-emergency-exit.ts`), either of which can race the sweep worker or each other for the same user across different sessions — a Node-side read-then-write has a lost-update window no application-level care closes. A single `SECURITY DEFINER` function does the whole read-decide-write cycle under row locks inside one transaction, the same precedent as `join_session()`/`rejoin_session()`.
+
+Called once per finalized `session_participants` row, after that row (and its `rewards_history` base/bonus rows) already exist. Returns `'applied'` or `'skipped'` (exactly-once guard via `session_participants.stats_applied_at`, or the row not existing at all).
+
+1. Lock the `session_participants` row; skip if missing or already applied.
+2. Resolve the participant's **local day**: `(p_finalized_at at time zone coalesce(users.timezone, 'UTC'))::date` — an unrecognized/garbage timezone string falls back to UTC rather than aborting finalization.
+3. Accumulate into `user_stats`: `total_minutes`, `total_points`, and whichever of `sessions_completed`/`sessions_emergency_exit`/`sessions_disconnected` matches `exit_reason`.
+4. Upsert `user_stats_daily` for that local day.
+5. **Streak** (`user_streaks`, any session with presence counts — `docs/RETENTION_STRATEGY.md` §1's forgiving-by-design decision): first-ever session starts it at 1; a later finalization timestamped *before* `last_session_at` (out-of-order — e.g. the sweep worker closing a stale interval after the participant already started a fresh session elsewhere) leaves the streak untouched entirely, stats still applied; the same local day as `last_session_day` doesn't double-count but still pushes `streak_grace_expires_at` forward; a gap within `STREAK_GRACE_HOURS` on a new day increments; a gap beyond it resets to 1. `longest_streak` is a monotonic high-water mark, never decremented here (only session-close code path — see the separate streak-expiry job below for how `current_streak` gets zeroed by the passage of time alone).
+6. **Milestones**: `insert into user_milestones ... select ... where sessions_required <= (just-updated total) on conflict do nothing returning milestone_id`, looped — set-based and naturally idempotent, correctly handles crossing more than one tier in a single session. Each crossing writes one `rewards_history` row (`bonus_type='milestone'`) and folds `bonus_points` into `user_stats.total_points` in the same transaction — this is what keeps `total_points == sum(rewards_history.points)` true by construction rather than by convention.
+7. Sets `stats_applied_at = p_finalized_at`.
+
+**Streak expiry** is a separate concern from the above: nothing at session-close time can *break* a streak, since a break is caused by the passage of time, not an event. `apps/server/src/modules/stats/streak-expiry.ts`'s `runStreakExpiry()` — the same testable-core-plus-`setInterval` split as the Phase 4 sweep worker, on its own `STREAK_EXPIRY_INTERVAL_SECONDS` cadence (300s — no debounce-window concern the way host migration has, so it can run far less often) — delegates to `SessionsStore.expireStreaks(asOf)`, a single scoped `UPDATE ... SET current_streak = 0 WHERE streak_grace_expires_at < asOf AND current_streak > 0`. Deliberately a plain `service_role`-granted UPDATE, not a `SECURITY DEFINER` function: zeroing an already-expired streak has no atomicity concern the way `apply_session_stats()`'s cross-table read-decide-write does. `longest_streak` is never touched by this job — it's a monotonic high-water mark.
+
 ## Config Constants (Node, not DB — tune here, not in migrations)
 
 | Constant | Default | Notes |
@@ -315,4 +366,5 @@ All rules above are confirmed final — see `docs/ARCHITECTURE.md` §7/§11.
 | `PARTICIPANT_PRESENCE_TIMEOUT_MINUTES` | 30 | non-host stale-interval reconciliation (Phase 4) — matches the native offline-cutoff grace period, §4, so a brief disconnect isn't penalized |
 | `OPEN_ENDED_SESSION_MAX_HOURS` | 24 | server force-closes past this |
 | `STREAK_GRACE_HOURS` | 48 | |
+| `STREAK_EXPIRY_INTERVAL_SECONDS` | 300 | streak-expiry job cadence (Phase 5) — no debounce concern, so it runs far less often than the session sweep |
 | `BLOCKED_APP_CATEGORIES` | `[Social Networking, Games, Entertainment]` | Fixed default-category blocklist, not per-session/per-user configurable; see `docs/ARCHITECTURE.md` §4 |

@@ -180,6 +180,19 @@ jest.mock('./services/native-sign-in', () => ({
   },
 }));
 
+// Phase 5: a successful sign-in in this suite lands on Home, which now
+// fetches its gamification summary on mount — mocked the same way as
+// App.spec.tsx, since this suite only needs the auth gate wiring proven,
+// not these functions' own contracts (stats-repository.test.ts owns those).
+const mockFetchUserStats = jest.fn();
+const mockFetchUserStreak = jest.fn();
+const mockFetchMilestoneProgress = jest.fn();
+jest.mock('./services/stats-repository', () => ({
+  fetchUserStats: (...args: unknown[]) => mockFetchUserStats(...args),
+  fetchUserStreak: (...args: unknown[]) => mockFetchUserStreak(...args),
+  fetchMilestoneProgress: (...args: unknown[]) => mockFetchMilestoneProgress(...args),
+}));
+
 const mockGetItem = jest.fn<Promise<string | null>, [string]>();
 const mockRemoveItem = jest.fn<Promise<void>, [string]>();
 const mockSetItem = jest.fn<Promise<void>, [string, string]>();
@@ -237,6 +250,11 @@ describe('App auth gate', () => {
     mockNativeApple.mockResolvedValue({ status: 'unavailable' });
     mockExchangeGoogle.mockReset();
     mockExchangeApple.mockReset();
+    mockFetchUserStats.mockReset().mockResolvedValue({ ok: true, value: null });
+    mockFetchUserStreak.mockReset().mockResolvedValue({ ok: true, value: null });
+    mockFetchMilestoneProgress
+      .mockReset()
+      .mockResolvedValue({ ok: true, value: { milestones: [], achievedMilestoneIds: new Set() } });
     mockGetItem.mockReset();
     // Default: both first-launch gates already passed, so only the auth gate
     // decides between AuthScreen and Home.

@@ -8,6 +8,66 @@ export const en = {
     title: 'Lockal Time',
     createSession: 'Create Session',
     scanQr: 'Scan QR',
+    historyCta: 'History',
+    statsCta: 'Stats',
+    // Phase 5 gamification summary card — copy is PLACEHOLDER, flagged for
+    // the deferred copy pass. Streak/milestones stay visually quiet per
+    // ARCHITECTURE.md §9 (a fact being stated, not a prize being dangled).
+    summary: {
+      streakCount: '{{count}} day streak',
+      streakNone: 'Start a streak today',
+      totalPoints: 'Total points',
+      milestoneProgress: '{{count}} more sessions to {{milestone}}',
+      allMilestonesReached: "You've reached every milestone",
+    },
+  },
+  // History (Screen 11, Phase 5 task 8) copy is PLACEHOLDER, flagged for
+  // the deferred copy pass.
+  history: {
+    title: 'History',
+    filters: {
+      all: 'All',
+      solo: 'Solo',
+      group: 'Group',
+    },
+    type: {
+      solo: 'Solo session',
+      dynamic_qr: 'Group session',
+      static_qr: 'Group session',
+    },
+    minutesPresent: '{{count}} min',
+    pointsEarned: '+{{count}}',
+    groupBonusChip: 'Group bonus',
+    completionBonusChip: 'Completion bonus',
+    empty: {
+      all: "You haven't completed any sessions yet.",
+      solo: "You haven't completed any solo sessions yet.",
+      group: "You haven't completed any group sessions yet.",
+    },
+    loadError: "We couldn't load your history. Please try again.",
+    retry: 'Retry',
+  },
+  // Stats (Screen 12, Phase 5 task 9) copy is PLACEHOLDER, flagged for the
+  // deferred copy pass.
+  stats: {
+    title: 'Stats',
+    totalPoints: 'Total points',
+    totalMinutes: 'Total minutes',
+    currentStreak: 'Current streak',
+    longestStreak: 'Longest streak',
+    chartTitle: 'Last 7 days',
+    milestonesTitle: 'Milestones reached',
+    noMilestonesYet: 'No milestones reached yet',
+  },
+  // Phase 5 milestone ladder — slug is the i18n key (docs/DATABASE.md),
+  // since the DB row's own `name` column is never rendered directly.
+  milestones: {
+    sessions_5: 'First Five',
+    sessions_10: 'Ten Sessions',
+    sessions_25: 'Quarter Century',
+    sessions_50: 'Half Century',
+    sessions_100: 'Centurion',
+    sessions_250: 'Dedicated',
   },
   // Phase 2 session screens (4-8 skeleton) — placeholder copy, flagged for
   // the deferred copy pass. No native blocking yet; sessions are "virtual"
