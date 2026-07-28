@@ -13,6 +13,7 @@ import ActiveSessionScreen from './screens/ActiveSessionScreen';
 import AuthScreen from './screens/AuthScreen';
 import CreateSessionScreen from './screens/CreateSessionScreen';
 import EmergencyExitScreen from './screens/EmergencyExitScreen';
+import FriendsScreen from './screens/FriendsScreen';
 import HistoryScreen from './screens/HistoryScreen';
 import HomeScreen from './screens/HomeScreen';
 import OnboardingScreen from './screens/OnboardingScreen';
@@ -213,6 +214,7 @@ const App = (): React.JSX.Element | null => {
           <RootStack.Screen name="Stats" component={StatsScreen} />
           <RootStack.Screen name="VenueManagement" component={VenueManagementScreen} />
           <RootStack.Screen name="VenueDashboard" component={VenueDashboardScreen} />
+          <RootStack.Screen name="Friends" component={FriendsScreen} />
           <RootStack.Screen name="CreateSession" component={CreateSessionScreen} />
           <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
           <RootStack.Screen

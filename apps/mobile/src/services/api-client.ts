@@ -217,3 +217,88 @@ export interface VenueMetricsResponse {
 
 export const getVenueMetrics = (venueId: string): Promise<ApiResult<VenueMetricsResponse>> =>
   request<VenueMetricsResponse>(`/venues/${venueId}/metrics`, undefined, 'GET');
+
+// ── Phase 6.5: friends (search/requests/leaderboard) ──────────────────────
+// Still Node-only, not a direct Supabase read: public.users' SELECT policy
+// is "own row only" and stays that way (no widening) — searching strangers
+// by username and reading a friend's total_points/activity signal both need
+// a cross-user read RLS can't express cleanly, the same posture as venue
+// metrics/session preview.
+
+export type FriendRelationship = 'none' | 'requested' | 'incoming' | 'friends';
+
+export interface UserSearchResult {
+  readonly id: string;
+  readonly username: string;
+  readonly displayName: string;
+  readonly avatarUrl: string | null;
+  readonly relationship: FriendRelationship;
+}
+
+export interface SearchUsersResponse {
+  readonly results: readonly UserSearchResult[];
+}
+
+export const searchUsers = (query: string): Promise<ApiResult<SearchUsersResponse>> =>
+  request<SearchUsersResponse>(`/friends/search?q=${encodeURIComponent(query)}`, undefined, 'GET');
+
+export interface PendingFriendRequest {
+  readonly id: string;
+  readonly userId: string;
+  readonly username: string;
+  readonly displayName: string;
+  readonly avatarUrl: string | null;
+  readonly createdAt: string;
+}
+
+export interface ListFriendRequestsResponse {
+  readonly incoming: readonly PendingFriendRequest[];
+  readonly outgoing: readonly PendingFriendRequest[];
+}
+
+export const listFriendRequests = (): Promise<ApiResult<ListFriendRequestsResponse>> =>
+  request<ListFriendRequestsResponse>('/friends/requests', undefined, 'GET');
+
+// requesterId is derived from the verified token server-side, never sent —
+// a mutual double-request (the other person already requested you) resolves
+// straight to 'friends', same as a real Instagram/Facebook-style system.
+export interface SendFriendRequestResponse {
+  readonly status: 'requested' | 'already_requested' | 'already_friends' | 'friends';
+}
+
+export const sendFriendRequest = (
+  recipientId: string,
+): Promise<ApiResult<SendFriendRequestResponse>> =>
+  request<SendFriendRequestResponse>('/friends/requests', { recipientId });
+
+export interface RespondToFriendRequestResponse {
+  readonly status: 'accepted' | 'declined';
+}
+
+export const respondToFriendRequest = (
+  requestId: string,
+  accept: boolean,
+): Promise<ApiResult<RespondToFriendRequestResponse>> =>
+  request<RespondToFriendRequestResponse>(`/friends/requests/${requestId}/respond`, { accept });
+
+// The leaderboard: caller included (isSelf: true), pre-sorted by
+// totalPoints descending. Only totalPoints and a coarse hadSessionToday
+// boolean ever cross the boundary for a friend — never their real
+// current_streak or anything else user_stats/user_streaks hold (Phase
+// 6.5's privacy decision).
+export interface FriendLeaderboardEntry {
+  readonly id: string;
+  readonly username: string;
+  readonly displayName: string;
+  readonly avatarUrl: string | null;
+  readonly totalPoints: number;
+  readonly hadSessionToday: boolean;
+  readonly isSelf: boolean;
+}
+
+export interface ListFriendsResponse {
+  readonly leaderboard: readonly FriendLeaderboardEntry[];
+}
+
+export const listFriends = (): Promise<ApiResult<ListFriendsResponse>> =>
+  request<ListFriendsResponse>('/friends', undefined, 'GET');

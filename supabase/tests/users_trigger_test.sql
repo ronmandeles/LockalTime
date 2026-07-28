@@ -26,7 +26,7 @@
 --     never errors the signup.
 
 begin;
-select plan(14);
+select plan(19);
 
 -- ── Trigger + function exist and are wired together ─────────────────
 select has_function(
@@ -68,6 +68,37 @@ select is(
   (select role from public.users
      where id = '33333333-3333-3333-3333-333333333333'),
   'user', 'auto-created profile row gets default role ''user''');
+
+-- ── Phase 6.5: username auto-generation ──────────────────────────────
+select has_column('public', 'users', 'username', 'users gains username');
+select is(
+  (select username from public.users
+     where id = '33333333-3333-3333-3333-333333333333'),
+  'alicecohen', 'username is display_name lowercased with non-alphanumerics stripped');
+
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('99999999-9999-9999-9999-999999999999', 'alice2@test.dev',
+   '{"full_name": "Alice Cohen"}');
+select is(
+  (select username from public.users
+     where id = '99999999-9999-9999-9999-999999999999'),
+  'alicecohen1', 'a second signup sharing a display_name gets a numeric-suffixed username instead of colliding');
+
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('99999999-9999-9999-9999-999999999998', 'alice3@test.dev',
+   '{"full_name": "Alice Cohen"}');
+select is(
+  (select username from public.users
+     where id = '99999999-9999-9999-9999-999999999998'),
+  'alicecohen2', 'a third signup sharing the same display_name resolves to the next free suffix');
+
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('99999999-9999-9999-9999-999999999997', 'punctuated@test.dev',
+   '{"full_name": "!!! ??? ---"}');
+select is(
+  (select username from public.users
+     where id = '99999999-9999-9999-9999-999999999997'),
+  'user', 'a display_name that strips to nothing falls back to ''user'' as the username base, never aborting signup');
 
 -- ── Email OTP signup: no metadata → email local-part fallback ───────
 insert into auth.users (id, email) values
@@ -116,8 +147,8 @@ select is(
 -- transaction purely to stage it. The trigger must be ON CONFLICT DO NOTHING:
 -- a duplicate-key error here would abort the auth insert and break signup.
 alter table public.users drop constraint users_id_fkey;
-insert into public.users (id, display_name) values
-  ('77777777-7777-7777-7777-777777777777', 'Preexisting');
+insert into public.users (id, display_name, username) values
+  ('77777777-7777-7777-7777-777777777777', 'Preexisting', 'preexisting');
 select lives_ok(
   $$ insert into auth.users (id, email, raw_user_meta_data) values
        ('77777777-7777-7777-7777-777777777777', 'dup@test.dev',
