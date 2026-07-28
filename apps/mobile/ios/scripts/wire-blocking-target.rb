@@ -61,24 +61,35 @@ main_target.build_configurations.each do |config|
 end
 
 # ---------------------------------------------------------------------
-# 3. en.lproj / he.lproj Localizable.strings as one variant group
+# 3. en.lproj / he.lproj Localizable.strings
 # ---------------------------------------------------------------------
-existing_variant_group = lockaltime_group.children.find do |c|
-  c.is_a?(Xcodeproj::Project::Object::PBXVariantGroup) && c.name == 'Localizable.strings'
-end
+# Phase 7 debugging note: an earlier version of this script built a real
+# Xcode "localization variant group" (PBXVariantGroup, manually
+# constructed via project.new(...) and appended to lockaltime_group.children
+# directly) -- real xcodebuild CI caught the same class of path-resolution
+# bug this file's SharedAppGroup.swift handling hit: "Build input file
+# cannot be found: .../ios/en.lproj/Localizable.strings" (missing the
+# LockalTime/ segment). Manually constructing a PBXGroup/PBXVariantGroup
+# and appending to `.children` directly, rather than going through the
+# gem's own new_group/new_reference helpers, appears to skip some
+# parent-linking bookkeeping those helpers do, which broke path
+# resolution specifically for that manually-built group's children (while
+# blocking_group, built via the proper `new_group` helper, resolved
+# correctly for its own files). Simplest robust fix: skip the variant-
+# group UI grouping feature entirely and add both files as ordinary
+# resources, anchored at project root the same way the SharedAppGroup.swift
+# fix above is -- Xcode just won't show them merged as one logical file in
+# the navigator (cosmetic only); CFBundleLocalizations (already in
+# Info.plist) plus the correct en.lproj/he.lproj folder structure on disk
+# is all NSLocalizedString actually needs at runtime.
+%w[en he].each do |locale|
+  path = "LockalTime/#{locale}.lproj/Localizable.strings"
+  already_added = main_target.resources_build_phase.files_references.any? { |f| f.path == path }
+  next if already_added
 
-if existing_variant_group.nil?
-  variant_group = project.new(Xcodeproj::Project::Object::PBXVariantGroup)
-  variant_group.name = 'Localizable.strings'
-  variant_group.source_tree = '<group>'
-  lockaltime_group.children << variant_group
-
-  %w[en he].each do |locale|
-    file_ref = variant_group.new_reference("#{locale}.lproj/Localizable.strings")
-    file_ref.name = locale
-  end
-
-  main_target.add_resources([variant_group])
+  file_ref = project.main_group.new_reference(path)
+  file_ref.name = "#{locale}.lproj/Localizable.strings"
+  main_target.add_resources([file_ref])
 end
 
 # ---------------------------------------------------------------------
