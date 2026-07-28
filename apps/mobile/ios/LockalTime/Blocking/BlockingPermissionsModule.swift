@@ -45,7 +45,19 @@ class BlockingPermissionsModule: NSObject {
   ) {
     Task {
       do {
-        try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+        // requestAuthorization(for:) needs iOS 16+ (caught by the real
+        // ios-build CI compile, Phase 7); this project's deployment
+        // target is 15.1. The iOS 15-compatible no-parameter overload is
+        // semantically identical for this app -- .individual (a person
+        // managing their own device) is the only member kind iOS 15's
+        // FamilyControls supports at all; .child-style parental
+        // supervision was the iOS 16 addition the `for:` parameter exists
+        // to select between, and this app never uses it.
+        if #available(iOS 16.0, *) {
+          try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
+        } else {
+          try await AuthorizationCenter.shared.requestAuthorization()
+        }
       } catch {
         // User declined, or the entitlement isn't approved yet — either way
         // this is an answer, not an error (matches the JS contract: neither
