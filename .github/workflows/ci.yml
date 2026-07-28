@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Phase 7: lets a feature branch trigger a manual run (e.g. to verify the
+  # ios-build job) without needing a PR into main first.
+  workflow_dispatch: {}
 
 # Cancel superseded runs on the same ref — keeps the queue clear during
 # autonomous runs that push once per closed task.
