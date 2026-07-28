@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getTimeZone } from 'react-native-localize';
+import { getLocales, getTimeZone } from 'react-native-localize';
 
+import { resolveDeviceLocale } from '../i18n/resolve-device-locale';
+import { pushRegistration } from './push-registration';
 import { getSupabaseClient } from './supabase-client';
 
 // Phase 6: the client's first-ever read of its own role. Mirrors
@@ -91,5 +93,92 @@ export const reportTimezoneIfChanged = async (userId: string): Promise<void> => 
     // an unexpected failure (e.g. the native localize module not linked)
     // is a best-effort side effect failing, never something that should
     // propagate into the auth bootstrap flow.
+  }
+};
+
+// Phase 5.5: reports the app's resolved locale (the same resolution
+// init-i18n.ts uses for the app's own UI — resolveDeviceLocale(getLocales()))
+// to users.locale, so server-composed notifications (the streak-risk push)
+// can be localized. Display data, not money-equivalent — same posture as
+// timezone, same shape as reportTimezoneIfChanged above.
+export const REPORTED_LOCALE_STORAGE_KEY = '@lockal-time/reported-locale';
+
+export const reportLocaleIfChanged = async (userId: string): Promise<void> => {
+  try {
+    const deviceLocale = resolveDeviceLocale(getLocales());
+
+    let lastReported: string | null = null;
+    try {
+      lastReported = await AsyncStorage.getItem(REPORTED_LOCALE_STORAGE_KEY);
+    } catch {
+      // Fail open — worst case, one unnecessary write below.
+    }
+    if (lastReported === deviceLocale) {
+      return;
+    }
+
+    const { error } = await getSupabaseClient()
+      .from('users')
+      .update({ locale: deviceLocale })
+      .eq('id', userId);
+    if (error !== null) {
+      return; // Fail open — see header comment; next call retries.
+    }
+
+    try {
+      await AsyncStorage.setItem(REPORTED_LOCALE_STORAGE_KEY, deviceLocale);
+    } catch {
+      // Fail open — the write to `users` already succeeded; a failure only
+      // here means the next call redundantly re-writes the same value.
+    }
+  } catch {
+    // Outer fail-open net — see reportTimezoneIfChanged's header comment.
+  }
+};
+
+// Phase 5.5: registers this device's push token directly (RLS own-rows-
+// only, not money-equivalent — same posture as timezone/locale). One row
+// per (user_id, platform): the upsert is what makes a reinstall replace
+// the old token instead of accumulating a duplicate (owner decision, see
+// docs/DATABASE.md's device_tokens section). In practice a no-op today —
+// pushRegistration.getToken() never yields a real token until a real
+// FCM/APNs SDK is linked (push-registration.ts) — honest, not faked.
+export const REPORTED_PUSH_TOKEN_STORAGE_KEY = '@lockal-time/reported-push-token';
+
+export const registerPushTokenIfChanged = async (userId: string): Promise<void> => {
+  try {
+    const result = await pushRegistration.getToken();
+    if (result.status !== 'granted') {
+      return;
+    }
+
+    let lastReported: string | null = null;
+    try {
+      lastReported = await AsyncStorage.getItem(REPORTED_PUSH_TOKEN_STORAGE_KEY);
+    } catch {
+      // Fail open — worst case, one unnecessary write below.
+    }
+    if (lastReported === result.token) {
+      return;
+    }
+
+    const { error } = await getSupabaseClient()
+      .from('device_tokens')
+      .upsert(
+        { user_id: userId, platform: result.platform, token: result.token },
+        { onConflict: 'user_id,platform' },
+      );
+    if (error !== null) {
+      return; // Fail open — see header comment; next call retries.
+    }
+
+    try {
+      await AsyncStorage.setItem(REPORTED_PUSH_TOKEN_STORAGE_KEY, result.token);
+    } catch {
+      // Fail open — the write already succeeded; a failure only here means
+      // the next call redundantly re-writes the same value.
+    }
+  } catch {
+    // Outer fail-open net — see reportTimezoneIfChanged's header comment.
   }
 };

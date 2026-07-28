@@ -2,7 +2,15 @@ import dotenv from 'dotenv';
 
 import { createApp } from './app';
 import { loadEnv } from './config/env';
-import { SESSION_SWEEP_INTERVAL_SECONDS, STREAK_EXPIRY_INTERVAL_SECONDS } from './config/constants';
+import {
+  SESSION_SWEEP_INTERVAL_SECONDS,
+  STREAK_EXPIRY_INTERVAL_SECONDS,
+  STREAK_RISK_NOTIFICATION_INTERVAL_SECONDS,
+  STREAK_RISK_NOTIFICATION_WINDOW_HOURS,
+} from './config/constants';
+import { unconfiguredNotificationSender } from './modules/notifications/notification-sender';
+import { createSupabaseNotificationsStore } from './modules/notifications/notifications-store';
+import { runStreakRiskNotifications } from './modules/notifications/streak-risk-notifier';
 import { createSupabaseSessionRealtimePort } from './modules/sessions/session-realtime-port';
 import { createSupabaseSessionsStore } from './modules/sessions/sessions-store';
 import { runSweep } from './modules/sessions/sweep';
@@ -50,6 +58,25 @@ setInterval(() => {
     console.error('Streak expiry tick failed', error);
   });
 }, STREAK_EXPIRY_INTERVAL_SECONDS * 1000);
+
+// Phase 5.5 (docs/RETENTION_STRATEGY.md §5, backlog.md Phase 5.5) — the
+// streak-at-risk push. Own setInterval/testable core
+// (streak-risk-notifier.ts), same split as the two pollers above. Ships
+// wired but inert: unconfiguredNotificationSender never actually delivers
+// anything (no FCM/APNs credentials exist yet) — this is the real claim
+// logic and dispatch pipeline running end-to-end today, with only the
+// delivery source a stand-in, same posture as attestation.
+const streakRiskNotifierDeps = {
+  store: createSupabaseNotificationsStore(adminClient),
+  sender: unconfiguredNotificationSender,
+  now: () => new Date(),
+  windowHours: STREAK_RISK_NOTIFICATION_WINDOW_HOURS,
+};
+setInterval(() => {
+  runStreakRiskNotifications(streakRiskNotifierDeps).catch((error: unknown) => {
+    console.error('Streak risk notification tick failed', error);
+  });
+}, STREAK_RISK_NOTIFICATION_INTERVAL_SECONDS * 1000);
 
 app.listen(env.PORT, () => {
   console.log(`Lockal Time API listening on port ${env.PORT}`);
