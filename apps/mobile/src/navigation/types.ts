@@ -40,4 +40,9 @@ export type RootStackParamList = {
   // in-screen, same "local UI state, not a route param" convention as
   // History's filter.
   VenueDashboard: undefined;
+  // Phase 6.5 (Social & Comparison Surfaces) — reached from Home's
+  // friendsCta link, available to every user (not role-gated). No params:
+  // search, pending requests, and the leaderboard all read/write entirely
+  // through the /friends endpoints for the authenticated user.
+  Friends: undefined;
 };

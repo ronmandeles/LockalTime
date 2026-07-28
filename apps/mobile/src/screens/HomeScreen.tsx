@@ -176,6 +176,13 @@ const HomeScreen = ({ navigation }: HomeScreenProps): React.JSX.Element => {
         >
           <Text style={styles.secondaryLinkLabel}>{t('home.statsCta')}</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Friends')}
+          style={styles.secondaryLink}
+          testID="home-friends-cta"
+        >
+          <Text style={styles.secondaryLinkLabel}>{t('home.friendsCta')}</Text>
+        </TouchableOpacity>
         {isVerifiedHost && (
           <TouchableOpacity
             onPress={() => navigation.navigate('VenueManagement')}

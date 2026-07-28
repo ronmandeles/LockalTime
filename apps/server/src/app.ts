@@ -6,6 +6,8 @@ import { createRequireRole } from './middleware/require-role';
 import { errorHandler } from './middleware/error-handler';
 import { unconfiguredAttestationProvider } from './modules/attestation/attestation-provider';
 import { createSupabaseAttestationStore } from './modules/attestation/attestation-store';
+import { createFriendsRouter } from './modules/friends/friends.router';
+import { createSupabaseFriendsStore } from './modules/friends/friends-store';
 import { createSessionsRouter } from './modules/sessions/sessions.router';
 import { createSupabaseSessionsStore } from './modules/sessions/sessions-store';
 import { createSupabaseUsersStore } from './modules/users/users-store';
@@ -37,6 +39,7 @@ export function createApp(env: Env): Express {
   const attestationStore = createSupabaseAttestationStore(adminClient);
   const usersStore = createSupabaseUsersStore(adminClient);
   const venuesStore = createSupabaseVenuesStore(adminClient);
+  const friendsStore = createSupabaseFriendsStore(adminClient);
   // Venues are a strictly B2B construct (ARCHITECTURE.md §10) — every
   // route that creates or lists them requires verified_host or admin.
   const requireVerifiedHost = createRequireRole(usersStore, ['verified_host', 'admin']);
@@ -60,6 +63,14 @@ export function createApp(env: Env): Express {
       qrSigningSecret: env.QR_SIGNING_SECRET,
       requireAuth,
       requireVerifiedHost,
+    }),
+  );
+
+  app.use(
+    '/friends',
+    createFriendsRouter({
+      store: friendsStore,
+      requireAuth,
     }),
   );
 

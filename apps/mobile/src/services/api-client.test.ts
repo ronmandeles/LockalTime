@@ -17,11 +17,16 @@ import {
   joinSession,
   joinVenueSession,
   leaveSession,
+  listFriendRequests,
+  listFriends,
   listVenues,
   markBlockerReady,
   previewSession,
   regenerateVenueQr,
   rejoinSession,
+  respondToFriendRequest,
+  searchUsers,
+  sendFriendRequest,
 } from './api-client';
 
 const AUTHENTICATED = {
@@ -377,5 +382,105 @@ describe('getVenueMetrics', () => {
 
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error.code).toBe('venue_not_owned');
+  });
+});
+
+describe('searchUsers', () => {
+  it('issues a GET with the query string, url-encoded', async () => {
+    const results = [
+      { id: 'user-2', username: 'alice', displayName: 'Alice', avatarUrl: null, relationship: 'none' },
+    ];
+    mockFetch.mockResolvedValue(jsonResponse(200, { results }));
+
+    const result = await searchUsers('ali ce');
+
+    expect(result).toEqual({ ok: true, value: { results } });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/friends/search?q=ali%20ce');
+    expect(init.method).toBe('GET');
+  });
+
+  it('surfaces query_too_short untouched', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse(400, { error: { code: 'query_too_short', message: 'too short' } }),
+    );
+
+    const result = await searchUsers('a');
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.code).toBe('query_too_short');
+  });
+});
+
+describe('listFriendRequests', () => {
+  it('issues a GET with no body', async () => {
+    const pending = { incoming: [], outgoing: [] };
+    mockFetch.mockResolvedValue(jsonResponse(200, pending));
+
+    const result = await listFriendRequests();
+
+    expect(result).toEqual({ ok: true, value: pending });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/friends/requests');
+    expect(init.method).toBe('GET');
+  });
+});
+
+describe('sendFriendRequest', () => {
+  it('posts recipientId to /friends/requests', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(200, { status: 'requested' }));
+
+    const result = await sendFriendRequest('user-2');
+
+    expect(result).toEqual({ ok: true, value: { status: 'requested' } });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/friends/requests');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ recipientId: 'user-2' });
+  });
+
+  it('reports a mutual double-request as an immediate friendship', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(200, { status: 'friends' }));
+
+    const result = await sendFriendRequest('user-2');
+
+    expect(result).toEqual({ ok: true, value: { status: 'friends' } });
+  });
+});
+
+describe('respondToFriendRequest', () => {
+  it('posts accept to /friends/requests/:id/respond', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(200, { status: 'accepted' }));
+
+    const result = await respondToFriendRequest('req-1', true);
+
+    expect(result).toEqual({ ok: true, value: { status: 'accepted' } });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/friends/requests/req-1/respond');
+    expect(JSON.parse(init.body as string)).toEqual({ accept: true });
+  });
+});
+
+describe('listFriends', () => {
+  it('issues a GET returning the pre-sorted leaderboard', async () => {
+    const leaderboard = [
+      {
+        id: 'user-1',
+        username: 'me',
+        displayName: 'Me',
+        avatarUrl: null,
+        totalPoints: 100,
+        hadSessionToday: false,
+        isSelf: true,
+      },
+    ];
+    mockFetch.mockResolvedValue(jsonResponse(200, { leaderboard }));
+
+    const result = await listFriends();
+
+    expect(result).toEqual({ ok: true, value: { leaderboard } });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/friends');
+    expect(init.method).toBe('GET');
   });
 });

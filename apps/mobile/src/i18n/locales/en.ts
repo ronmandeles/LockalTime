@@ -14,6 +14,8 @@ export const en = {
     // a subdued link, not a third competing CTA (DESIGN_GUIDELINES §1).
     manageVenuesCta: 'Manage venues',
     venueDashboardCta: 'Venue activity',
+    // Phase 6.5 — available to every user, not role-gated.
+    friendsCta: 'Friends',
     // Phase 5 gamification summary card — copy is PLACEHOLDER, flagged for
     // the deferred copy pass. Streak/milestones stay visually quiet per
     // ARCHITECTURE.md §9 (a fact being stated, not a prize being dangled).
@@ -359,6 +361,43 @@ export const en = {
     concurrentCustomers: 'Customers here now',
     avgMinutesPerCustomer: 'Avg. minutes per customer ({{count}}-day)',
     sessionsInWindow: '{{count}} sessions in the last {{days}} days',
+  },
+  // Phase 6.5 (Social & Comparison Surfaces) — a friends-only leaderboard
+  // ranked by total lifetime points, plus username search/request/accept.
+  // Only totalPoints and a coarse "active today" signal are ever shown for
+  // a friend — never their real streak length or session history.
+  friends: {
+    title: 'Friends',
+    loadError: "We couldn't load your friends. Please try again.",
+    retry: 'Retry',
+    emptyLeaderboard: 'Add a friend to see how you compare.',
+    you: 'You',
+    pointsLabel: '{{count}} points',
+    activeToday: 'Active today',
+    search: {
+      placeholder: 'Search by username',
+      tooShort: 'Enter at least 2 characters.',
+      noResults: 'No users found.',
+      add: 'Add',
+      requested: 'Requested',
+      incoming: 'Respond below',
+      friends: 'Friends',
+      error: "We couldn't search right now. Please try again.",
+    },
+    requests: {
+      title: 'Friend requests',
+      accept: 'Accept',
+      decline: 'Decline',
+      error: "We couldn't do that. Please try again.",
+    },
+    remove: {
+      label: 'Remove',
+      confirmTitle: 'Remove this friend?',
+      confirmBody: 'You can send a new request later if you change your mind.',
+      confirm: 'Remove',
+      cancel: 'Cancel',
+      error: "We couldn't remove this friend. Please try again.",
+    },
   },
 };
 
