@@ -10,7 +10,7 @@ jest.mock('../state/auth-store', () => ({
   useAuthStore: { getState: () => mockGetState() },
 }));
 
-import { createSession, joinSession, leaveSession, markBlockerReady } from './api-client';
+import { createSession, joinSession, leaveSession, markBlockerReady, rejoinSession } from './api-client';
 
 const AUTHENTICATED = {
   auth: {
@@ -103,6 +103,34 @@ describe('joinSession', () => {
     mockFetch.mockResolvedValue(jsonResponse(409, { error: { code, message: 'nope' } }));
 
     const result = await joinSession('qr-token-value');
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.code).toBe(expectedCode);
+  });
+});
+
+describe('rejoinSession', () => {
+  it('posts to /sessions/:id/rejoin with no body — no token to send', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(201, { sessionId: 's1' }));
+
+    const result = await rejoinSession('s1');
+
+    expect(result).toEqual({ ok: true, value: { sessionId: 's1' } });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/sessions/s1/rejoin');
+    expect(JSON.parse(init.body as string)).toEqual({});
+  });
+
+  it.each`
+    code                          | expectedCode
+    ${'session_not_found'}        | ${'session_not_found'}
+    ${'session_not_joinable'}     | ${'session_not_joinable'}
+    ${'not_a_prior_participant'}  | ${'not_a_prior_participant'}
+    ${'session_at_capacity'}      | ${'session_at_capacity'}
+  `('surfaces the $code failure code from the server untouched', async ({ code, expectedCode }) => {
+    mockFetch.mockResolvedValue(jsonResponse(409, { error: { code, message: 'nope' } }));
+
+    const result = await rejoinSession('s1');
 
     expect(result.ok).toBe(false);
     expect(!result.ok && result.error.code).toBe(expectedCode);

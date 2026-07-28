@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 
 import type { RootStackParamList } from '../navigation/types';
-import { joinSession } from '../services/api-client';
+import { joinSession, rejoinSession } from '../services/api-client';
 import { radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Session Details (Screen 8): pre-join confirmation. This is where the
@@ -15,6 +15,13 @@ import { radius, sizing, spacing, typography } from '../theme/tokens';
 // the host for a new one, etc.). Every join_session() outcome
 // (sessions-store.ts's JoinOutcome on the server) maps to its own copy key
 // here — never a single generic "join failed" message.
+//
+// Also doubles as Screen 13's rejoin confirmation (Phase 4 task 12,
+// ARCHITECTURE.md §2 item 13): route.params carries either a scanned QR
+// `token` (normal join) or a bare `sessionId` (Welcome Back's token-free
+// rejoin) — never both, RootStackParamList models them as a discriminated
+// union. Same screen, same CTA shape, only the copy and which api-client
+// call fires differ.
 type SessionDetailsScreenProps = NativeStackScreenProps<RootStackParamList, 'SessionDetails'>;
 
 const ERROR_KEYS: ReadonlySet<string> = new Set([
@@ -23,17 +30,20 @@ const ERROR_KEYS: ReadonlySet<string> = new Set([
   'qr_token_expired',
   'session_at_capacity',
   'invalid_qr_token',
+  'not_a_prior_participant',
 ]);
 
 const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps): React.JSX.Element => {
   const { t } = useTranslation();
   const [joining, setJoining] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const isRejoin = !('token' in route.params);
 
   const handleJoin = (): void => {
     setErrorKey(null);
     setJoining(true);
-    joinSession(route.params.token)
+    const result$ = isRejoin ? rejoinSession(route.params.sessionId) : joinSession(route.params.token);
+    result$
       .then((result) => {
         setJoining(false);
         if (!result.ok) {
@@ -51,8 +61,8 @@ const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps):
   return (
     <View style={styles.container} testID="session-details-screen">
       <View style={styles.content}>
-        <Text style={styles.title}>{t('sessionDetails.title')}</Text>
-        <Text style={styles.body}>{t('sessionDetails.body')}</Text>
+        <Text style={styles.title}>{t(isRejoin ? 'sessionDetails.rejoinTitle' : 'sessionDetails.title')}</Text>
+        <Text style={styles.body}>{t(isRejoin ? 'sessionDetails.rejoinBody' : 'sessionDetails.body')}</Text>
         {errorKey !== null && (
           <Text style={styles.error} testID="session-details-error">
             {t(`sessionDetails.errors.${errorKey}`)}
@@ -66,7 +76,9 @@ const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps):
         testID="session-details-join"
       >
         <Text style={styles.primaryCtaLabel}>
-          {joining ? t('sessionDetails.joining') : t('sessionDetails.join')}
+          {joining
+            ? t(isRejoin ? 'sessionDetails.rejoining' : 'sessionDetails.joining')
+            : t(isRejoin ? 'sessionDetails.rejoin' : 'sessionDetails.join')}
         </Text>
       </TouchableOpacity>
     </View>

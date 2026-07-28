@@ -9,6 +9,7 @@ import { useAppBlocker } from '../hooks/use-app-blocker';
 import { useHostMigrationToast } from '../hooks/use-host-migration-toast';
 import { useSession } from '../hooks/use-session';
 import type { RootStackParamList } from '../navigation/types';
+import { setActiveSession } from '../state/active-session-store';
 import { useAuthStore } from '../state/auth-store';
 import { radius, sizing, spacing, typography } from '../theme/tokens';
 
@@ -55,6 +56,13 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
     const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
+
+  // From this mount on, an interrupted relaunch (killed app, dropped past
+  // the offline cutoff) has a session to offer Screen 13 (Welcome Back) a
+  // rejoin for — cleared again once SessionCompletionScreen mounts.
+  useEffect(() => {
+    setActiveSession(route.params.sessionId);
+  }, [route.params.sessionId]);
 
   // Absolute server timestamp, never "now + duration" (ARCHITECTURE.md §8
   // item 5) — derived from the server-issued started_at, not the device

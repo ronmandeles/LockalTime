@@ -51,12 +51,19 @@ export const en = {
     body: "You're about to join a session. Distracting apps will stay blocked for everyone present until it ends.",
     join: 'Join session',
     joining: 'Joining…',
+    // Screen 13's "Welcome Back" flow (Phase 4 task 12) reuses this screen
+    // for a token-free rejoin — same CTA testID/behavior, distinct copy.
+    rejoinTitle: 'Rejoin this session?',
+    rejoinBody: "You're picking back up a session you were already part of. Distracting apps will stay blocked for everyone present until it ends.",
+    rejoin: 'Rejoin session',
+    rejoining: 'Rejoining…',
     errors: {
       session_not_found: "This session doesn't exist or has already ended.",
       session_not_joinable: 'This session is no longer accepting new people.',
       qr_token_expired: "This QR code has expired. Ask the host for a new one.",
       session_at_capacity: 'This session is full.',
       invalid_qr_token: "That code isn't valid. Check it and try again.",
+      not_a_prior_participant: "You weren't part of this session, so it can't be rejoined this way.",
       unknown: "Something went wrong joining. Please try again.",
     },
   },
@@ -125,6 +132,16 @@ export const en = {
     done: 'Done',
     loading: 'Calculating your points…',
     notReady: "Your results aren't ready yet — check History in a moment.",
+  },
+  // Screen 13 — Welcome Back / Session Interrupted (Phase 4 task 12,
+  // ARCHITECTURE.md §2 item 13). Shows elapsed presence TIME, deliberately
+  // never a points figure: an in-progress session has no authoritative
+  // points value yet (bonuses aren't decided until it ends), and the
+  // Money-Equivalent Logic Rule (CLAUDE.md) forbids showing anything else.
+  welcomeBack: {
+    title: 'Welcome back',
+    minutesElapsed: '{{count}} minutes into this session so far',
+    rejoin: 'Rejoin session',
   },
   // Onboarding copy is PLACEHOLDER, flagged for the deferred copy pass. Each
   // page resolves one hesitation (DESIGN_GUIDELINES §9): why this app / how

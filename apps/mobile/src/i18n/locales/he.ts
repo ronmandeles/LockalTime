@@ -49,12 +49,17 @@ export const he: TranslationSchema = {
     body: 'אתם עומדים להצטרף לסשן. אפליקציות מסיחות דעת יישארו חסומות לכל הנוכחים עד לסיומו.',
     join: 'הצטרפות לסשן',
     joining: 'מצטרפים…',
+    rejoinTitle: 'לחזור לסשן הזה?',
+    rejoinBody: 'אתם חוזרים לסשן שכבר הייתם חלק ממנו. אפליקציות מסיחות דעת יישארו חסומות לכל הנוכחים עד לסיומו.',
+    rejoin: 'חזרה לסשן',
+    rejoining: 'חוזרים…',
     errors: {
       session_not_found: 'הסשן הזה לא קיים או שכבר הסתיים.',
       session_not_joinable: 'הסשן הזה כבר לא מקבל אנשים חדשים.',
       qr_token_expired: 'קוד ה-QR הזה פג תוקף. בקשו מהמארח קוד חדש.',
       session_at_capacity: 'הסשן הזה מלא.',
       invalid_qr_token: 'הקוד הזה לא תקין. בדקו אותו ונסו שוב.',
+      not_a_prior_participant: 'לא הייתם חלק מהסשן הזה, אז אי אפשר לחזור אליו בדרך הזו.',
       unknown: 'משהו השתבש בהצטרפות. נסו שוב.',
     },
   },
@@ -115,6 +120,11 @@ export const he: TranslationSchema = {
     done: 'סיום',
     loading: 'מחשבים את הנקודות שלכם…',
     notReady: 'התוצאות שלכם עדיין לא מוכנות — בדקו בהיסטוריה בעוד רגע.',
+  },
+  welcomeBack: {
+    title: 'ברוכים השבים',
+    minutesElapsed: '{{count}} דקות בתוך הסשן הזה עד כה',
+    rejoin: 'חזרה לסשן',
   },
   onboarding: {
     pages: {

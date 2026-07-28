@@ -19,6 +19,8 @@ import PermissionPrimingScreen from './screens/PermissionPrimingScreen';
 import ScanSessionScreen from './screens/ScanSessionScreen';
 import SessionCompletionScreen from './screens/SessionCompletionScreen';
 import SessionDetailsScreen from './screens/SessionDetailsScreen';
+import WelcomeBackScreen from './screens/WelcomeBackScreen';
+import { hydrateActiveSessionStatus, useActiveSessionStore } from './state/active-session-store';
 import { attachAuthStateListener, useAuthStore } from './state/auth-store';
 import { hydrateOnboardingStatus, markOnboardingSeen, useOnboardingStore } from './state/onboarding-store';
 import {
@@ -52,6 +54,10 @@ const App = (): React.JSX.Element | null => {
   const onboarding = useOnboardingStore((state) => state.onboarding);
   const permissionStep = usePermissionStore((state) => state.permissionStep);
   const auth = useAuthStore((state) => state.auth);
+  const activeSession = useActiveSessionStore((state) => state.activeSession);
+  const pendingWelcomeBackNavigation = useActiveSessionStore(
+    (state) => state.pendingWelcomeBackNavigation,
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -66,6 +72,7 @@ const App = (): React.JSX.Element | null => {
     // reject (fail-open inside the stores).
     hydrateOnboardingStatus();
     hydratePermissionStepStatus();
+    hydrateActiveSessionStatus();
 
     initI18n().then((instance) => {
       // initI18n only ever resolves to a supported language, so narrowing by
@@ -86,10 +93,11 @@ const App = (): React.JSX.Element | null => {
   if (
     i18nInstance === null ||
     onboarding.status === 'hydrating' ||
-    permissionStep.status === 'hydrating'
+    permissionStep.status === 'hydrating' ||
+    activeSession.status === 'hydrating'
   ) {
     // Blank gate until the i18n instance is ready (rendering earlier would
-    // flash raw translation keys) AND both gate flags are hydrated (deciding
+    // flash raw translation keys) AND every gate flag is hydrated (deciding
     // earlier would flash the wrong first screen).
     return null;
   }
@@ -131,19 +139,56 @@ const App = (): React.JSX.Element | null => {
     );
   }
 
+  if (
+    activeSession.status === 'ready' &&
+    activeSession.lastActiveSessionId !== null &&
+    pendingWelcomeBackNavigation === null
+  ) {
+    // Screen 13 (ARCHITECTURE.md §2 item 13): a pre-navigator conditional
+    // gate, same rationale as onboarding/permission above — it resolves
+    // what the one NavigationContainer mount below should do
+    // (resolveWelcomeBack, read via pendingWelcomeBackNavigation), so it
+    // never sits on the navigator stack itself. Runs after auth (only a
+    // signed-in user can have an interrupted session) and after the other
+    // one-time gates (a first-run user can't have one either).
+    return (
+      <I18nProvider i18n={i18nInstance}>
+        <WelcomeBackScreen sessionId={activeSession.lastActiveSessionId} />
+      </I18nProvider>
+    );
+  }
+
+  // Welcome Back resolves into exactly one of these two non-Home entry
+  // points (or nothing, staying on Home) — React Navigation's
+  // initialRouteName/initialParams are read once at this one mount, which
+  // is only reached after the gate above already settled.
+  const initialRouteName = pendingWelcomeBackNavigation?.screen ?? 'Home';
+
   return (
     <I18nProvider i18n={i18nInstance}>
       <NavigationContainer>
         {/* Header hidden: the navigator's screen name is a route id, not
             user-facing copy. */}
-        <RootStack.Navigator screenOptions={{ headerShown: false }}>
+        <RootStack.Navigator screenOptions={{ headerShown: false }} initialRouteName={initialRouteName}>
           <RootStack.Screen name="Home" component={HomeScreen} />
           <RootStack.Screen name="CreateSession" component={CreateSessionScreen} />
           <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
-          <RootStack.Screen name="SessionDetails" component={SessionDetailsScreen} />
+          <RootStack.Screen
+            name="SessionDetails"
+            component={SessionDetailsScreen}
+            {...(pendingWelcomeBackNavigation?.screen === 'SessionDetails'
+              ? { initialParams: { sessionId: pendingWelcomeBackNavigation.sessionId } }
+              : {})}
+          />
           <RootStack.Screen name="ActiveSession" component={ActiveSessionScreen} />
           <RootStack.Screen name="EmergencyExit" component={EmergencyExitScreen} />
-          <RootStack.Screen name="SessionCompletion" component={SessionCompletionScreen} />
+          <RootStack.Screen
+            name="SessionCompletion"
+            component={SessionCompletionScreen}
+            {...(pendingWelcomeBackNavigation?.screen === 'SessionCompletion'
+              ? { initialParams: { sessionId: pendingWelcomeBackNavigation.sessionId } }
+              : {})}
+          />
         </RootStack.Navigator>
       </NavigationContainer>
     </I18nProvider>

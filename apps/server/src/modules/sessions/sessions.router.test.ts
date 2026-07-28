@@ -77,6 +77,9 @@ const buildFakeStore = (): SessionsStore & {
     async joinSession(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async rejoinSession(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
     async closeOpenInterval(): Promise<never> {
       throw new Error('not used in these tests');
     },

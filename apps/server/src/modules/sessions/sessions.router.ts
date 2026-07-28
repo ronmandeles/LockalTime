@@ -10,6 +10,7 @@ import { createSession } from './create-session';
 import { endSession } from './end-session';
 import { finalizeEmergencyExit } from './finalize-emergency-exit';
 import { joinSession } from './join-session';
+import { rejoinSession } from './rejoin-session';
 import type { SessionsStore } from './sessions-store';
 
 export interface SessionsRouterDeps {
@@ -78,6 +79,29 @@ const JOIN_FAILURE_RESPONSES: Record<
     message: 'Session is not accepting new joins',
   },
   expired: { status: 410, code: 'qr_token_expired', message: 'QR token has expired' },
+  at_capacity: { status: 409, code: 'session_at_capacity', message: 'Session is at capacity' },
+};
+
+// rejoin_session()'s outcome, mapped the same way. Screen 13 (Welcome Back)
+// is the one caller — reached only when the client already believes it was
+// previously in this session, so not_a_participant is a genuine trust-boundary
+// rejection (403), not a user-facing "you typed the wrong code" scenario the
+// way invalid_token is for the token-based join.
+const REJOIN_FAILURE_RESPONSES: Record<
+  Exclude<Awaited<ReturnType<typeof rejoinSession>>['outcome'], 'joined' | 'already_joined'>,
+  { status: number; code: string; message: string }
+> = {
+  not_found: { status: 404, code: 'session_not_found', message: 'Session not found' },
+  not_joinable: {
+    status: 409,
+    code: 'session_not_joinable',
+    message: 'Session is not accepting new joins',
+  },
+  not_a_participant: {
+    status: 403,
+    code: 'not_a_prior_participant',
+    message: 'You were never a participant in this session',
+  },
   at_capacity: { status: 409, code: 'session_at_capacity', message: 'Session is at capacity' },
 };
 
@@ -152,6 +176,26 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
           return;
         }
         const failure = JOIN_FAILURE_RESPONSES[result.outcome];
+        next(new ApiError(failure.status, failure.code, failure.message));
+      })
+      .catch(next);
+  });
+
+  // Token-free counterpart to /join — Screen 13's "Welcome Back" flow
+  // (ARCHITECTURE.md §2/§4) for a gap longer than the QR token's 15-minute
+  // TTL. No body to validate: the session id comes from the URL, the caller
+  // from the verified auth token, same trust-boundary shape as /:id/leave.
+  router.post('/:id/rejoin', requireAuth, (req, res, next) => {
+    const userId = req.auth?.userId as string;
+    const sessionId = req.params.id;
+
+    rejoinSession(deps.store, { sessionId, userId })
+      .then((result) => {
+        if (result.outcome === 'joined' || result.outcome === 'already_joined') {
+          res.status(result.outcome === 'joined' ? 201 : 200).json({ sessionId });
+          return;
+        }
+        const failure = REJOIN_FAILURE_RESPONSES[result.outcome];
         next(new ApiError(failure.status, failure.code, failure.message));
       })
       .catch(next);

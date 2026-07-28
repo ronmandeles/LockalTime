@@ -5,6 +5,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 
 import App from './App';
 import { en } from './i18n/locales/en';
+import { useActiveSessionStore } from './state/active-session-store';
 
 // App bootstrap contract. The Phase 0 smoke test (testID) proves React
 // Navigation boots; the Phase 1 additions prove App actually wires the i18n
@@ -153,16 +154,27 @@ jest.mock(
 // side fails one of the two suites.
 const ONBOARDING_SEEN_KEY = '@lockal-time/onboarding-seen';
 const PERMISSION_STEP_HANDLED_KEY = '@lockal-time/permission-step-handled';
+// Pinned the same way as the other two — the real literal lives in
+// active-session-store.test.ts.
+const ACTIVE_SESSION_ID_KEY = '@lockal-time/last-active-session-id';
 
 interface PersistedFlagsStub {
   readonly onboardingSeen: boolean;
   readonly permissionHandled: boolean;
+  // undefined (the default across this suite) means no interrupted session
+  // — Screen 13 (Welcome Back) never shows, which is what every pre-Phase-4
+  // assertion in this file already assumes.
+  readonly lastActiveSessionId?: string;
 }
 
-// The two gates persist under separate keys, so the read stub must answer
+// The gates persist under separate keys, so the read stub must answer
 // per-key — a blanket resolved value could not express "onboarding seen,
 // permission step still unhandled", the state Screen 2 gating hinges on.
-const stubPersistedFlags = ({ onboardingSeen, permissionHandled }: PersistedFlagsStub): void => {
+const stubPersistedFlags = ({
+  onboardingSeen,
+  permissionHandled,
+  lastActiveSessionId,
+}: PersistedFlagsStub): void => {
   mockGetItem.mockImplementation((key) => {
     if (key === ONBOARDING_SEEN_KEY) {
       return Promise.resolve(onboardingSeen ? 'true' : null);
@@ -170,9 +182,27 @@ const stubPersistedFlags = ({ onboardingSeen, permissionHandled }: PersistedFlag
     if (key === PERMISSION_STEP_HANDLED_KEY) {
       return Promise.resolve(permissionHandled ? 'true' : null);
     }
+    if (key === ACTIVE_SESSION_ID_KEY) {
+      return Promise.resolve(lastActiveSessionId ?? null);
+    }
     return Promise.resolve(null);
   });
 };
+
+// Screen 13 (Welcome Back) reads sessions.repository's fetchSession
+// directly; SessionCompletionScreen (reachable when Welcome Back resolves
+// "the session already ended") reads fetchSessionParticipant/
+// fetchRewardsHistory. Mocked here the same way api-client is mocked in the
+// screen-level specs — this suite only needs App's gate wiring proven, not
+// these functions' own contracts (session-repository.test.ts owns those).
+const mockFetchSession = jest.fn();
+const mockFetchSessionParticipant = jest.fn();
+const mockFetchRewardsHistory = jest.fn();
+jest.mock('./services/session-repository', () => ({
+  fetchSession: (...args: unknown[]) => mockFetchSession(...args),
+  fetchSessionParticipant: (...args: unknown[]) => mockFetchSessionParticipant(...args),
+  fetchRewardsHistory: (...args: unknown[]) => mockFetchRewardsHistory(...args),
+}));
 
 interface PermissionStatusStub {
   readonly status: 'granted' | 'denied' | 'undetermined';
@@ -216,6 +246,16 @@ describe('App', () => {
     mockRemoveItem.mockResolvedValue(undefined);
     mockSetItem.mockReset();
     mockSetItem.mockResolvedValue(undefined);
+    mockFetchSession.mockReset();
+    mockFetchSessionParticipant.mockReset().mockResolvedValue({ ok: true, value: null });
+    mockFetchRewardsHistory.mockReset().mockResolvedValue({ ok: true, value: [] });
+    // The real store is a module singleton — without resetting it, one
+    // test's resolved Welcome Back outcome (a real button press updating
+    // real state) would leak into the next test's fresh App render.
+    useActiveSessionStore.setState({
+      activeSession: { status: 'hydrating' },
+      pendingWelcomeBackNavigation: null,
+    });
     // I18nManager is mocked in every test here (not just the RTL one) so the
     // bootstrap can never mutate real native layout state mid-suite.
     jest.spyOn(I18nManager, 'allowRTL').mockImplementation(() => undefined);
@@ -359,5 +399,56 @@ describe('App', () => {
     await view.unmount();
 
     expect(mockUnsubscribe).toHaveBeenCalledTimes(1);
+  });
+
+  describe('Welcome Back gate (Phase 4 task 12, Screen 13)', () => {
+    it('shows Welcome Back, not Home, when a last-active session was persisted', async () => {
+      stubPersistedFlags({ onboardingSeen: true, permissionHandled: true, lastActiveSessionId: 'session-99' });
+      mockFetchSession.mockResolvedValue({
+        ok: true,
+        value: { status: 'active', started_at: '2026-07-28T12:00:00.000Z' },
+      });
+
+      await render(<App />);
+
+      expect(await screen.findByTestId('welcome-back-screen')).toBeOnTheScreen();
+      expect(screen.queryByTestId('home-screen')).toBeNull();
+    });
+
+    it('rejoining from Welcome Back lands on Session Details in rejoin mode (no QR re-scan)', async () => {
+      stubPersistedFlags({ onboardingSeen: true, permissionHandled: true, lastActiveSessionId: 'session-99' });
+      mockFetchSession.mockResolvedValue({
+        ok: true,
+        value: { status: 'active', started_at: '2026-07-28T12:00:00.000Z' },
+      });
+      await render(<App />);
+      await fireEvent.press(await screen.findByTestId('welcome-back-rejoin'));
+
+      expect(await screen.findByTestId('session-details-screen')).toBeOnTheScreen();
+      expect(screen.getByText(en.sessionDetails.rejoinTitle)).toBeOnTheScreen();
+    });
+
+    it('routes straight to Session Completion when the session already ended while away', async () => {
+      stubPersistedFlags({ onboardingSeen: true, permissionHandled: true, lastActiveSessionId: 'session-99' });
+      mockFetchSession.mockResolvedValue({
+        ok: true,
+        value: { status: 'completed', started_at: '2026-07-28T12:00:00.000Z' },
+      });
+
+      await render(<App />);
+
+      expect(await screen.findByTestId('session-completion-screen')).toBeOnTheScreen();
+      expect(screen.queryByTestId('welcome-back-screen')).toBeNull();
+      expect(screen.queryByTestId('home-screen')).toBeNull();
+    });
+
+    it('renders Home as usual when no last-active session was persisted', async () => {
+      stubPersistedFlags({ onboardingSeen: true, permissionHandled: true });
+
+      await render(<App />);
+
+      expect(await screen.findByTestId('home-screen')).toBeOnTheScreen();
+      expect(mockFetchSession).not.toHaveBeenCalled();
+    });
   });
 });

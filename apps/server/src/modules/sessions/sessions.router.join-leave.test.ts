@@ -14,6 +14,7 @@ import type {
   HostAssignmentReason,
   JoinOutcome,
   NewSessionInput,
+  RejoinOutcome,
   RewardsHistoryRowInput,
   SessionsStore,
 } from './sessions-store';
@@ -42,14 +43,21 @@ const mintAuthToken = async (sub: string) => jwks.mintToken({ sub });
 
 const buildFakeStore = (options: {
   joinOutcome?: JoinOutcome;
+  rejoinOutcome?: RejoinOutcome;
   closeResult?: boolean;
 }): SessionsStore & {
   closeCalledWith: { sessionId: string; userId: string; reason: DisconnectReason } | null;
+  rejoinCalledWith: { sessionId: string; userId: string; maxParticipants: number } | null;
   writtenParticipants: readonly FinalizedParticipantInput[] | null;
   writtenRewards: readonly RewardsHistoryRowInput[] | null;
 } => {
   const store = {
     closeCalledWith: null as { sessionId: string; userId: string; reason: DisconnectReason } | null,
+    rejoinCalledWith: null as {
+      sessionId: string;
+      userId: string;
+      maxParticipants: number;
+    } | null,
     writtenParticipants: null as readonly FinalizedParticipantInput[] | null,
     writtenRewards: null as readonly RewardsHistoryRowInput[] | null,
     async insertSession(_input: NewSessionInput) {
@@ -58,6 +66,10 @@ const buildFakeStore = (options: {
     async insertHostAssignment(_s: string, _u: string, _r: HostAssignmentReason) {},
     async joinSession() {
       return options.joinOutcome ?? 'joined';
+    },
+    async rejoinSession(sessionId: string, userId: string, maxParticipants: number) {
+      store.rejoinCalledWith = { sessionId, userId, maxParticipants };
+      return options.rejoinOutcome ?? 'joined';
     },
     async closeOpenInterval(sessionId: string, userId: string, reason: DisconnectReason) {
       store.closeCalledWith = { sessionId, userId, reason };
@@ -236,6 +248,64 @@ describe('POST /sessions/join', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error.code).toBe('invalid_qr_token');
+  });
+});
+
+describe('POST /sessions/:id/rejoin', () => {
+  it('rejects an unauthenticated request', async () => {
+    const response = await request(buildApp(buildFakeStore({}))).post(
+      `/sessions/${SESSION_ID}/rejoin`,
+    );
+
+    expect(response.status).toBe(401);
+  });
+
+  it('returns 201 with the session id on a fresh rejoin', async () => {
+    const authToken = await mintAuthToken(USER_ID);
+    const store = buildFakeStore({ rejoinOutcome: 'joined' });
+
+    const response = await request(buildApp(store))
+      .post(`/sessions/${SESSION_ID}/rejoin`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send();
+
+    expect(response.status).toBe(201);
+    expect(response.body).toEqual({ sessionId: SESSION_ID });
+    expect(store.rejoinCalledWith).toEqual({
+      sessionId: SESSION_ID,
+      userId: USER_ID,
+      maxParticipants: expect.any(Number),
+    });
+  });
+
+  it('returns 200 (not an error) on an idempotent rejoin', async () => {
+    const authToken = await mintAuthToken(USER_ID);
+
+    const response = await request(buildApp(buildFakeStore({ rejoinOutcome: 'already_joined' })))
+      .post(`/sessions/${SESSION_ID}/rejoin`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send();
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ sessionId: SESSION_ID });
+  });
+
+  it.each`
+    outcome                | status | code
+    ${'not_found'}         | ${404} | ${'session_not_found'}
+    ${'not_joinable'}      | ${409} | ${'session_not_joinable'}
+    ${'not_a_participant'} | ${403} | ${'not_a_prior_participant'}
+    ${'at_capacity'}       | ${409} | ${'session_at_capacity'}
+  `('maps store outcome $outcome to HTTP $status / $code', async ({ outcome, status, code }) => {
+    const authToken = await mintAuthToken(USER_ID);
+
+    const response = await request(buildApp(buildFakeStore({ rejoinOutcome: outcome })))
+      .post(`/sessions/${SESSION_ID}/rejoin`)
+      .set('Authorization', `Bearer ${authToken}`)
+      .send();
+
+    expect(response.status).toBe(status);
+    expect(response.body.error.code).toBe(code);
   });
 });
 

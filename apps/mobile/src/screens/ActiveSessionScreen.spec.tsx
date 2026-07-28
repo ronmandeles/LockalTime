@@ -26,6 +26,14 @@ jest.mock('../state/auth-store', () => ({
   useAuthStore: (selector: (state: unknown) => unknown) => mockUseAuthStore(selector),
 }));
 
+// Same reason: the real store's own contract (persistence, fail-open) is
+// pinned in active-session-store.test.ts — this suite only needs to know
+// the screen calls it on mount.
+const mockSetActiveSession = jest.fn();
+jest.mock('../state/active-session-store', () => ({
+  setActiveSession: (...args: unknown[]) => mockSetActiveSession(...args),
+}));
+
 import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
@@ -105,6 +113,7 @@ describe('ActiveSessionScreen', () => {
       selector({ auth: { status: 'authenticated', session: { user: { id: 'host-1' } } } }),
     );
     mockNavigate.mockReset();
+    mockSetActiveSession.mockReset().mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -302,6 +311,16 @@ describe('ActiveSessionScreen', () => {
       await renderScreen();
 
       expect(screen.queryByTestId('active-session-emergency-exit')).toBeNull();
+    });
+  });
+
+  describe('Welcome Back gate (Phase 4 task 12)', () => {
+    it('records this session as the last-active one on mount, for a future Welcome Back prompt', async () => {
+      mockSession({}, 'active');
+
+      await renderScreen();
+
+      expect(mockSetActiveSession).toHaveBeenCalledWith('session-1');
     });
   });
 

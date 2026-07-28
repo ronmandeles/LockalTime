@@ -5,7 +5,10 @@ export type RootStackParamList = {
   Home: undefined;
   CreateSession: undefined;
   ScanSession: undefined;
-  SessionDetails: { readonly token: string };
+  // Two mutually exclusive entry modes: a scanned QR token (normal join) or
+  // a bare sessionId (Screen 13's token-free rejoin — ARCHITECTURE.md §2
+  // item 13, no QR re-scan since the session id is already known).
+  SessionDetails: { readonly token: string } | { readonly sessionId: string };
   // qrToken is only ever passed right after the HOST creates a session
   // (CreateSessionScreen has it from the create response) — a joining
   // participant's session-repository read deliberately never re-exposes

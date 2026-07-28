@@ -23,6 +23,18 @@ export type JoinOutcome =
   | 'expired'
   | 'at_capacity';
 
+// Mirrors the return values of the public.rejoin_session() Postgres function
+// exactly (supabase/migrations/20260728140000_create_rejoin_session_function.sql).
+// No 'invalid_token'/'expired' — rejoin never checks a token — but adds
+// 'not_a_participant' for a user who was never in this session at all.
+export type RejoinOutcome =
+  | 'joined'
+  | 'already_joined'
+  | 'not_found'
+  | 'not_joinable'
+  | 'not_a_participant'
+  | 'at_capacity';
+
 export interface SessionRecord {
   readonly id: string;
   readonly hostId: string;
@@ -121,6 +133,11 @@ export interface SessionsStore {
     token: string,
     maxParticipants: number,
   ): Promise<JoinOutcome>;
+  // Delegates to the rejoin_session() DB function — the token-free
+  // counterpart to joinSession() above, authorized by prior participation
+  // instead of a QR token (see that migration's header for why a still-valid
+  // token can't be assumed for this path).
+  rejoinSession(sessionId: string, userId: string, maxParticipants: number): Promise<RejoinOutcome>;
   // Closes the caller's own open presence interval. Returns false if there
   // was none to close (already left, or never joined) — a single UPDATE
   // scoped to one row, so no TOCTOU concern the way join has.
@@ -262,6 +279,19 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
       throw new ApiError(500, 'session_join_failed', error.message);
     }
     return data as JoinOutcome;
+  },
+
+  async rejoinSession(sessionId, userId, maxParticipants) {
+    const { data, error } = await client.rpc('rejoin_session', {
+      p_session_id: sessionId,
+      p_user_id: userId,
+      p_max_participants: maxParticipants,
+    });
+
+    if (error !== null) {
+      throw new ApiError(500, 'session_rejoin_failed', error.message);
+    }
+    return data as RejoinOutcome;
   },
 
   async closeOpenInterval(sessionId, userId, reason) {

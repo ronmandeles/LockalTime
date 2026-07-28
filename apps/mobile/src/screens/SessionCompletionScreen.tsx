@@ -7,6 +7,7 @@ import { useTranslation } from 'react-i18next';
 import type { RootStackParamList } from '../navigation/types';
 import { fetchRewardsHistory, fetchSessionParticipant } from '../services/session-repository';
 import type { RewardsHistoryRow, SessionParticipantRow } from '../services/session-repository';
+import { clearActiveSession } from '../state/active-session-store';
 import { useAuthStore } from '../state/auth-store';
 import { radius, sizing, spacing, typography } from '../theme/tokens';
 
@@ -34,6 +35,13 @@ const SessionCompletionScreen = ({
   // specific to tell the user either way.
   const [participant, setParticipant] = useState<SessionParticipantRow | null | undefined>(undefined);
   const [rewards, setRewards] = useState<readonly RewardsHistoryRow[]>([]);
+
+  // The session has a real, final receipt now — no longer "interrupted", so
+  // it must never trigger Screen 13 (Welcome Back) again on a future cold
+  // start.
+  useEffect(() => {
+    clearActiveSession();
+  }, []);
 
   useEffect(() => {
     if (userId === null) {

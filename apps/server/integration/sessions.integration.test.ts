@@ -293,6 +293,101 @@ describe('sessions integration (local Supabase)', () => {
     expect(outcomes).toEqual(['at_capacity', 'joined']);
   });
 
+  it('create -> join -> disconnect -> rejoin re-opens a presence interval without a token', async () => {
+    const host = await createTestUserAndToken('rejoin-host');
+    const participant = await createTestUserAndToken('rejoin-participant');
+    const stranger = await createTestUserAndToken('rejoin-stranger');
+
+    const createResponse = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ type: 'dynamic_qr', duration_mode: 'fixed', planned_duration_minutes: 30 });
+    const sessionId = createResponse.body.id as string;
+    const qrToken = createResponse.body.qrToken as string;
+
+    await request(app)
+      .post('/sessions/join')
+      .set('Authorization', `Bearer ${participant.token}`)
+      .send({ token: qrToken })
+      .expect(201);
+
+    // A user with no prior presence interval for this session is rejected —
+    // rejoin authorizes on history, never lets a stranger in without a token.
+    const strangerRejoin = await request(app)
+      .post(`/sessions/${sessionId}/rejoin`)
+      .set('Authorization', `Bearer ${stranger.token}`);
+    expect(strangerRejoin.status).toBe(403);
+    expect(strangerRejoin.body.error.code).toBe('not_a_prior_participant');
+
+    // involuntary_disconnect never finalizes — the participant may still
+    // reconnect, exactly the gap rejoin exists to close.
+    await request(app)
+      .post(`/sessions/${sessionId}/leave`)
+      .set('Authorization', `Bearer ${participant.token}`)
+      .send({ reason: 'involuntary_disconnect' })
+      .expect(200);
+
+    const { data: afterLeave } = await adminClient
+      .from('session_presence_intervals')
+      .select('left_at')
+      .eq('session_id', sessionId)
+      .eq('user_id', participant.userId)
+      .single();
+    expect(afterLeave?.left_at).not.toBeNull();
+
+    // No token in the body at all — the whole point of this endpoint.
+    const rejoinResponse = await request(app)
+      .post(`/sessions/${sessionId}/rejoin`)
+      .set('Authorization', `Bearer ${participant.token}`);
+    expect(rejoinResponse.status).toBe(201);
+    expect(rejoinResponse.body).toEqual({ sessionId });
+
+    const idempotentRejoin = await request(app)
+      .post(`/sessions/${sessionId}/rejoin`)
+      .set('Authorization', `Bearer ${participant.token}`);
+    expect(idempotentRejoin.status).toBe(200);
+
+    const { data: intervals } = await adminClient
+      .from('session_presence_intervals')
+      .select('left_at')
+      .eq('session_id', sessionId)
+      .eq('user_id', participant.userId);
+    // The original closed interval plus the new open one from rejoin — the
+    // idempotent second call above must not have opened a third.
+    expect(intervals).toHaveLength(2);
+    expect(intervals?.filter((row) => row.left_at === null)).toHaveLength(1);
+
+    // Ending now proves the Phase 4 DoD line end to end: the disconnect gap
+    // disqualifies the Completion Bonus (the participant has 2 intervals,
+    // not the required 1 — computeCompletionBonusEligibility's own unit
+    // tests own the underlying rule), but base points are still credited
+    // for both presence spans (end-session.ts includes every interval, not
+    // just the most recent one).
+    const endResponse = await request(app)
+      .post(`/sessions/${sessionId}/end`)
+      .set('Authorization', `Bearer ${host.token}`);
+    expect(endResponse.status).toBe(200);
+
+    const { data: participantRow } = await adminClient
+      .from('session_participants')
+      .select('exit_reason, completion_bonus_earned')
+      .eq('session_id', sessionId)
+      .eq('user_id', participant.userId)
+      .single();
+    expect(participantRow).toEqual({ exit_reason: 'completed', completion_bonus_earned: false });
+
+    const { data: rewardsRows } = await adminClient
+      .from('rewards_history')
+      .select('bonus_type')
+      .eq('session_id', sessionId)
+      .eq('user_id', participant.userId);
+    // Always a base row, even though the real elapsed time in this test is
+    // well under a minute (rounds to 0 base points) — the row's PRESENCE is
+    // what proves points were computed and credited, not zeroed out for
+    // having disconnected.
+    expect(rewardsRows).toEqual([{ bonus_type: 'base' }]);
+  });
+
   it('create -> join -> end produces session_participants + rewards_history rows, readable only by their own user', async () => {
     const host = await createTestUserAndToken('end-host');
     const participant = await createTestUserAndToken('end-participant');

@@ -7,8 +7,10 @@ import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
 
 const mockJoinSession = jest.fn();
+const mockRejoinSession = jest.fn();
 jest.mock('../services/api-client', () => ({
   joinSession: (...args: unknown[]) => mockJoinSession(...args),
+  rejoinSession: (...args: unknown[]) => mockRejoinSession(...args),
 }));
 
 interface DeviceLocaleStub {
@@ -36,13 +38,20 @@ const routeStub = {
   name: 'SessionDetails' as const,
   params: { token: 'qr-token-value' },
 };
+const rejoinRouteStub = {
+  key: 'SessionDetails',
+  name: 'SessionDetails' as const,
+  params: { sessionId: 'session-1' },
+};
 
-const renderScreen = async (): Promise<void> => {
+const renderScreen = async (
+  route: typeof routeStub | typeof rejoinRouteStub = routeStub,
+): Promise<void> => {
   const i18n = await initI18n();
   await i18n.changeLanguage('en');
   await render(
     <I18nProvider i18n={i18n}>
-      <SessionDetailsScreen navigation={navigationStub} route={routeStub} />
+      <SessionDetailsScreen navigation={navigationStub} route={route} />
     </I18nProvider>,
   );
 };
@@ -50,6 +59,7 @@ const renderScreen = async (): Promise<void> => {
 describe('SessionDetailsScreen', () => {
   beforeEach(() => {
     mockJoinSession.mockReset();
+    mockRejoinSession.mockReset();
     mockNavigate.mockClear();
   });
 
@@ -97,6 +107,56 @@ describe('SessionDetailsScreen', () => {
   `('renders the $code failure as its own distinct message', async ({ code, expectedMessage }) => {
     mockJoinSession.mockResolvedValue({ ok: false, error: { code, message: 'diagnostic only' } });
     await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('session-details-join'));
+
+    expect(await screen.findByText(expectedMessage)).toBeOnTheScreen();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+});
+
+// Screen 13's "Welcome Back" flow (Phase 4 task 12) reuses this screen for
+// a token-free re-entry, routed here by sessionId instead of a scanned
+// token (ARCHITECTURE.md §2 item 13: "Rejoin Session -> Session Details
+// screen directly, no QR re-scan"). Same screen, same CTA shape — only the
+// copy and which api-client function gets called differ.
+describe('SessionDetailsScreen (rejoin mode — route params has sessionId, not token)', () => {
+  beforeEach(() => {
+    mockJoinSession.mockReset();
+    mockRejoinSession.mockReset();
+    mockNavigate.mockClear();
+  });
+
+  it('renders rejoin-specific copy and CTA', async () => {
+    await renderScreen(rejoinRouteStub);
+
+    expect(screen.getByText(en.sessionDetails.rejoinTitle)).toBeOnTheScreen();
+    expect(screen.getByTestId('session-details-join')).toBeOnTheScreen();
+  });
+
+  it('rejoins using the sessionId from route params (no token involved) and navigates to ActiveSession', async () => {
+    mockRejoinSession.mockResolvedValue({ ok: true, value: { sessionId: 'session-1' } });
+    await renderScreen(rejoinRouteStub);
+
+    await fireEvent.press(screen.getByTestId('session-details-join'));
+
+    await waitFor(() => expect(mockRejoinSession).toHaveBeenCalledWith('session-1'));
+    expect(mockJoinSession).not.toHaveBeenCalled();
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('ActiveSession', { sessionId: 'session-1' }),
+    );
+  });
+
+  it.each`
+    code                        | expectedMessage
+    ${'session_not_found'}      | ${en.sessionDetails.errors.session_not_found}
+    ${'session_not_joinable'}   | ${en.sessionDetails.errors.session_not_joinable}
+    ${'session_at_capacity'}    | ${en.sessionDetails.errors.session_at_capacity}
+    ${'not_a_prior_participant'} | ${en.sessionDetails.errors.not_a_prior_participant}
+    ${'some_unmapped_code'}     | ${en.sessionDetails.errors.unknown}
+  `('renders the $code failure as its own distinct message', async ({ code, expectedMessage }) => {
+    mockRejoinSession.mockResolvedValue({ ok: false, error: { code, message: 'diagnostic only' } });
+    await renderScreen(rejoinRouteStub);
 
     await fireEvent.press(screen.getByTestId('session-details-join'));
 

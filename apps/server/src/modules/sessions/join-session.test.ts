@@ -29,6 +29,9 @@ const buildFakeStore = (
       store.joinCalledWith = { sessionId, userId, token, maxParticipants };
       return joinOutcome;
     },
+    async rejoinSession(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
     closeOpenInterval: jest.fn(async (_s: string, _u: string, _r: DisconnectReason) => true),
     insertPresenceInterval: jest.fn(),
     markBlockerReady: jest.fn(),

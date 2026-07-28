@@ -90,6 +90,17 @@ export interface JoinSessionResponse {
 export const joinSession = (token: string): Promise<ApiResult<JoinSessionResponse>> =>
   request<JoinSessionResponse>('/sessions/join', { token });
 
+// Token-free counterpart to joinSession — Screen 13's "Welcome Back" flow,
+// authorized by prior participation instead of a QR token (see
+// apps/server's rejoin_session() migration for why a still-valid token
+// can't be assumed after a relaunch or a long offline gap).
+export interface RejoinSessionResponse {
+  readonly sessionId: string;
+}
+
+export const rejoinSession = (sessionId: string): Promise<ApiResult<RejoinSessionResponse>> =>
+  request<RejoinSessionResponse>(`/sessions/${sessionId}/rejoin`, {});
+
 export type LeaveReason = 'emergency_exit' | 'involuntary_disconnect';
 
 export interface LeaveSessionResponse {

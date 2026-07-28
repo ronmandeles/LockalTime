@@ -19,6 +19,14 @@ jest.mock('../state/auth-store', () => ({
   useAuthStore: (selector: (state: unknown) => unknown) => mockUseAuthStore(selector),
 }));
 
+// Same reason: the real store's own contract (persistence, fail-open) is
+// pinned in active-session-store.test.ts — this suite only needs to know
+// the screen calls it on mount.
+const mockClearActiveSession = jest.fn();
+jest.mock('../state/active-session-store', () => ({
+  clearActiveSession: (...args: unknown[]) => mockClearActiveSession(...args),
+}));
+
 interface DeviceLocaleStub {
   readonly countryCode: string;
   readonly isRTL: boolean;
@@ -80,6 +88,7 @@ describe('SessionCompletionScreen', () => {
     mockFetchRewardsHistory.mockReset().mockResolvedValue({ ok: true, value: [] });
     (navigationStub.reset as jest.Mock).mockReset();
     mockUseAuthStore.mockReset().mockImplementation((selector) => selector(AUTHENTICATED_STATE));
+    mockClearActiveSession.mockReset().mockResolvedValue(undefined);
   });
 
   it('shows a loading state before the fetch resolves', async () => {
@@ -252,6 +261,14 @@ describe('SessionCompletionScreen', () => {
     fireEvent.press(screen.getByTestId('session-completion-done'));
 
     expect(navigationStub.reset).toHaveBeenCalledWith({ index: 0, routes: [{ name: 'Home' }] });
+  });
+
+  it('clears the last-active-session flag on mount, so Welcome Back never re-offers a finished session', async () => {
+    mockFetchSessionParticipant.mockResolvedValue({ ok: true, value: null });
+
+    await renderScreen();
+
+    expect(mockClearActiveSession).toHaveBeenCalled();
   });
 
   it('fetches using the authenticated user id and the route sessionId', async () => {

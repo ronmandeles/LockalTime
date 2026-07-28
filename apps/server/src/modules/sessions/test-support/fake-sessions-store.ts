@@ -75,6 +75,9 @@ export const buildFakeSessionsStore = (
     async joinSession(): Promise<never> {
       throw new Error('not used by sweep.test.ts');
     },
+    async rejoinSession(): Promise<never> {
+      throw new Error('not used by sweep.test.ts');
+    },
     async closeOpenInterval(sessionId, userId, reason) {
       const interval = state.intervals.find(
         (row) => row.sessionId === sessionId && row.userId === userId && row.leftAt === null,
