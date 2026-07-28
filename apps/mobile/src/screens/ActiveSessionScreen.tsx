@@ -6,8 +6,10 @@ import { useTranslation } from 'react-i18next';
 
 import { BLOCKED_CATEGORIES } from '../config/blocked-categories';
 import { useAppBlocker } from '../hooks/use-app-blocker';
+import { useHostMigrationToast } from '../hooks/use-host-migration-toast';
 import { useSession } from '../hooks/use-session';
 import type { RootStackParamList } from '../navigation/types';
+import { useAuthStore } from '../state/auth-store';
 import { radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Session statuses in which the blocker should keep running — everything
@@ -43,6 +45,11 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
   const { t } = useTranslation();
   const { session, openIntervals, status, reportOfflineTimeout } = useSession(route.params.sessionId);
   const [now, setNow] = useState(() => Date.now());
+  const currentUserId = useAuthStore((state) =>
+    state.auth.status === 'authenticated' ? state.auth.session.user.id : null,
+  );
+  // ARCHITECTURE.md §6: only the newly-promoted host sees this, nobody else.
+  const showHostMigrationToast = useHostMigrationToast(session?.host_id ?? null, currentUserId);
 
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 1000);
@@ -103,6 +110,12 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
     <View style={styles.container} testID="active-session-screen">
       <Text style={styles.title}>{t('activeSession.title')}</Text>
       <Text style={styles.status}>{statusLabel}</Text>
+
+      {showHostMigrationToast && (
+        <View style={styles.hostMigrationToast} testID="active-session-host-migration-toast">
+          <Text style={styles.hostMigrationToastText}>{t('activeSession.hostMigrationToast')}</Text>
+        </View>
+      )}
 
       {violation !== null && (
         <View style={styles.violationBanner} testID="active-session-blocker-violation">
@@ -194,6 +207,17 @@ const styles = StyleSheet.create({
     minHeight: sizing.minTouchTarget,
     textAlign: 'center',
     textAlignVertical: 'center',
+  },
+  hostMigrationToast: {
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    borderRadius: radius.md,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+  },
+  hostMigrationToastText: {
+    ...typography.caption,
+    color: '#222222',
   },
   participantRow: {
     ...typography.body,

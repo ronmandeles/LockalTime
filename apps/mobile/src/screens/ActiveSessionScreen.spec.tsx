@@ -12,6 +12,20 @@ jest.mock('../hooks/use-app-blocker', () => ({
   useAppBlocker: (...args: unknown[]) => mockUseAppBlocker(...args),
 }));
 
+const mockUseHostMigrationToast = jest.fn();
+jest.mock('../hooks/use-host-migration-toast', () => ({
+  useHostMigrationToast: (...args: unknown[]) => mockUseHostMigrationToast(...args),
+}));
+
+// Mocked directly (not the real store), same reason as
+// SessionCompletionScreen.spec.tsx: the real store drags in
+// auth-service.ts -> supabase-client.ts -> AsyncStorage (untranspiled),
+// and its own contract isn't this suite's concern.
+const mockUseAuthStore = jest.fn();
+jest.mock('../state/auth-store', () => ({
+  useAuthStore: (selector: (state: unknown) => unknown) => mockUseAuthStore(selector),
+}));
+
 import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
@@ -86,6 +100,10 @@ describe('ActiveSessionScreen', () => {
     jest.useFakeTimers({ now: new Date('2026-07-26T12:05:00.000Z') });
     mockUseSession.mockReset();
     mockUseAppBlocker.mockReset().mockReturnValue({ violation: null });
+    mockUseHostMigrationToast.mockReset().mockReturnValue(false);
+    mockUseAuthStore.mockReset().mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({ auth: { status: 'authenticated', session: { user: { id: 'host-1' } } } }),
+    );
     mockNavigate.mockReset();
   });
 
@@ -284,6 +302,28 @@ describe('ActiveSessionScreen', () => {
       await renderScreen();
 
       expect(screen.queryByTestId('active-session-emergency-exit')).toBeNull();
+    });
+  });
+
+  describe('host-migration toast', () => {
+    it('shows the toast and passes the current session/user ids through when the hook says so', async () => {
+      mockSession({ host_id: 'host-1' }, 'active');
+      mockUseHostMigrationToast.mockReturnValue(true);
+
+      await renderScreen();
+
+      expect(screen.getByTestId('active-session-host-migration-toast')).toBeOnTheScreen();
+      expect(screen.getByText(en.activeSession.hostMigrationToast)).toBeOnTheScreen();
+      expect(mockUseHostMigrationToast).toHaveBeenCalledWith('host-1', 'host-1');
+    });
+
+    it('shows no toast when the hook reports no migration', async () => {
+      mockSession({}, 'active');
+      mockUseHostMigrationToast.mockReturnValue(false);
+
+      await renderScreen();
+
+      expect(screen.queryByTestId('active-session-host-migration-toast')).toBeNull();
     });
   });
 });

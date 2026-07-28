@@ -80,6 +80,7 @@ export const he: TranslationSchema = {
     },
     qrLabel: 'שתפו קוד זה כדי לאפשר לאחרים להצטרף',
     emergencyExit: 'יציאת חירום',
+    hostMigrationToast: 'אתם מארחים עכשיו',
     blockerViolation: {
       message: {
         permission_revoked: 'הרשאת החסימה בוטלה — הסשן הזה כבר לא נאכף.',

@@ -82,6 +82,7 @@ export const en = {
     },
     qrLabel: 'Share this code to let others join',
     emergencyExit: 'Emergency exit',
+    hostMigrationToast: "You're hosting now",
     blockerViolation: {
       message: {
         permission_revoked: 'Blocking permission was turned off — this session is no longer enforced.',
