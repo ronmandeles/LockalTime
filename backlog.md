@@ -150,13 +150,60 @@ Prerequisites: Phase 6.
 **DoD:** a user can see friend activity without any friend's individual session data being exposed beyond what the privacy design explicitly allows; adding/removing a friend is instant and RLS-verified from both sides.
 
 ## Phase 7 — Release Prep
-Prerequisites: Phase 6.
+Prerequisites: Phase 6 (Phase 6.5 also complete, sits ahead of Phase 6 on `dev`).
 
-- [ ] Restore Android release ABIs: `apps/mobile/android/gradle.properties` `reactNativeArchitectures` is set to `arm64-v8a` only — a single ABI for fast dev builds against the physical phone over USB (this PC's GPU can't run the emulator) — restore the real device set (at least `arm64-v8a,armeabi-v7a,x86_64`) before any Play Store build
-- [ ] App Store Screen Time entitlement — confirm approval status, or document fallback plan
-- [ ] Privacy nutrition labels (confirm: no geolocation, no contacts collected)
-- [ ] Detox/Maestro E2E suite across golden paths (create → join → complete; create → emergency exit)
-- [ ] Load-test Realtime channel at target concurrency
+**Planned 2026-07-28** (see conversation) as an end-to-end phase plan before any code, per the working contract — this phase touches nearly every item on `CLAUDE.md`'s "known gaps" list, so each one was surfaced and confirmed before task-writing rather than assumed. Locked decisions:
+- **Production API hosting:** a PaaS (Railway/Render/Fly.io-style), not serverless — the sweep/streak-expiry/streak-risk-notification workers are long-running `setInterval` processes (Phase 4/5/5.5 decisions) that would need real rearchitecting to run on a stateless serverless platform; a PaaS runs them as-is.
+- **iOS build:** a cloud macOS CI runner (GitHub Actions `macos-latest`) gets added to `ci.yml` this phase — the first real compile of the Swift blocker code (`apps/mobile/ios/LockalTime/Blocking/`, written since Phase 3 task 3.6, never built) happens here, not deferred further.
+- **Observability:** minimal crash/error monitoring (Sentry or equivalent) added to both workspaces before shipping to real users — a small, well-scoped addition given how much native code has never run on real hardware.
+- **Color palette:** the real palette replaces `DESIGN_GUIDELINES.md`'s deferred neutral-grayscale tokens in this phase, not a later one.
+- **Legal content:** placeholder ToS/Privacy Policy drafted this phase (covering the app's actual data footprint — session/points data, device tokens, attestation raw responses, friend graph, username, venue data; explicitly no geolocation/contacts) for owner review, not a lawyer-reviewed final version.
+- **Data retention:** account data is retained for the life of the account and cascade-deleted on account deletion (matches the schema's existing `on delete cascade` chain) — the policy line the privacy label/policy state.
+- **Push + attestation credentials:** obtaining real Firebase/APNs credentials and Play Integrity/App Attest credentials is in scope this phase (owner-actioned, same shape as the existing Family Controls entitlement task) rather than shipping v1 permanently inert on both.
+- **Launch strategy:** TestFlight + Play internal testing precede public submission — this app has an unusually large "manual QA pending" list, and a beta ring is what actually closes it against real hardware.
 
-**DoD:** E2E suite green on CI against staging Supabase; entitlement approved or fallback documented.
+Two real gaps surfaced during planning that the original five-line draft never named, folded in below: **no account-deletion flow exists anywhere in the app** — a hard App Store (guideline 5.1.1v) and Play Store requirement for any app that supports account creation. And: the Express API has no rate-limiting or security headers (`helmet`) at all — fine for a dev-only local stack, not fine for a public production endpoint.
+
+Explicitly out of scope for this phase (confirmed, not overlooked): B2B self-serve monetization / a real Verified Host application flow (`ARCHITECTURE.md` §10 already calls this "V2, explicitly deferred"); a marketing site/roadmap beyond the store listing itself; product-roadmap milestones (beta/launch dates) — a scheduling decision, not an engineering task.
+
+Task order (grouped by track; a track's tasks are prerequisites for later tracks where noted):
+
+**Infra & deployment**
+- [ ] Staging Supabase project (`LockalTime-staging`, decided in `CLAUDE.md`, not yet created): provision it, push every migration, and specifically re-verify `service_role` grants land — the exact miss `docs/MANUAL_QA.md` already documents twice for the production project
+- [ ] Provision production `apps/server` hosting on a PaaS; wire real env vars/secrets (Supabase service-role key, QR-signing HMAC secret, JWKS config) outside the repo; confirm the sweep/streak-expiry/streak-risk-notification pollers run continuously under it
+- [ ] API hardening: `helmet` (security headers) + rate-limiting on public endpoints, prioritizing the highest-abuse surface (`POST /sessions`, `/sessions/join`, `/sessions/join-venue`, `/friends/search`)
+- [ ] CI: staging-deploy workflow (GitHub Actions secrets for the staging Supabase project + PaaS deploy token), triggered on merge to a release branch or manually
+
+**iOS build** *(blocked on confirming Apple Developer Program enrollment status first — see Credentials track)*
+- [ ] Cloud macOS CI: add a `macos-latest` job to `ci.yml`, perform the one-time Xcode project wiring `docs/MANUAL_QA.md` already documents (add `Blocking/` Swift files + bridging header, App Groups/Family Controls capabilities, the `DeviceActivityMonitorExtension` target, `pod install`) — the first real `xcodebuild` compile of this codebase
+- [ ] Swift code-review pass `docs/MANUAL_QA.md` already flags as a prerequisite before device time (the `scheduleMonitoring` midnight-spanning-session edge case especially)
+- [ ] App Store Screen Time entitlement — confirm approval status, or document fallback plan (carried over from the original draft)
+- [ ] iOS release signing: distribution certificate + provisioning profile, once the entitlement and Apple Developer enrollment are confirmed
+
+**Android release**
+- [ ] Restore release ABIs: `apps/mobile/android/gradle.properties`'s `reactNativeArchitectures` back to the real device set (at least `arm64-v8a,armeabi-v7a,x86_64`) — currently pinned to `arm64-v8a` only for fast USB-connected dev builds (carried over from the original draft)
+- [ ] Android release signing: generate a real release keystore, wire the Gradle signing config, store keystore/passwords as CI/PaaS secrets, never in the repo
+- [ ] Confirm physical Android device availability/status — nearly all of Phase 3's native-enforcement manual QA (actual blocking, boot persistence, permission round-trips) has never run on real hardware; this is a release-blocking prerequisite, not optional polish
+
+**Store readiness, legal, branding**
+- [ ] Draft placeholder ToS + Privacy Policy (mine to write this phase, per the locked decision above); decide and stand up a stable hosting URL for them
+- [ ] In-app ToS/Privacy Policy acceptance during onboarding/auth (currently no acceptance UI exists anywhere)
+- [ ] **Account deletion flow** (new scope, not polish): a Node endpoint or direct RLS-permitted path that deletes the `auth.users` row and lets the schema's existing cascade chain clean up every dependent table, plus a mobile confirmation screen
+- [ ] Real color palette pass across every screen, replacing the neutral-grayscale tokens; update `DESIGN_GUIDELINES.md`'s "intentionally deferred" note
+- [ ] App icon design (all required iOS sizes + Android adaptive icon) — currently just React Native's empty placeholder `AppIcon.appiconset`
+- [ ] Privacy nutrition label (Apple) / Data Safety form (Google) — now backed by a real data-collected audit (points/rewards, device tokens, attestation `raw_response`, friend graph, username, venue data) and the retention policy above
+- [ ] App Store Connect / Google Play Console listing content: screenshots, description, keywords, support URL, category, age rating
+- [ ] Crash/error monitoring (Sentry or equivalent) wired into both `apps/server` and `apps/mobile`
+
+**Credentials** *(owner-actioned account/credential creation; the code and runbook side is buildable now, real activation is not)*
+- [ ] Confirm Apple Developer Program + Google Play Console account enrollment status — prerequisite to nearly everything in the iOS/Android/store tracks above
+- [ ] Firebase project + FCM credentials, Apple Push key: obtain, then wire the real `NotificationSender` adapter (replacing `unconfiguredNotificationSender`) and link a real native push SDK (replacing `pushRegistration`'s placeholder)
+- [ ] Play Integrity service account + App Attest DeviceCheck key: obtain, then wire real adapters (replacing `unconfiguredAttestationProvider`), review `verdictToTrustTier()`'s denylist against real verdict data, and flip `ATTESTATION_ENFORCEMENT_ENABLED=true`
+
+**Quality gates**
+- [ ] Detox/Maestro E2E suite across golden paths (create → join → complete; create → emergency exit), run in CI against the new staging deployment (carried over from the original draft)
+- [ ] Load-test the Realtime channel — proposed default target: 500 concurrent connections (modeling a launch-day mix of ~10 simultaneous venue-scale `static_qr` sessions near their 200-participant `VENUE_SESSION_MAX_PARTICIPANTS` cap); confirm/adjust the number before running
+- [ ] TestFlight + Play internal testing track: real beta users on real devices, closing the manual-QA gap hardware constraints have left open across the whole project
+
+**DoD:** E2E suite green in CI against a real staging deployment (not just local Supabase); production API deployed and reachable with hardened security headers/rate-limiting; account deletion works end-to-end and is reachable from the app; ToS/Privacy Policy content exists and is linked from onboarding; iOS compiles for the first time via cloud CI; Android release build uses the restored multi-ABI + real signing config; both store listings' privacy labels are accurate; a beta ring has run on real hardware before public submission. Entitlement/credential items (Family Controls, FCM/APNs, Play Integrity/App Attest) are approved, or the fallback is explicitly documented — the same "confirmed or documented" bar the original draft's DoD already set.
 
