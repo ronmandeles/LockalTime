@@ -94,10 +94,28 @@ if ext_target.nil?
   ext_target.add_file_references([ext_swift_ref])
 
   # SharedAppGroup.swift lives in the main app's Blocking/ group but must
-  # compile into BOTH targets -- one file reference, two targets, never
-  # duplicated (docs/MANUAL_QA.md's original instruction).
+  # compile into BOTH targets. docs/MANUAL_QA.md's original (manual, Xcode
+  # GUI) instruction shared ONE file reference across both targets'
+  # membership -- reusing blocking_group's existing reference here hit a
+  # real, CI-caught build error ("Build input file cannot be found:
+  # .../ios/Blocking/SharedAppGroup.swift", missing the LockalTime/ path
+  # segment) that only manifested for the SECOND (extension) target's
+  # Sources build phase referencing that shared fileRef -- some group-path-
+  # resolution interaction with a <group>-sourceTree reference used by two
+  # targets that this project's structure doesn't play well with. Rather
+  # than keep guessing at that blind, this creates a SECOND
+  # PBXFileReference for the extension target specifically, with an
+  # explicit path from the project root (main_group's own sourceTree, the
+  # same anchor DeviceActivityMonitorExtension.swift above already resolves
+  # correctly from) -- Xcode shows the file twice in the navigator, but
+  # both reference the identical physical file, and per-target file
+  # references are a normal, fully supported Xcode pattern (the "shared
+  # Target Membership checkbox" is a GUI convenience, not the only valid
+  # way to compile one file into two targets).
   raise "SharedAppGroup.swift file reference not found" if shared_app_group_ref.nil?
-  ext_target.add_file_references([shared_app_group_ref])
+  ext_shared_app_group_ref = project.main_group.new_reference('LockalTime/Blocking/SharedAppGroup.swift')
+  ext_shared_app_group_ref.name = 'SharedAppGroup.swift'
+  ext_target.add_file_references([ext_shared_app_group_ref])
 
   ext_target.build_configurations.each do |config|
     # Phase 7 debugging note: project.new_target(:app_extension, ...) does
