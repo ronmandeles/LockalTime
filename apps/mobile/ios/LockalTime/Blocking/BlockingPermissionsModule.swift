@@ -1,5 +1,10 @@
 import FamilyControls
 import Foundation
+// React Native visibility (RCTPromiseResolveBlock/RCTPromiseRejectBlock) —
+// see AppBlockerModule.swift's identical comment for why this Swift-module
+// import, not the bridging header, is the mechanism this RN template
+// actually needs (confirmed by real xcodebuild CI, Phase 7).
+import React
 import SwiftUI
 import UIKit
 

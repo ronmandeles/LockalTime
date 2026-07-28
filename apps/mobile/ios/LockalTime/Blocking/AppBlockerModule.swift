@@ -3,6 +3,16 @@ import FamilyControls
 import Foundation
 import ManagedSettings
 import Network
+// React Native visibility (RCTEventEmitter, RCTPromiseResolveBlock/
+// RCTPromiseRejectBlock) via the same Swift-module import
+// AppDelegate.swift already uses successfully (confirmed by real
+// xcodebuild CI, Phase 7) -- this RN template is Swift-native
+// (CocoaPods modular headers), not classic bridging-header-only
+// Objective-C interop, so `import React` is the actual mechanism, not
+// LockalTime-Bridging-Header.h's #import lines (which this file doesn't
+// need once this import is present, but are left in place as a harmless,
+// documented fallback for any future Objective-C-only file added here).
+import React
 
 // Phase 3 task 3.6 (backlog.md): the real iOS AppBlockerModule
 // (apps/mobile/src/services/app-blocker.ts's native seam). Applies the
