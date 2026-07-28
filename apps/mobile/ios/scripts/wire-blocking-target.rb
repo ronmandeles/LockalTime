@@ -100,6 +100,16 @@ if ext_target.nil?
   ext_target.add_file_references([shared_app_group_ref])
 
   ext_target.build_configurations.each do |config|
+    # Phase 7 debugging note: project.new_target(:app_extension, ...) does
+    # NOT default PRODUCT_NAME the way Xcode's own "New Target" wizard
+    # does -- left unset, it resolves to an empty string, so the built
+    # product is literally named ".appex" (no name before the extension),
+    # and Xcode's build system treats the per-arch merge step and the
+    # product's own output as two commands colliding on that one identical
+    # (empty) path -- "Multiple commands produce '.../.appex'". Caught by
+    # the real ios-build CI run (.github/workflows/ci.yml), not locally
+    # (no Mac to catch it with beforehand).
+    config.build_settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
     config.build_settings['INFOPLIST_FILE'] = 'LockalTimeBlockerExtension/Info.plist'
     config.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'LockalTimeBlockerExtension/LockalTimeBlockerExtension.entitlements'
     config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = EXTENSION_BUNDLE_ID
