@@ -28,6 +28,7 @@ Known gaps not yet designed (do not assume these are decided — ask before buil
 - **Documentation-first close-out:** a task isn't done until `backlog.md` has it checked `[x]` and any `.md` file whose claims changed (e.g., `ARCHITECTURE.md` for a new service, `DATABASE.md` for a schema change) is updated in the same turn.
 - **Skills system:** read the relevant skill(s) in `.claude/skills/` before starting a coding task; if a needed convention doesn't exist yet, add a new `.claude/skills/<name>/SKILL.md` (with `name`/`description` frontmatter) alongside the code, not after.
 - **Commits:** only when explicitly asked — self-pacing through tasks doesn't imply auto-committing. Exception: an explicitly requested unattended/background autonomous run over `backlog.md` commits **and pushes to `origin`** after each task closes (full suite green + docs updated), giving a checkpoint to recover from if something later in the run goes wrong.
+- **Branching (owner decision, 2026-07-28):** every feature and every phase gets its own branch off `dev` (e.g. `phase5-gamification-stats`), merged back into `dev` once it closes (full suite green + docs updated) — solo-dev workflow, no PR review step needed, but still a real branch + merge rather than committing straight to `dev`. `main` is left alone by this cadence; when `main` gets updated from `dev` is a separate, not-yet-decided call.
 
 ## Money-Equivalent Logic Rule
 
