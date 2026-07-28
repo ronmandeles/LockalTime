@@ -72,6 +72,21 @@ def enableProguardInReleaseBuilds = false
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Phase 7 (Release Prep) release signing. keystore.properties is gitignored
+// and does not exist until the owner runs docs/DEPLOYMENT.md's runbook
+// (generates a real keystore via `keytool`, never committed) — loaded here
+// if present so a real release build picks it up with no code change;
+// falls back to the debug keystore otherwise so `./gradlew assembleRelease`
+// still works for local testing before that keystore exists (same posture
+// as unconfiguredAttestationProvider: a real seam, honestly inert until
+// real credentials land, never a fabricated stand-in).
+def keystorePropertiesFile = rootProject.file("keystore.properties")
+def keystoreProperties = new Properties()
+def hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+}
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     buildToolsVersion rootProject.ext.buildToolsVersion
@@ -92,15 +107,28 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+        if (hasReleaseKeystore) {
+            release {
+                storeFile file(keystoreProperties['RELEASE_STORE_FILE'])
+                storePassword keystoreProperties['RELEASE_STORE_PASSWORD']
+                keyAlias keystoreProperties['RELEASE_KEY_ALIAS']
+                keyPassword keystoreProperties['RELEASE_KEY_PASSWORD']
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // Caution! In production, you need to generate your own keystore file.
-            // see https://reactnative.dev/docs/signed-apk-android.
-            signingConfig signingConfigs.debug
+            // Real release signing once android/keystore.properties exists
+            // (docs/DEPLOYMENT.md's runbook) — falls back to the debug
+            // keystore otherwise, same as the stock RN template, so a
+            // release build stays buildable for local testing before then.
+            // Google Play's own listing would reject a debug-signed build,
+            // so this fallback is a local-build convenience only, never a
+            // production path.
+            signingConfig hasReleaseKeystore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled enableProguardInReleaseBuilds
             proguardFiles getDefaultProguardFile("proguard-android.txt"), "proguard-rules.pro"
         }
