@@ -21,6 +21,7 @@ import PermissionPrimingScreen from './screens/PermissionPrimingScreen';
 import ScanSessionScreen from './screens/ScanSessionScreen';
 import SessionCompletionScreen from './screens/SessionCompletionScreen';
 import SessionDetailsScreen from './screens/SessionDetailsScreen';
+import SettingsScreen from './screens/SettingsScreen';
 import StatsScreen from './screens/StatsScreen';
 import VenueDashboardScreen from './screens/VenueDashboardScreen';
 import VenueManagementScreen from './screens/VenueManagementScreen';
@@ -215,6 +216,7 @@ const App = (): React.JSX.Element | null => {
           <RootStack.Screen name="VenueManagement" component={VenueManagementScreen} />
           <RootStack.Screen name="VenueDashboard" component={VenueDashboardScreen} />
           <RootStack.Screen name="Friends" component={FriendsScreen} />
+          <RootStack.Screen name="Settings" component={SettingsScreen} />
           <RootStack.Screen name="CreateSession" component={CreateSessionScreen} />
           <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
           <RootStack.Screen

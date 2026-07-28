@@ -4,7 +4,11 @@ import { ApiError } from '../../middleware/api-error';
 
 export interface VenueRecord {
   readonly id: string;
-  readonly ownerId: string;
+  // Nullable since Phase 7's account-deletion cascade (20260801000000):
+  // owner_id is SET NULL, not CASCADEd, when its owning host deletes their
+  // account — the venue (a shared B2B asset other users' sessions may
+  // still reference) survives as an orphan rather than disappearing.
+  readonly ownerId: string | null;
   readonly name: string;
   readonly addressLabel: string | null;
   // No expiry, unlike a session's qr_token (Phase 6 task 2 — a printed
@@ -27,7 +31,7 @@ export interface NewVenueInput {
 
 interface VenueRow {
   id: string;
-  owner_id: string;
+  owner_id: string | null;
   name: string;
   address_label: string | null;
   qr_token: string;

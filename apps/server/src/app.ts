@@ -11,6 +11,7 @@ import { createFriendsRouter } from './modules/friends/friends.router';
 import { createSupabaseFriendsStore } from './modules/friends/friends-store';
 import { createSessionsRouter } from './modules/sessions/sessions.router';
 import { createSupabaseSessionsStore } from './modules/sessions/sessions-store';
+import { createUsersRouter } from './modules/users/users.router';
 import { createSupabaseUsersStore } from './modules/users/users-store';
 import { createVenuesRouter } from './modules/venues/venues.router';
 import { createSupabaseVenuesStore } from './modules/venues/venues-store';
@@ -76,6 +77,14 @@ export function createApp(env: Env): Express {
     '/friends',
     createFriendsRouter({
       store: friendsStore,
+      requireAuth,
+    }),
+  );
+
+  app.use(
+    '/account',
+    createUsersRouter({
+      store: usersStore,
       requireAuth,
     }),
   );

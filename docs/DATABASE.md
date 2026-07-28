@@ -1,6 +1,6 @@
 # Lockal Time — Database Schema
 
-Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. **Phase 4 task 7** (`supabase/migrations/20260728130000_grant_host_assignments_update.sql`): `session_host_assignments` gains a `service_role` `UPDATE` grant — the original Phase 2 migration only granted `select, insert`, missed until the sweep worker's real integration test tried to close a migrated-away host's assignment row and hit `permission denied`. **Phase 4 task 12** (`supabase/migrations/20260728140000_create_rejoin_session_function.sql`): `rejoin_session()`, the token-free counterpart to `join_session()` for Screen 13's Welcome Back rejoin. **Phase 5 task 2** (`supabase/migrations/20260728150000_phase5_gamification_and_stats.sql`): `user_streaks`, `user_stats`, `user_stats_daily`, `milestones` (seeded, 6 tiers), `user_milestones` created; `users.timezone` and `session_participants.stats_applied_at` added. Three deliberate deviations from this file's original blueprint below it (see the "Bonus Computation"/"Gamification" sections for why): `user_stats.sessions_disconnected`, `user_streaks.last_session_day`, `milestones.slug`. 108/108 pgTAP passing (adds `supabase/tests/phase5_gamification_test.sql`, 28 new), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, true concurrent-join-at-capacity, and create→join→disconnect→rejoin→end (proving the disconnect gap disqualifies the Completion Bonus while base points are still credited — the Phase 4 DoD's disconnect-and-rejoin line) against the live local stack; production push pending (manual, per `CLAUDE.md`). **Phase 6** (five migrations, `20260729000000` through `20260729000500`): `grant select on public.users to service_role` (the role-authorization primitive's read path); venues gets its missing `service_role` grant plus a tightened owner-only read policy; `venues.qr_token`/`qr_token_issued_at` (the static-QR venue token) + `chk_static_qr_has_venue` + a partial unique index (one active `static_qr` session per venue) + `public.join_venue_session()`; `public.get_venue_metrics()` (the B2B dashboard's data source); `session_presence_intervals`/`session_participants.device_trust_tier` + `apply_session_stats()` re-created with a 5th `p_device_trust_tier` parameter (see "Stats/Streak/Milestone Accumulation" below). 154/154 pgTAP passing (adds `supabase/tests/phase6_hardening_test.sql` + `join_venue_session_test.sql`, 26 new), plus 17 real integration tests against the live local stack. **Phase 5.5** (two migrations, `20260730000000`-`20260730000100`): `device_tokens` (one row per `(user_id, platform)`, `service_role` select-only — registration is always a direct authenticated client write) + `users.locale` (extends the existing column-scoped `update` grant alongside `timezone`, needed so the server's first-ever user-facing text — the streak-risk push — can be localized); `user_streaks.risk_notification_sent_for` + `public.claim_streak_risk_notifications()` (the streak-risk dispatch job's atomic claim function, same `UPDATE ... RETURNING` pattern as `join_session()`). 175/175 pgTAP passing (adds `supabase/tests/phase5_5_push_notifications_test.sql`, 21 new), plus 4 real integration tests against the live local stack. **Phase 6.5** (two migrations, `20260731000000`-`20260731000100`): `users.username` (unique, not null, auto-generated at signup by a re-created `handle_new_user()`) + `friend_requests` (ephemeral — accepted or declined, never a persisted terminal status) + `friendships` (canonical `user_id_a < user_id_b` ordering) + `public.send_friend_request()`/`public.respond_to_friend_request()` (atomic Node-only functions). 209/209 pgTAP passing (adds `supabase/tests/phase6_5_social_test.sql`, 29 new; `supabase/tests/users_trigger_test.sql` gains 5 more for username generation), plus 4 real integration tests against the live local stack. This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
+Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. **Phase 4 task 7** (`supabase/migrations/20260728130000_grant_host_assignments_update.sql`): `session_host_assignments` gains a `service_role` `UPDATE` grant — the original Phase 2 migration only granted `select, insert`, missed until the sweep worker's real integration test tried to close a migrated-away host's assignment row and hit `permission denied`. **Phase 4 task 12** (`supabase/migrations/20260728140000_create_rejoin_session_function.sql`): `rejoin_session()`, the token-free counterpart to `join_session()` for Screen 13's Welcome Back rejoin. **Phase 5 task 2** (`supabase/migrations/20260728150000_phase5_gamification_and_stats.sql`): `user_streaks`, `user_stats`, `user_stats_daily`, `milestones` (seeded, 6 tiers), `user_milestones` created; `users.timezone` and `session_participants.stats_applied_at` added. Three deliberate deviations from this file's original blueprint below it (see the "Bonus Computation"/"Gamification" sections for why): `user_stats.sessions_disconnected`, `user_streaks.last_session_day`, `milestones.slug`. 108/108 pgTAP passing (adds `supabase/tests/phase5_gamification_test.sql`, 28 new), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, true concurrent-join-at-capacity, and create→join→disconnect→rejoin→end (proving the disconnect gap disqualifies the Completion Bonus while base points are still credited — the Phase 4 DoD's disconnect-and-rejoin line) against the live local stack; production push pending (manual, per `CLAUDE.md`). **Phase 6** (five migrations, `20260729000000` through `20260729000500`): `grant select on public.users to service_role` (the role-authorization primitive's read path); venues gets its missing `service_role` grant plus a tightened owner-only read policy; `venues.qr_token`/`qr_token_issued_at` (the static-QR venue token) + `chk_static_qr_has_venue` + a partial unique index (one active `static_qr` session per venue) + `public.join_venue_session()`; `public.get_venue_metrics()` (the B2B dashboard's data source); `session_presence_intervals`/`session_participants.device_trust_tier` + `apply_session_stats()` re-created with a 5th `p_device_trust_tier` parameter (see "Stats/Streak/Milestone Accumulation" below). 154/154 pgTAP passing (adds `supabase/tests/phase6_hardening_test.sql` + `join_venue_session_test.sql`, 26 new), plus 17 real integration tests against the live local stack. **Phase 5.5** (two migrations, `20260730000000`-`20260730000100`): `device_tokens` (one row per `(user_id, platform)`, `service_role` select-only — registration is always a direct authenticated client write) + `users.locale` (extends the existing column-scoped `update` grant alongside `timezone`, needed so the server's first-ever user-facing text — the streak-risk push — can be localized); `user_streaks.risk_notification_sent_for` + `public.claim_streak_risk_notifications()` (the streak-risk dispatch job's atomic claim function, same `UPDATE ... RETURNING` pattern as `join_session()`). 175/175 pgTAP passing (adds `supabase/tests/phase5_5_push_notifications_test.sql`, 21 new), plus 4 real integration tests against the live local stack. **Phase 6.5** (two migrations, `20260731000000`-`20260731000100`): `users.username` (unique, not null, auto-generated at signup by a re-created `handle_new_user()`) + `friend_requests` (ephemeral — accepted or declined, never a persisted terminal status) + `friendships` (canonical `user_id_a < user_id_b` ordering) + `public.send_friend_request()`/`public.respond_to_friend_request()` (atomic Node-only functions). 209/209 pgTAP passing (adds `supabase/tests/phase6_5_social_test.sql`, 29 new; `supabase/tests/users_trigger_test.sql` gains 5 more for username generation), plus 4 real integration tests against the live local stack. **Phase 7** (`supabase/migrations/20260801000000_account_deletion_cascades.sql`): every bare `references public.users(id)`/`references public.sessions(id)` FK left at Postgres's default `NO ACTION` gets a real `ON DELETE` action — before this migration, deleting the account of anyone who had ever hosted/joined a session or owned a venue failed outright with a foreign-key violation, i.e. account deletion only worked for a brand-new user with no history. `sessions.host_id`, `session_host_assignments.user_id`, `session_presence_intervals.user_id`, `session_participants.user_id`, and `device_attestations.user_id` all gain `ON DELETE CASCADE`; `sessions.ended_by` and `venues.owner_id` (made nullable) gain `ON DELETE SET NULL`; `rewards_history.user_id` cascades but `rewards_history.session_id` is deliberately `SET NULL` rather than cascade, so another participant's own earned-points receipt survives the session's host deleting their account. 224/224 pgTAP passing (adds `supabase/tests/phase7_release_prep_test.sql`, 15 new — a full delete-a-participant-then-delete-the-host scenario against real rows, not just constraint definitions), plus a real integration test (`apps/server/integration/account-deletion.integration.test.ts`) proving `DELETE /account` actually removes the `auth.users` row end to end and stays idempotent on retry. This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
 
 Note on RLS in production: a table's RLS policies alone don't grant access — Postgres privileges (`GRANT`) must exist too, and new tables get none by default for `anon`/`authenticated` **or `service_role`** (confirmed against the real local stack in Phase 2 task 2.3 — the Node API's own service-role writes 500'd until `service_role` got explicit grants too). See `.claude/skills/supabase-integration/SKILL.md` for the pattern (table-wide `SELECT`, column-scoped `UPDATE` to exclude fields like `role`, and a `service_role` grant for every table the Node API writes to).
 
@@ -69,7 +69,15 @@ create trigger on_auth_user_created
 -- ============================================================
 create table public.venues (
   id              uuid primary key default gen_random_uuid(),
-  owner_id        uuid not null references public.users(id),
+  owner_id        uuid references public.users(id) on delete set null,
+                    -- Phase 7: made nullable, ON DELETE SET NULL (was `not
+                    -- null references ... ` with no delete action, which
+                    -- blocked account deletion for any venue owner). A venue
+                    -- is a shared B2B asset other users' sessions may still
+                    -- reference (sessions.venue_id has no cascade of its
+                    -- own) -- it survives its owner's account deletion as
+                    -- an orphan rather than disappearing. See
+                    -- 20260801000000_account_deletion_cascades.sql.
   name            text not null,
   address_label   text,        -- free-text display only, never geocoded
   qr_token        text unique not null,  -- Phase 6: the printed venue code --
@@ -85,7 +93,16 @@ create table public.venues (
 -- ============================================================
 create table public.sessions (
   id                       uuid primary key default gen_random_uuid(),
-  host_id                  uuid not null references public.users(id),
+  host_id                  uuid not null references public.users(id) on delete cascade,
+                             -- Phase 7: the session (and everything that
+                             -- itself cascades from session_id below) is
+                             -- deleted when its host deletes their account
+                             -- -- "your data disappears with you", applied
+                             -- to the object the host created. See the
+                             -- design-choice comment atop
+                             -- 20260801000000_account_deletion_cascades.sql
+                             -- for the full reasoning and its one deliberate
+                             -- carve-out (rewards_history, below).
   venue_id                 uuid references public.venues(id),
   type                     text not null
                              check (type in ('solo', 'dynamic_qr', 'static_qr')),
@@ -99,7 +116,7 @@ create table public.sessions (
   qr_expires_at            timestamptz,
   started_at               timestamptz,
   ended_at                 timestamptz,
-  ended_by                 uuid references public.users(id),
+  ended_by                 uuid references public.users(id) on delete set null,
   end_reason               text
                              check (end_reason in ('host_ended', 'planned_duration_reached', 'force_terminated')),
   created_at               timestamptz not null default now(),
@@ -119,7 +136,10 @@ create index idx_sessions_host on public.sessions(host_id);
 create table public.session_host_assignments (
   id            uuid primary key default gen_random_uuid(),
   session_id    uuid not null references public.sessions(id) on delete cascade,
-  user_id       uuid not null references public.users(id),
+  user_id       uuid not null references public.users(id) on delete cascade,
+                  -- Phase 7: was missing an ON DELETE action -- a
+                  -- migrated-away past host deleting their account while
+                  -- the session still exists must not be blocked.
   assigned_at   timestamptz not null default now(),
   unassigned_at timestamptz,
   reason        text not null check (reason in ('initial_host', 'migration'))
@@ -133,7 +153,10 @@ create index idx_host_assignments_session on public.session_host_assignments(ses
 create table public.session_presence_intervals (
   id                uuid primary key default gen_random_uuid(),
   session_id        uuid not null references public.sessions(id) on delete cascade,
-  user_id           uuid not null references public.users(id),
+  user_id           uuid not null references public.users(id) on delete cascade,
+                      -- Phase 7: a participant deleting their own account
+                      -- removes their own presence rows without needing
+                      -- the whole session (or its host) gone.
   joined_at         timestamptz not null default now(),
   left_at           timestamptz,      -- null while still connected
   disconnect_reason text
@@ -164,7 +187,9 @@ create index idx_presence_user on public.session_presence_intervals(user_id);
 create table public.session_participants (
   id                        uuid primary key default gen_random_uuid(),
   session_id                uuid not null references public.sessions(id) on delete cascade,
-  user_id                   uuid not null references public.users(id),
+  user_id                   uuid not null references public.users(id) on delete cascade,
+                              -- Phase 7: same reasoning as
+                              -- session_presence_intervals.user_id above.
   is_host                   boolean not null default false,
   total_minutes_present     int not null default 0,
   exit_reason               text check (exit_reason in ('completed', 'emergency_exit', 'disconnected')),
@@ -198,7 +223,11 @@ create index idx_participants_user on public.session_participants(user_id);
 -- ============================================================
 create table public.device_attestations (
   id           uuid primary key default gen_random_uuid(),
-  user_id      uuid not null references public.users(id),
+  user_id      uuid not null references public.users(id) on delete cascade,
+                 -- Phase 7: was missing an ON DELETE action -- this is
+                 -- exactly the raw-provider-payload data named in the
+                 -- account-deletion data footprint, so it must actually be
+                 -- deletable, not just block the delete.
   session_id   uuid references public.sessions(id) on delete cascade,
   platform     text not null check (platform in ('android', 'ios')),
   action       text not null check (action in ('create', 'join')),
@@ -460,8 +489,16 @@ create table public.user_stats_daily (
 -- ============================================================
 create table public.rewards_history (
   id         uuid primary key default gen_random_uuid(),
-  user_id    uuid not null references public.users(id),
-  session_id uuid references public.sessions(id),
+  user_id    uuid not null references public.users(id) on delete cascade,
+               -- Phase 7: cascades -- this is the row owner's own receipt.
+  session_id uuid references public.sessions(id) on delete set null,
+               -- Phase 7: SET NULL, deliberately NOT cascade, unlike every
+               -- other session_id FK above -- this is the one exception to
+               -- "cascades with the session". If it cascaded, another
+               -- participant's own earned-points receipt would be destroyed
+               -- just because the session's HOST deleted their account and
+               -- took the session with them. SET NULL keeps the receipt,
+               -- drops only the now-dangling session reference.
   points     int not null,
   bonus_type text not null
                check (bonus_type in ('base', 'group_bonus', 'completion_bonus', 'milestone')),

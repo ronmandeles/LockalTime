@@ -45,4 +45,8 @@ export type RootStackParamList = {
   // search, pending requests, and the leaderboard all read/write entirely
   // through the /friends endpoints for the authenticated user.
   Friends: undefined;
+  // Phase 7 (Release Prep) — sign-out and account deletion, available to
+  // every user. No params: reads/writes entirely through the authenticated
+  // session and the /account endpoint.
+  Settings: undefined;
 };

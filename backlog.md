@@ -171,7 +171,7 @@ Task order (grouped by track; a track's tasks are prerequisites for later tracks
 **Infra & deployment**
 - [ ] Staging Supabase project (`LockalTime-staging`, decided in `CLAUDE.md`, not yet created): provision it, push every migration, and specifically re-verify `service_role` grants land — the exact miss `docs/MANUAL_QA.md` already documents twice for the production project
 - [ ] Provision production `apps/server` hosting on a PaaS; wire real env vars/secrets (Supabase service-role key, QR-signing HMAC secret, JWKS config) outside the repo; confirm the sweep/streak-expiry/streak-risk-notification pollers run continuously under it
-- [ ] API hardening: `helmet` (security headers) + rate-limiting on public endpoints, prioritizing the highest-abuse surface (`POST /sessions`, `/sessions/join`, `/sessions/join-venue`, `/friends/search`)
+- [x] API hardening: `helmet` (security headers) + rate-limiting on public endpoints, prioritizing the highest-abuse surface (`POST /sessions`, `/sessions/join`, `/sessions/join-venue`, `/friends/search`)
 - [ ] CI: staging-deploy workflow (GitHub Actions secrets for the staging Supabase project + PaaS deploy token), triggered on merge to a release branch or manually
 
 **iOS build** *(blocked on confirming Apple Developer Program enrollment status first — see Credentials track)*
@@ -188,7 +188,7 @@ Task order (grouped by track; a track's tasks are prerequisites for later tracks
 **Store readiness, legal, branding**
 - [ ] Draft placeholder ToS + Privacy Policy (mine to write this phase, per the locked decision above); decide and stand up a stable hosting URL for them
 - [ ] In-app ToS/Privacy Policy acceptance during onboarding/auth (currently no acceptance UI exists anywhere)
-- [ ] **Account deletion flow** (new scope, not polish): a Node endpoint or direct RLS-permitted path that deletes the `auth.users` row and lets the schema's existing cascade chain clean up every dependent table, plus a mobile confirmation screen
+- [x] **Account deletion flow** (new scope, not polish): a Node endpoint or direct RLS-permitted path that deletes the `auth.users` row and lets the schema's existing cascade chain clean up every dependent table, plus a mobile confirmation screen — `DELETE /account` (`apps/server/src/modules/users/users.router.ts`), idempotent on retry; surfaced and fixed a real gap where most FKs had no `ON DELETE` action at all (`20260801000000_account_deletion_cascades.sql`, see `docs/DATABASE.md`/`docs/ARCHITECTURE.md`); mobile `SettingsScreen` (new — also the app's first sign-out UI and home for the ToS/Privacy links below) uses the same hold-to-confirm interaction as Emergency Exit for this irreversible action
 - [ ] Real color palette pass across every screen, replacing the neutral-grayscale tokens; update `DESIGN_GUIDELINES.md`'s "intentionally deferred" note
 - [ ] App icon design (all required iOS sizes + Android adaptive icon) — currently just React Native's empty placeholder `AppIcon.appiconset`
 - [ ] Privacy nutrition label (Apple) / Data Safety form (Google) — now backed by a real data-collected audit (points/rewards, device tokens, attestation `raw_response`, friend graph, username, venue data) and the retention policy above

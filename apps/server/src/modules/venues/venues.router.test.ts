@@ -65,6 +65,9 @@ const buildFakeUsersStore = (roles: Record<string, UserRole>): UsersStore => ({
   async getUserRole(userId) {
     return roles[userId] ?? 'user';
   },
+  async deleteAccount(): Promise<void> {
+    // not exercised by these tests
+  },
 });
 
 const DEFAULT_METRICS: VenueMetricsRow = {

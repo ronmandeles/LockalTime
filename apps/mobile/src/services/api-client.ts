@@ -23,11 +23,13 @@ interface ServerErrorBody {
 
 // method defaults to POST (every endpoint before Phase 6 was a write); GET
 // added for the venues list read (still Node-only, not a direct Supabase
-// read — see requestGet's own doc comment for why).
+// read — see requestGet's own doc comment for why); DELETE added for Phase
+// 7's account deletion, the first endpoint that returns 204 No Content
+// rather than a JSON body on success.
 const request = async <T>(
   path: string,
   body: unknown,
-  method: 'POST' | 'GET' = 'POST',
+  method: 'POST' | 'GET' | 'DELETE' = 'POST',
 ): Promise<ApiResult<T>> => {
   const { auth } = useAuthStore.getState();
   if (auth.status !== 'authenticated') {
@@ -41,9 +43,12 @@ const request = async <T>(
         'Content-Type': 'application/json',
         Authorization: `Bearer ${auth.session.accessToken}`,
       },
-      ...(method === 'GET' ? {} : { body: JSON.stringify(body) }),
+      ...(method === 'GET' || method === 'DELETE' ? {} : { body: JSON.stringify(body) }),
     });
-    const parsed: unknown = await response.json();
+    // A 204 (or any empty body) has nothing for response.json() to parse —
+    // it would throw on valid, successful responses.
+    const rawText = await response.text();
+    const parsed: unknown = rawText.length > 0 ? JSON.parse(rawText) : {};
 
     if (!response.ok) {
       const errorBody = parsed as ServerErrorBody;
@@ -302,3 +307,13 @@ export interface ListFriendsResponse {
 
 export const listFriends = (): Promise<ApiResult<ListFriendsResponse>> =>
   request<ListFriendsResponse>('/friends', undefined, 'GET');
+
+// ── Phase 7 (Release Prep): account deletion ──────────────────────────────
+// The App/Play Store-mandated deletion path (guideline 5.1.1v). Deletes the
+// caller's own account server-side (userId always comes from their verified
+// token, never a param — see apps/server's users.router.ts) — every
+// dependent row cascades via the schema's FK chain
+// (20260801000000_account_deletion_cascades.sql), so there is nothing else
+// for the client to clean up beyond signing itself out afterward.
+export const deleteAccount = (): Promise<ApiResult<Record<string, never>>> =>
+  request<Record<string, never>>('/account', undefined, 'DELETE');
