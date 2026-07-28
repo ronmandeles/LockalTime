@@ -12,8 +12,16 @@ import { en } from '../i18n/locales/en';
 // api-client.test.ts.
 
 const mockCreateSession = jest.fn();
+const mockListVenues = jest.fn();
 jest.mock('../services/api-client', () => ({
   createSession: (...args: unknown[]) => mockCreateSession(...args),
+  listVenues: () => mockListVenues(),
+}));
+
+let mockRole: 'user' | 'verified_host' | 'admin' | null = null;
+jest.mock('../state/profile-store', () => ({
+  useProfileStore: (selector: (state: { role: typeof mockRole }) => unknown) =>
+    selector({ role: mockRole }),
 }));
 
 interface DeviceLocaleStub {
@@ -49,7 +57,9 @@ const renderScreen = async (): Promise<void> => {
 describe('CreateSessionScreen', () => {
   beforeEach(() => {
     mockCreateSession.mockReset();
+    mockListVenues.mockReset();
     mockNavigate.mockClear();
+    mockRole = null;
   });
 
   it('defaults to solo + fixed duration', async () => {
@@ -133,5 +143,78 @@ describe('CreateSessionScreen', () => {
 
     expect(await screen.findByText(en.createSession.errors.requestFailed)).toBeOnTheScreen();
     expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('never offers static_qr to a plain user', async () => {
+    await renderScreen();
+
+    expect(screen.queryByTestId('create-session-type-static_qr')).toBeNull();
+  });
+
+  it('offers static_qr to a verified host and fetches their venues once selected', async () => {
+    mockRole = 'verified_host';
+    mockListVenues.mockResolvedValue({
+      ok: true,
+      value: { venues: [{ id: 'venue-1', name: "Joe's Cafe" }] },
+    });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('create-session-type-static_qr'));
+
+    expect(await screen.findByText("Joe's Cafe")).toBeOnTheScreen();
+  });
+
+  it('requires a venue to be selected before submitting a static_qr session', async () => {
+    mockRole = 'verified_host';
+    mockListVenues.mockResolvedValue({ ok: true, value: { venues: [{ id: 'venue-1', name: 'Cafe' }] } });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('create-session-type-static_qr'));
+    await fireEvent.press(screen.getByTestId('create-session-duration-open_ended'));
+    await screen.findByText('Cafe');
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    expect(await screen.findByText(en.createSession.errors.venueRequired)).toBeOnTheScreen();
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  it('submits venue_id once a venue is picked', async () => {
+    mockRole = 'verified_host';
+    mockListVenues.mockResolvedValue({ ok: true, value: { venues: [{ id: 'venue-1', name: 'Cafe' }] } });
+    mockCreateSession.mockResolvedValue({
+      ok: true,
+      value: { id: 'session-4', qrToken: null },
+    });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('create-session-type-static_qr'));
+    await fireEvent.press(screen.getByTestId('create-session-duration-open_ended'));
+    await fireEvent.press(await screen.findByTestId('create-session-venue-venue-1'));
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    await waitFor(() =>
+      expect(mockCreateSession).toHaveBeenCalledWith({
+        type: 'static_qr',
+        duration_mode: 'open_ended',
+        venue_id: 'venue-1',
+      }),
+    );
+  });
+
+  it('maps venue_not_owned/venue_not_found to their own copy', async () => {
+    mockRole = 'verified_host';
+    mockListVenues.mockResolvedValue({ ok: true, value: { venues: [{ id: 'venue-1', name: 'Cafe' }] } });
+    mockCreateSession.mockResolvedValue({
+      ok: false,
+      error: { code: 'venue_not_owned', message: 'nope' },
+    });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('create-session-type-static_qr'));
+    await fireEvent.press(screen.getByTestId('create-session-duration-open_ended'));
+    await fireEvent.press(await screen.findByTestId('create-session-venue-venue-1'));
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    expect(await screen.findByText(en.createSession.errors.venueNotOwned)).toBeOnTheScreen();
   });
 });

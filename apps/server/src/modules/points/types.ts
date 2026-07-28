@@ -18,6 +18,14 @@ export interface PresenceInterval {
   // never contributes to the group bonus's concurrent-count threshold
   // (ARCHITECTURE.md §7's Sybil-resistance gate, §8 item 9).
   readonly blockerReadyAt: Date | null;
+  // Phase 6 tasks 8-9: false only when device attestation reported a
+  // no-integrity-signal verdict AND enforcement was enabled at write time
+  // (the gating already happened once, upstream, when this value was
+  // written — see attestation/trust-tier.ts's applyEnforcementPolicy) —
+  // with enforcement off (the shipping default), this is always true, so
+  // this column changes nothing yet. Same "still counts for base points,
+  // never for the group bonus" shape as blockerReadyAt.
+  readonly deviceTrusted: boolean;
 }
 
 export interface ParticipantSummary {

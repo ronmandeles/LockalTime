@@ -13,6 +13,32 @@ export const QR_TOKEN_TTL_MINUTES = 15;
 // backwards-compatible change if that decision is made later.
 export const SESSION_MAX_PARTICIPANTS = 50;
 
+// Phase 6 task 2 (owner decision): a verified host's static_qr/venue
+// session expects materially more concurrent people than a friend-group
+// session — a busy cafe's foot traffic, not five friends. A separate,
+// higher, tunable constant rather than a per-venue DB column: simplest
+// MVP shape (tune here, no migration needed), used wherever
+// type === 'static_qr' (join-venue-session.ts's capacity check).
+export const VENUE_SESSION_MAX_PARTICIPANTS = 200;
+
+// Phase 6 task 5 (B2B metrics, ARCHITECTURE.md §10): the trailing window
+// "average session duration per customer" is computed over. 30 days is
+// long enough to stay meaningful for a venue with light foot traffic,
+// short enough that the number keeps moving month to month (an all-time
+// average would go stale and stop being actionable).
+export const VENUE_METRICS_WINDOW_DAYS = 30;
+
+// Phase 6 tasks 8-9 (attestation/device-trust): built-but-inert by design.
+// There is no real monitor-mode data to threshold against yet — Phase 2's
+// attestation pipeline still runs unconfiguredAttestationProvider (every
+// verdict reads 'not_configured'), so "turning enforcement on" today would
+// mean acting on a placeholder, not real signal. Flipping this to true is
+// the ONE change needed once real Play Integrity/App Attest credentials
+// exist and monitor-mode data has actually been analyzed — every other
+// piece (schema, trust-tier mapping, group-bonus/streak gating) is already
+// wired and tested against this flag both ways.
+export const ATTESTATION_ENFORCEMENT_ENABLED = false;
+
 // Points & bonus engine (ARCHITECTURE.md §7, DATABASE.md "Bonus
 // Computation" — spec confirmed, §11). Consumed by src/modules/points/.
 export const BASE_POINTS_PER_MINUTE = 1;

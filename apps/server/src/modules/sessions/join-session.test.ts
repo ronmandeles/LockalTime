@@ -32,9 +32,15 @@ const buildFakeStore = (
     async rejoinSession(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    joinVenueSession: jest.fn(),
+    getSessionPreview: jest.fn(),
+    getOpenParticipantCount: jest.fn(),
+    getActiveStaticQrSessionId: jest.fn(),
+    getVenueMetrics: jest.fn(),
     closeOpenInterval: jest.fn(async (_s: string, _u: string, _r: DisconnectReason) => true),
     insertPresenceInterval: jest.fn(),
     markBlockerReady: jest.fn(),
+    markDeviceTrust: jest.fn(),
     getSessionSummary: jest.fn(),
     closeAllOpenIntervals: jest.fn(),
     getPresenceIntervals: jest.fn(),

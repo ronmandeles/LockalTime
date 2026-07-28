@@ -11,10 +11,12 @@ const readyInterval = (
   joinedAtMin: number,
   leftAtMin: number,
   blockerReadyAtMin: number = joinedAtMin,
+  deviceTrusted = true,
 ): PresenceInterval => ({
   joinedAt: minutes(joinedAtMin),
   leftAt: minutes(leftAtMin),
   blockerReadyAt: minutes(blockerReadyAtMin),
+  deviceTrusted,
 });
 
 const participant = (
@@ -126,7 +128,7 @@ describe('computeGroupBonusEligibility', () => {
   it('excludes an interval whose blocker never confirmed ready at all', () => {
     const fourSteady = ['a', 'b', 'c', 'd'].map((id) => participant(id, [readyInterval(0, 40)]));
     const neverReady: ParticipantSummary = participant('e', [
-      { joinedAt: minutes(0), leftAt: minutes(40), blockerReadyAt: null },
+      { joinedAt: minutes(0), leftAt: minutes(40), blockerReadyAt: null, deviceTrusted: true },
     ]);
 
     // Only 4 ever actually count toward the threshold -- never qualifies.
@@ -145,5 +147,31 @@ describe('computeGroupBonusEligibility', () => {
     const disconnected = participant('e', [readyInterval(0, 40)], 'disconnected');
 
     expect(computeGroupBonusEligibility([...steady, disconnected]).has('e')).toBe(false);
+  });
+
+  describe('device trust (Phase 6 tasks 8-9)', () => {
+    it("excludes an unverified participant's OWN group bonus eligibility even though the group otherwise qualifies", () => {
+      // 5 trusted participants alone already qualify (a..e) -- f is
+      // unverified and joins the same window, so the group still qualifies
+      // via a..e, but f itself must not benefit from it.
+      const fiveSteady = ['a', 'b', 'c', 'd', 'e'].map((id) =>
+        participant(id, [readyInterval(0, 40)]),
+      );
+      const unverified = participant('f', [readyInterval(0, 40, 0, false)]);
+
+      const eligible = computeGroupBonusEligibility([...fiveSteady, unverified]);
+
+      expect(eligible.has('f')).toBe(false);
+      expect(eligible.has('a')).toBe(true);
+    });
+
+    it('an unverified interval cannot push OTHER participants over the 5-participant threshold either', () => {
+      // Only 4 trusted + 1 unverified — without the gate this would read as
+      // 5 concurrent and everyone would qualify.
+      const fourSteady = ['a', 'b', 'c', 'd'].map((id) => participant(id, [readyInterval(0, 40)]));
+      const unverified = participant('e', [readyInterval(0, 40, 0, false)]);
+
+      expect(computeGroupBonusEligibility([...fourSteady, unverified])).toEqual(new Set());
+    });
   });
 });

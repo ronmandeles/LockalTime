@@ -198,10 +198,16 @@ const stubPersistedFlags = ({
 const mockFetchSession = jest.fn();
 const mockFetchSessionParticipant = jest.fn();
 const mockFetchRewardsHistory = jest.fn();
+// Phase 6 task 7: SessionDetailsScreen's rejoin-mode preview also reads
+// open presence intervals directly (same RLS-permitted read as
+// WelcomeBackScreen) — mocked here for the same reason as fetchSession
+// above, not this suite's concern.
+const mockFetchOpenPresenceIntervals = jest.fn();
 jest.mock('./services/session-repository', () => ({
   fetchSession: (...args: unknown[]) => mockFetchSession(...args),
   fetchSessionParticipant: (...args: unknown[]) => mockFetchSessionParticipant(...args),
   fetchRewardsHistory: (...args: unknown[]) => mockFetchRewardsHistory(...args),
+  fetchOpenPresenceIntervals: (...args: unknown[]) => mockFetchOpenPresenceIntervals(...args),
 }));
 
 // Phase 5: HomeScreen (the initial route this whole suite lands on) now
@@ -263,6 +269,7 @@ describe('App', () => {
     mockFetchSession.mockReset();
     mockFetchSessionParticipant.mockReset().mockResolvedValue({ ok: true, value: null });
     mockFetchRewardsHistory.mockReset().mockResolvedValue({ ok: true, value: [] });
+    mockFetchOpenPresenceIntervals.mockReset().mockResolvedValue({ ok: true, value: [] });
     mockFetchUserStats.mockReset().mockResolvedValue({ ok: true, value: null });
     mockFetchUserStreak.mockReset().mockResolvedValue({ ok: true, value: null });
     mockFetchMilestoneProgress

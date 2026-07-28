@@ -21,6 +21,8 @@ import ScanSessionScreen from './screens/ScanSessionScreen';
 import SessionCompletionScreen from './screens/SessionCompletionScreen';
 import SessionDetailsScreen from './screens/SessionDetailsScreen';
 import StatsScreen from './screens/StatsScreen';
+import VenueDashboardScreen from './screens/VenueDashboardScreen';
+import VenueManagementScreen from './screens/VenueManagementScreen';
 import WelcomeBackScreen from './screens/WelcomeBackScreen';
 import { reportTimezoneIfChanged } from './services/user-profile';
 import { hydrateActiveSessionStatus, useActiveSessionStore } from './state/active-session-store';
@@ -31,6 +33,7 @@ import {
   markPermissionStepHandled,
   usePermissionStore,
 } from './state/permission-store';
+import { hydrateProfile, resetProfile } from './state/profile-store';
 
 // Testable app factory (the runtime shell is index.js, which only registers
 // this component) — mirrors the app.ts/server.ts split in apps/server.
@@ -103,6 +106,14 @@ const App = (): React.JSX.Element | null => {
   useEffect(() => {
     if (authenticatedUserId !== null) {
       reportTimezoneIfChanged(authenticatedUserId);
+      // Phase 6: re-hydrated fresh every authenticated session (never
+      // persisted) so a manual runbook role flip is picked up on next
+      // sign-in without a stale cached value.
+      hydrateProfile(authenticatedUserId);
+    } else {
+      // A sign-out (or a cold start with no session) must not leave a
+      // PREVIOUS user's role visible to whoever signs in next.
+      resetProfile();
     }
   }, [authenticatedUserId]);
 
@@ -189,6 +200,8 @@ const App = (): React.JSX.Element | null => {
           <RootStack.Screen name="Home" component={HomeScreen} />
           <RootStack.Screen name="History" component={HistoryScreen} />
           <RootStack.Screen name="Stats" component={StatsScreen} />
+          <RootStack.Screen name="VenueManagement" component={VenueManagementScreen} />
+          <RootStack.Screen name="VenueDashboard" component={VenueDashboardScreen} />
           <RootStack.Screen name="CreateSession" component={CreateSessionScreen} />
           <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
           <RootStack.Screen

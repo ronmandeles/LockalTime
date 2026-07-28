@@ -2,14 +2,19 @@ import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { z } from 'zod';
 
+import { ATTESTATION_ENFORCEMENT_ENABLED } from '../../config/constants';
 import { ApiError } from '../../middleware/api-error';
 import type { AttestationProvider } from '../attestation/attestation-provider';
 import type { AttestationStore } from '../attestation/attestation-store';
 import { recordDeviceAttestation } from '../attestation/record-attestation';
+import { applyEnforcementPolicy, verdictToTrustTier } from '../attestation/trust-tier';
+import type { VenuesStore } from '../venues/venues-store';
 import { createSession } from './create-session';
 import { endSession } from './end-session';
 import { finalizeEmergencyExit } from './finalize-emergency-exit';
 import { joinSession } from './join-session';
+import { joinVenueSession } from './join-venue-session';
+import { previewSession } from './preview-session';
 import { rejoinSession } from './rejoin-session';
 import type { SessionsStore } from './sessions-store';
 
@@ -24,6 +29,11 @@ export interface SessionsRouterDeps {
   // into create/join below, never blocks either.
   readonly attestationProvider: AttestationProvider;
   readonly attestationStore: AttestationStore;
+  // Phase 6 task 1: venue ownership check for POST / below. Venues are a
+  // strictly B2B construct — only a venue's owner may ever tag a session
+  // with it, regardless of session type (owner decision; see
+  // docs/RUNBOOK_VERIFIED_HOST.md and the plan's "venue tagging" note).
+  readonly venuesStore: VenuesStore;
 }
 
 // Present only once the mobile app's native Play Integrity/App Attest
@@ -60,6 +70,19 @@ const joinSessionBodySchema = z.object({
   attestation: attestationSchema.optional(),
 });
 
+// Same shape as joinSessionBodySchema — the QR payload format is
+// unchanged either way (Phase 6 task 2's plan note); only which token
+// kind the client scanned differs, and this is the dedicated venue-token
+// route.
+const joinVenueSessionBodySchema = z.object({
+  token: z.string().min(1),
+  attestation: attestationSchema.optional(),
+});
+
+const previewSessionBodySchema = z.object({
+  token: z.string().min(1),
+});
+
 const leaveSessionBodySchema = z.object({
   reason: z.enum(['emergency_exit', 'involuntary_disconnect']),
 });
@@ -80,6 +103,42 @@ const JOIN_FAILURE_RESPONSES: Record<
   },
   expired: { status: 410, code: 'qr_token_expired', message: 'QR token has expired' },
   at_capacity: { status: 409, code: 'session_at_capacity', message: 'Session is at capacity' },
+};
+
+// join_venue_session()'s outcome, mapped the same way as JOIN_FAILURE_RESPONSES
+// above. no_active_session is the venue-specific case with no dynamic_qr
+// equivalent — the venue exists and its code is genuinely valid, there's
+// simply nothing running there right now.
+const JOIN_VENUE_FAILURE_RESPONSES: Record<
+  Exclude<Awaited<ReturnType<typeof joinVenueSession>>['outcome'], 'joined' | 'already_joined'>,
+  { status: number; code: string; message: string }
+> = {
+  invalid_token: { status: 400, code: 'invalid_qr_token', message: 'QR token is invalid' },
+  venue_not_found: { status: 404, code: 'venue_not_found', message: 'Venue not found' },
+  no_active_session: {
+    status: 404,
+    code: 'no_active_session_at_venue',
+    message: 'No session is currently running at this venue',
+  },
+  at_capacity: { status: 409, code: 'session_at_capacity', message: 'Session is at capacity' },
+};
+
+// previewSession()'s outcome, mapped the same way — this is the vocabulary
+// the plan's "late-join details" edge-case screens (task 7) key their
+// recovery affordance off (Scan again / Back to Home / Retry), same as the
+// existing join failure codes.
+const PREVIEW_FAILURE_RESPONSES: Record<
+  Exclude<Awaited<ReturnType<typeof previewSession>>['outcome'], 'ok'>,
+  { status: number; code: string; message: string }
+> = {
+  invalid_token: { status: 400, code: 'invalid_qr_token', message: 'QR token is invalid' },
+  session_not_found: { status: 404, code: 'session_not_found', message: 'Session not found' },
+  venue_not_found: { status: 404, code: 'venue_not_found', message: 'Venue not found' },
+  no_active_session: {
+    status: 404,
+    code: 'no_active_session_at_venue',
+    message: 'No session is currently running at this venue',
+  },
 };
 
 // rejoin_session()'s outcome, mapped the same way. Screen 13 (Welcome Back)
@@ -125,25 +184,54 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
     const hostId = req.auth?.userId as string;
     const body = parsed.data;
 
-    createSession(deps.store, deps.qrSigningSecret, {
-      hostId,
-      type: body.type,
-      durationMode: body.duration_mode,
-      plannedDurationMinutes:
-        body.duration_mode === 'fixed' ? body.planned_duration_minutes ?? null : null,
-      venueId: body.venue_id ?? null,
-    })
+    // Ownership check runs before createSession — a venue_id the caller
+    // doesn't own must reject the whole request, not just get silently
+    // dropped. Applies to every session type (not just static_qr): venues
+    // stay a strictly B2B construct, never a free-form location label a
+    // non-owner can attach to their own session.
+    const venueCheck: Promise<void> =
+      body.venue_id === undefined
+        ? Promise.resolve()
+        : deps.venuesStore.getVenueById(body.venue_id).then((venue) => {
+            if (venue === null) {
+              throw new ApiError(404, 'venue_not_found', 'Venue not found');
+            }
+            if (venue.ownerId !== hostId) {
+              throw new ApiError(403, 'venue_not_owned', 'You do not own this venue');
+            }
+          });
+
+    venueCheck
+      .then(() =>
+        createSession(deps.store, deps.qrSigningSecret, {
+          hostId,
+          type: body.type,
+          durationMode: body.duration_mode,
+          plannedDurationMinutes:
+            body.duration_mode === 'fixed' ? body.planned_duration_minutes ?? null : null,
+          venueId: body.venue_id ?? null,
+        }),
+      )
       .then(async (session) => {
         // Monitor-mode only — recordDeviceAttestation never throws, so
         // this can never turn a successful create into a failed response.
         if (body.attestation !== undefined) {
-          await recordDeviceAttestation(deps.attestationProvider, deps.attestationStore, {
-            userId: hostId,
-            sessionId: session.id,
-            platform: body.attestation.platform,
-            action: 'create',
-            token: body.attestation.token,
-          });
+          const verdict = await recordDeviceAttestation(
+            deps.attestationProvider,
+            deps.attestationStore,
+            {
+              userId: hostId,
+              sessionId: session.id,
+              platform: body.attestation.platform,
+              action: 'create',
+              token: body.attestation.token,
+            },
+          );
+          const tier = applyEnforcementPolicy(
+            verdictToTrustTier(verdict),
+            ATTESTATION_ENFORCEMENT_ENABLED,
+          );
+          deps.store.markDeviceTrust(session.id, hostId, tier).catch(() => undefined);
         }
         res.status(201).json(session);
       })
@@ -164,18 +252,100 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
       .then(async (result) => {
         if (result.outcome === 'joined' || result.outcome === 'already_joined') {
           if (attestation !== undefined) {
-            await recordDeviceAttestation(deps.attestationProvider, deps.attestationStore, {
-              userId,
-              sessionId: result.sessionId,
-              platform: attestation.platform,
-              action: 'join',
-              token: attestation.token,
-            });
+            const verdict = await recordDeviceAttestation(
+              deps.attestationProvider,
+              deps.attestationStore,
+              {
+                userId,
+                sessionId: result.sessionId,
+                platform: attestation.platform,
+                action: 'join',
+                token: attestation.token,
+              },
+            );
+            // Phase 6 tasks 8-9: fire-and-forget, same posture as
+            // markBlockerReady — a failure here never blocks the join
+            // response the caller is already waiting on.
+            const tier = applyEnforcementPolicy(
+              verdictToTrustTier(verdict),
+              ATTESTATION_ENFORCEMENT_ENABLED,
+            );
+            deps.store.markDeviceTrust(result.sessionId, userId, tier).catch(() => undefined);
           }
           res.status(result.outcome === 'joined' ? 201 : 200).json({ sessionId: result.sessionId });
           return;
         }
         const failure = JOIN_FAILURE_RESPONSES[result.outcome];
+        next(new ApiError(failure.status, failure.code, failure.message));
+      })
+      .catch(next);
+  });
+
+  // Venue-scoped counterpart to /join (Phase 6 task 2) — the printed venue
+  // QR encodes a venue token, not a session token, so it needs its own
+  // route rather than overloading /join with two incompatible token
+  // shapes. Same attestation-recording shape as /join above.
+  router.post('/join-venue', requireAuth, (req, res, next) => {
+    const parsed = joinVenueSessionBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ApiError(400, 'invalid_request', 'token is required'));
+      return;
+    }
+    const userId = req.auth?.userId as string;
+
+    const { attestation } = parsed.data;
+
+    joinVenueSession(deps.store, deps.qrSigningSecret, { token: parsed.data.token, userId })
+      .then(async (result) => {
+        if (result.outcome === 'joined' || result.outcome === 'already_joined') {
+          if (attestation !== undefined) {
+            const verdict = await recordDeviceAttestation(
+              deps.attestationProvider,
+              deps.attestationStore,
+              {
+                userId,
+                sessionId: result.sessionId,
+                platform: attestation.platform,
+                action: 'join',
+                token: attestation.token,
+              },
+            );
+            const tier = applyEnforcementPolicy(
+              verdictToTrustTier(verdict),
+              ATTESTATION_ENFORCEMENT_ENABLED,
+            );
+            deps.store.markDeviceTrust(result.sessionId, userId, tier).catch(() => undefined);
+          }
+          res.status(result.outcome === 'joined' ? 201 : 200).json({ sessionId: result.sessionId });
+          return;
+        }
+        const failure = JOIN_VENUE_FAILURE_RESPONSES[result.outcome];
+        next(new ApiError(failure.status, failure.code, failure.message));
+      })
+      .catch(next);
+  });
+
+  // Phase 6 task 4: real session details before joining, without exposing
+  // anything a non-participant's RLS would otherwise deny them (a
+  // dedicated Node endpoint, not a direct client read — see
+  // preview-session.ts's header). requireAuth only, no further gate: this
+  // is not an open enumeration endpoint (a caller still needs a real,
+  // correctly-signed token), just not host/participant-only either — a
+  // stranger about to join is exactly who needs to see this.
+  router.post('/preview', requireAuth, (req, res, next) => {
+    const parsed = previewSessionBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      next(new ApiError(400, 'invalid_request', 'token is required'));
+      return;
+    }
+
+    previewSession(deps.store, deps.venuesStore, deps.qrSigningSecret, parsed.data.token)
+      .then((result) => {
+        if (result.outcome === 'ok') {
+          res.status(200).json(result.preview);
+          return;
+        }
+        const failure = PREVIEW_FAILURE_RESPONSES[result.outcome];
         next(new ApiError(failure.status, failure.code, failure.message));
       })
       .catch(next);

@@ -2,11 +2,15 @@ import express, { Express } from 'express';
 
 import type { Env } from './config/env';
 import { createRequireAuth } from './middleware/require-auth';
+import { createRequireRole } from './middleware/require-role';
 import { errorHandler } from './middleware/error-handler';
 import { unconfiguredAttestationProvider } from './modules/attestation/attestation-provider';
 import { createSupabaseAttestationStore } from './modules/attestation/attestation-store';
 import { createSessionsRouter } from './modules/sessions/sessions.router';
 import { createSupabaseSessionsStore } from './modules/sessions/sessions-store';
+import { createSupabaseUsersStore } from './modules/users/users-store';
+import { createVenuesRouter } from './modules/venues/venues.router';
+import { createSupabaseVenuesStore } from './modules/venues/venues-store';
 import { getSupabaseAdminClient } from './services/supabase-admin';
 import { createSupabaseJwks } from './services/supabase-jwks';
 
@@ -31,6 +35,12 @@ export function createApp(env: Env): Express {
   const adminClient = getSupabaseAdminClient(env);
   const sessionsStore = createSupabaseSessionsStore(adminClient);
   const attestationStore = createSupabaseAttestationStore(adminClient);
+  const usersStore = createSupabaseUsersStore(adminClient);
+  const venuesStore = createSupabaseVenuesStore(adminClient);
+  // Venues are a strictly B2B construct (ARCHITECTURE.md §10) — every
+  // route that creates or lists them requires verified_host or admin.
+  const requireVerifiedHost = createRequireRole(usersStore, ['verified_host', 'admin']);
+
   app.use(
     '/sessions',
     createSessionsRouter({
@@ -39,6 +49,17 @@ export function createApp(env: Env): Express {
       requireAuth,
       attestationProvider: unconfiguredAttestationProvider,
       attestationStore,
+      venuesStore,
+    }),
+  );
+  app.use(
+    '/venues',
+    createVenuesRouter({
+      store: venuesStore,
+      sessionsStore,
+      qrSigningSecret: env.QR_SIGNING_SECRET,
+      requireAuth,
+      requireVerifiedHost,
     }),
   );
 

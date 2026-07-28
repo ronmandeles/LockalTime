@@ -10,6 +10,10 @@ export const en = {
     scanQr: 'Scan QR',
     historyCta: 'History',
     statsCta: 'Stats',
+    // Phase 6: shown only for verified_host/admin (useProfileStore) —
+    // a subdued link, not a third competing CTA (DESIGN_GUIDELINES §1).
+    manageVenuesCta: 'Manage venues',
+    venueDashboardCta: 'Venue activity',
     // Phase 5 gamification summary card — copy is PLACEHOLDER, flagged for
     // the deferred copy pass. Streak/milestones stay visually quiet per
     // ARCHITECTURE.md §9 (a fact being stated, not a prize being dangled).
@@ -78,6 +82,9 @@ export const en = {
       label: 'Who can join',
       solo: 'Just me',
       dynamicQr: 'Friends via QR code',
+      // Phase 6: only offered when useProfileStore's role is verified_host
+      // or admin (venues are a strictly B2B construct).
+      staticQr: 'Customers at my venue',
     },
     duration: {
       label: 'Duration',
@@ -85,10 +92,20 @@ export const en = {
       openEnded: 'Until I end it',
       minutesPlaceholder: 'Minutes',
     },
+    // Phase 6: shown only when type is static_qr.
+    venuePicker: {
+      label: 'Venue',
+      loading: 'Loading your venues…',
+      empty: 'You have no venues yet. Add one from Manage Venues on Home.',
+      error: "We couldn't load your venues. Please try again.",
+    },
     submit: 'Start session',
     errors: {
       minutesRequired: 'Enter how many minutes this session should run.',
       requestFailed: "We couldn't create the session. Please try again.",
+      venueRequired: 'Choose which venue this session is for.',
+      venueNotOwned: "That venue isn't yours.",
+      venueNotFound: "That venue couldn't be found.",
     },
   },
   scanSession: {
@@ -117,6 +134,23 @@ export const en = {
     rejoinBody: "You're picking back up a session you were already part of. Distracting apps will stay blocked for everyone present until it ends.",
     rejoin: 'Rejoin session',
     rejoining: 'Rejoining…',
+    // Phase 6 task 7: real details fetched via the preview endpoint (join
+    // mode) or a direct RLS-protected read (rejoin mode, already a prior
+    // participant) before the CTA appears at all.
+    preview: {
+      loading: 'Loading session details…',
+      error: "We couldn't load this session's details. Please try again.",
+      retry: 'Retry',
+      elapsedMinutes: 'Started {{count}} minutes ago',
+      participantCount: '{{count}} people here now',
+      atVenue: 'At {{name}}',
+    },
+    completionBonusUnavailable: "This session's completion bonus is no longer available to you, but you'll still earn points for the time you're present.",
+    recovery: {
+      scanAgain: 'Scan again',
+      backToHome: 'Back to Home',
+      retry: 'Retry',
+    },
     errors: {
       session_not_found: "This session doesn't exist or has already ended.",
       session_not_joinable: 'This session is no longer accepting new people.',
@@ -124,6 +158,8 @@ export const en = {
       session_at_capacity: 'This session is full.',
       invalid_qr_token: "That code isn't valid. Check it and try again.",
       not_a_prior_participant: "You weren't part of this session, so it can't be rejoined this way.",
+      venue_not_found: "That venue couldn't be found.",
+      no_active_session_at_venue: 'No session is currently running at this venue.',
       unknown: "Something went wrong joining. Please try again.",
     },
   },
@@ -150,6 +186,12 @@ export const en = {
     qrLabel: 'Share this code to let others join',
     emergencyExit: 'Emergency exit',
     hostMigrationToast: "You're hosting now",
+    // Phase 6 task 7: a dedicated banner for the two realtime-connectivity
+    // states that warrant more than the quiet status label alone.
+    offlineBanner: {
+      participant_reconnecting: 'Reconnecting… blocking stays on while we try.',
+      degraded_offline: "You've been offline for a while — blocking has paused until you reconnect.",
+    },
     blockerViolation: {
       message: {
         permission_revoked: 'Blocking permission was turned off — this session is no longer enforced.',
@@ -275,6 +317,48 @@ export const en = {
       body: 'This email is already registered with a different sign-in method. Sign in with your email to keep everything in one account.',
       useEmail: 'Sign in with email',
     },
+  },
+  // Phase 6 (B2B) — verified_host/admin only, gated at the route by
+  // useProfileStore's role. Copy is PLACEHOLDER, flagged for the deferred
+  // copy pass, same as every other screen in this file.
+  venueManagement: {
+    title: 'Your venues',
+    empty: 'No venues yet. Add your first one below.',
+    loadError: "We couldn't load your venues. Please try again.",
+    retry: 'Retry',
+    nameLabel: 'Venue name',
+    namePlaceholder: 'e.g. Joe’s Cafe',
+    addressLabel: 'Address (optional)',
+    addressPlaceholder: 'e.g. 123 Main St',
+    addVenue: 'Add venue',
+    errors: {
+      nameRequired: 'Enter a venue name.',
+      requestFailed: "We couldn't add that venue. Please try again.",
+    },
+    // Printed as plain text (no QR-rendering library exists in this
+    // codebase yet — same limitation ActiveSessionScreen's dynamic_qr card
+    // already carries) — a business prints/copies this string, it doesn't
+    // scan a rendered image from this screen.
+    qrLabel: 'Venue code',
+    regenerate: 'Regenerate code',
+    regenerateConfirmTitle: 'Regenerate this venue’s code?',
+    regenerateConfirmBody: 'The old printed code will stop working immediately. You’ll need to print the new one.',
+    regenerateConfirm: 'Regenerate',
+    regenerateCancel: 'Cancel',
+    regenerateSuccess: 'New code generated.',
+    regenerateError: "We couldn't regenerate the code. Please try again.",
+  },
+  // Phase 6 (B2B dashboard, ARCHITECTURE.md §10) — verified_host/admin
+  // only. Aggregates only, no individual customers ever shown here.
+  venueDashboard: {
+    title: 'Venue activity',
+    noVenues: 'Add a venue from Manage Venues to see its activity here.',
+    loadError: "We couldn't load this venue's activity. Please try again.",
+    retry: 'Retry',
+    refresh: 'Refresh',
+    concurrentCustomers: 'Customers here now',
+    avgMinutesPerCustomer: 'Avg. minutes per customer ({{count}}-day)',
+    sessionsInWindow: '{{count}} sessions in the last {{days}} days',
   },
 };
 

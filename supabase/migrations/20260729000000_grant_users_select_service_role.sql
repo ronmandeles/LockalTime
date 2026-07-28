@@ -1,0 +1,21 @@
+-- Phase 6 task 0: role authorization primitive.
+--
+-- Every table the Node API reads or writes needs an explicit service_role
+-- grant (.claude/skills/supabase-integration/SKILL.md — service_role
+-- bypasses RLS POLICIES, never table GRANTs). public.users has never had
+-- one: apply_session_stats() reads users.timezone, but from inside a
+-- SECURITY DEFINER function running as its owner, so it needed no grant of
+-- its own. Phase 6's requireRole() middleware is the first plain Node query
+-- against this table (getUserRole(userId) -> users.role), so it needs one
+-- now.
+--
+-- Deliberately SELECT only. The verified_host/admin role flip itself stays
+-- manual SQL run by the owner (CLAUDE.md: "granted manually by flipping a
+-- DB flag in Supabase, no in-app application flow yet" — see
+-- docs/RUNBOOK_VERIFIED_HOST.md) — Node never needs to WRITE role, so no
+-- write grant is added. Adding one "just in case" would be the exact kind
+-- of unused surface .claude/skills/code-style/SKILL.md's minimalism rule
+-- warns against, and users_test.sql's escalation-guard test already proves
+-- authenticated can't self-escalate; a service_role write grant would be a
+-- second, needless way for that same column to become writable from Node.
+grant select on public.users to service_role;

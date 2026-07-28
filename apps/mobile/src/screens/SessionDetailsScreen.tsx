@@ -1,20 +1,20 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 
 import type { RootStackParamList } from '../navigation/types';
-import { joinSession, rejoinSession } from '../services/api-client';
+import { joinSession, joinVenueSession, previewSession, rejoinSession } from '../services/api-client';
+import { fetchOpenPresenceIntervals, fetchSession } from '../services/session-repository';
 import { radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Session Details (Screen 8): pre-join confirmation. This is where the
 // actual POST /sessions/join call happens (not on the Scan screen) — so a
 // mis-typed/expired/full/already-cancelled session surfaces its own
-// specific error right where the user can act on it (retype the code, ask
-// the host for a new one, etc.). Every join_session() outcome
-// (sessions-store.ts's JoinOutcome on the server) maps to its own copy key
-// here — never a single generic "join failed" message.
+// specific error right where the user can act on it. Every join_session()
+// outcome (sessions-store.ts's JoinOutcome on the server) maps to its own
+// copy key here — never a single generic "join failed" message.
 //
 // Also doubles as Screen 13's rejoin confirmation (Phase 4 task 12,
 // ARCHITECTURE.md §2 item 13): route.params carries either a scanned QR
@@ -22,6 +22,14 @@ import { radius, sizing, spacing, typography } from '../theme/tokens';
 // rejoin) — never both, RootStackParamList models them as a discriminated
 // union. Same screen, same CTA shape, only the copy and which api-client
 // call fires differ.
+//
+// Phase 6 task 7: real details before joining, via previewSession() (join
+// mode — is_session_participant()'s RLS denies a non-participant a direct
+// read, so this has to hit the Node preview endpoint) or a direct
+// RLS-protected read (rejoin mode — the caller already IS a participant,
+// same reasoning as WelcomeBackScreen's own read). The preview is
+// informational only: its failure never blocks the Join CTA, since the
+// actual join call already has its own complete error handling.
 type SessionDetailsScreenProps = NativeStackScreenProps<RootStackParamList, 'SessionDetails'>;
 
 const ERROR_KEYS: ReadonlySet<string> = new Set([
@@ -31,18 +39,131 @@ const ERROR_KEYS: ReadonlySet<string> = new Set([
   'session_at_capacity',
   'invalid_qr_token',
   'not_a_prior_participant',
+  'venue_not_found',
+  'no_active_session_at_venue',
 ]);
+
+// Which recovery action a given join failure gets — DESIGN_GUIDELINES-
+// consistent grouping (three real needs: "the code you have is dead, get a
+// new one", "this session isn't reachable at all, leave", "something
+// transient happened, try the same thing again").
+const SCAN_AGAIN_CODES: ReadonlySet<string> = new Set([
+  'qr_token_expired',
+  'invalid_qr_token',
+  'no_active_session_at_venue',
+]);
+const BACK_TO_HOME_CODES: ReadonlySet<string> = new Set([
+  'session_not_found',
+  'session_not_joinable',
+  'session_at_capacity',
+  'not_a_prior_participant',
+  'venue_not_found',
+]);
+
+interface DetailsView {
+  readonly elapsedMinutes: number | null;
+  readonly participantCount: number;
+  readonly venueName: string | null;
+  // Late-join note: join mode shows it only once the completion bonus is
+  // actually out of reach (server-computed); rejoin mode always shows it —
+  // reaching Welcome Back's rejoin already means a prior disconnect, and
+  // ARCHITECTURE.md §7 forfeits the completion bonus unconditionally for
+  // any gap, so there is nothing left to compute.
+  readonly showCompletionBonusNote: boolean;
+}
+
+type PreviewLoadState =
+  | { readonly status: 'loading' }
+  | { readonly status: 'loaded'; readonly details: DetailsView }
+  | { readonly status: 'error' };
 
 const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps): React.JSX.Element => {
   const { t } = useTranslation();
   const [joining, setJoining] = useState(false);
   const [errorKey, setErrorKey] = useState<string | null>(null);
+  const [previewLoad, setPreviewLoad] = useState<PreviewLoadState>({ status: 'loading' });
+  const [reloadToken, setReloadToken] = useState(0);
+  // Only meaningful in join mode — which endpoint the Join CTA calls,
+  // resolved by previewSession()'s tokenKind (the printed venue QR needs
+  // /sessions/join-venue, a normal session QR needs /sessions/join).
+  const [joinsViaVenue, setJoinsViaVenue] = useState(false);
   const isRejoin = !('token' in route.params);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPreviewLoad({ status: 'loading' });
+
+    if (isRejoin) {
+      const sessionId = route.params.sessionId;
+      Promise.all([fetchSession(sessionId), fetchOpenPresenceIntervals(sessionId)]).then(
+        ([sessionResult, intervalsResult]) => {
+          if (cancelled) {
+            return;
+          }
+          if (!sessionResult.ok) {
+            setPreviewLoad({ status: 'error' });
+            return;
+          }
+          const elapsedMinutes =
+            sessionResult.value.started_at !== null
+              ? Math.max(
+                  0,
+                  Math.floor((Date.now() - new Date(sessionResult.value.started_at).getTime()) / 60_000),
+                )
+              : null;
+          setPreviewLoad({
+            status: 'loaded',
+            details: {
+              elapsedMinutes,
+              participantCount: intervalsResult.ok ? intervalsResult.value.length : 0,
+              venueName: null,
+              showCompletionBonusNote: true,
+            },
+          });
+        },
+      );
+    } else {
+      const token = route.params.token;
+      previewSession(token).then((result) => {
+        if (cancelled) {
+          return;
+        }
+        if (!result.ok) {
+          setPreviewLoad({ status: 'error' });
+          return;
+        }
+        setJoinsViaVenue(result.value.tokenKind === 'venue');
+        setPreviewLoad({
+          status: 'loaded',
+          details: {
+            elapsedMinutes: result.value.elapsedMinutes,
+            participantCount: result.value.participantCount,
+            venueName: result.value.venueName,
+            showCompletionBonusNote:
+              result.value.elapsedMinutes !== null &&
+              result.value.elapsedMinutes > 0 &&
+              !result.value.completionBonusAvailable,
+          },
+        });
+      });
+    }
+
+    return () => {
+      cancelled = true;
+    };
+    // route.params is a discriminated union (token XOR sessionId) — safe to
+    // depend on the whole object since a real param change always means a
+    // genuinely different screen instance in practice (a fresh scan/rejoin).
+  }, [isRejoin, route.params, reloadToken]);
 
   const handleJoin = (): void => {
     setErrorKey(null);
     setJoining(true);
-    const result$ = isRejoin ? rejoinSession(route.params.sessionId) : joinSession(route.params.token);
+    const result$ = isRejoin
+      ? rejoinSession(route.params.sessionId)
+      : joinsViaVenue
+        ? joinVenueSession(route.params.token)
+        : joinSession(route.params.token);
     result$
       .then((result) => {
         setJoining(false);
@@ -58,15 +179,87 @@ const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps):
       });
   };
 
+  const handleRecoveryAction = (): void => {
+    if (errorKey !== null && SCAN_AGAIN_CODES.has(errorKey)) {
+      navigation.navigate('ScanSession');
+      return;
+    }
+    if (errorKey !== null && BACK_TO_HOME_CODES.has(errorKey)) {
+      navigation.navigate('Home');
+      return;
+    }
+    // Anything else (network_error/unauthenticated/unknown_error/unknown)
+    // is a transient failure — re-attempt the same join.
+    handleJoin();
+  };
+
+  const recoveryLabel =
+    errorKey !== null && SCAN_AGAIN_CODES.has(errorKey)
+      ? t('sessionDetails.recovery.scanAgain')
+      : errorKey !== null && BACK_TO_HOME_CODES.has(errorKey)
+        ? t('sessionDetails.recovery.backToHome')
+        : t('sessionDetails.recovery.retry');
+
   return (
     <View style={styles.container} testID="session-details-screen">
       <View style={styles.content}>
         <Text style={styles.title}>{t(isRejoin ? 'sessionDetails.rejoinTitle' : 'sessionDetails.title')}</Text>
         <Text style={styles.body}>{t(isRejoin ? 'sessionDetails.rejoinBody' : 'sessionDetails.body')}</Text>
-        {errorKey !== null && (
-          <Text style={styles.error} testID="session-details-error">
-            {t(`sessionDetails.errors.${errorKey}`)}
+
+        {previewLoad.status === 'loading' && (
+          <Text style={styles.previewText} testID="session-details-preview-loading">
+            {t('sessionDetails.preview.loading')}
           </Text>
+        )}
+
+        {previewLoad.status === 'error' && (
+          <View>
+            <Text style={styles.error} testID="session-details-preview-error">
+              {t('sessionDetails.preview.error')}
+            </Text>
+            <TouchableOpacity
+              onPress={() => setReloadToken((token) => token + 1)}
+              testID="session-details-preview-retry"
+            >
+              <Text style={styles.retryLabel}>{t('sessionDetails.preview.retry')}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {previewLoad.status === 'loaded' && (
+          <View testID="session-details-preview">
+            {previewLoad.details.venueName !== null && (
+              <Text style={styles.previewText} testID="session-details-venue-name">
+                {t('sessionDetails.preview.atVenue', { name: previewLoad.details.venueName })}
+              </Text>
+            )}
+            {previewLoad.details.elapsedMinutes !== null && previewLoad.details.elapsedMinutes > 0 && (
+              <Text style={styles.previewText} testID="session-details-elapsed">
+                {t('sessionDetails.preview.elapsedMinutes', { count: previewLoad.details.elapsedMinutes })}
+              </Text>
+            )}
+            <Text style={styles.previewText} testID="session-details-participant-count">
+              {t('sessionDetails.preview.participantCount', {
+                count: previewLoad.details.participantCount,
+              })}
+            </Text>
+            {previewLoad.details.showCompletionBonusNote && (
+              <Text style={styles.completionBonusNote} testID="session-details-completion-bonus-note">
+                {t('sessionDetails.completionBonusUnavailable')}
+              </Text>
+            )}
+          </View>
+        )}
+
+        {errorKey !== null && (
+          <View>
+            <Text style={styles.error} testID="session-details-error">
+              {t(`sessionDetails.errors.${errorKey}`)}
+            </Text>
+            <TouchableOpacity onPress={handleRecoveryAction} testID="session-details-recovery-action">
+              <Text style={styles.retryLabel}>{recoveryLabel}</Text>
+            </TouchableOpacity>
+          </View>
         )}
       </View>
       <TouchableOpacity
@@ -92,6 +285,11 @@ const styles = StyleSheet.create({
     color: '#444444',
     marginTop: spacing.md,
   },
+  completionBonusNote: {
+    ...typography.caption,
+    color: '#666666',
+    marginTop: spacing.md,
+  },
   container: {
     backgroundColor: '#FFFFFF',
     flex: 1,
@@ -109,6 +307,11 @@ const styles = StyleSheet.create({
     color: '#B00020',
     marginTop: spacing.md,
   },
+  previewText: {
+    ...typography.caption,
+    color: '#666666',
+    marginTop: spacing.xs,
+  },
   primaryCta: {
     alignItems: 'center',
     backgroundColor: '#222222',
@@ -122,6 +325,12 @@ const styles = StyleSheet.create({
   primaryCtaLabel: {
     ...typography.bodyStrong,
     color: '#FFFFFF',
+  },
+  retryLabel: {
+    ...typography.bodyStrong,
+    color: '#222222',
+    marginTop: spacing.sm,
+    minHeight: sizing.minTouchTarget,
   },
   title: {
     ...typography.heading,

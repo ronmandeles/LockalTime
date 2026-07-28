@@ -29,6 +29,12 @@ const findQualifyingStreaks = (allIntervals: readonly PresenceInterval[]): Strea
     if (interval.blockerReadyAt === null) {
       continue;
     }
+    // Phase 6 tasks 8-9: an unverified device can't push OTHERS over the
+    // 5-participant threshold either — same reasoning as the
+    // blockerReadyAt gate directly above.
+    if (!interval.deviceTrusted) {
+      continue;
+    }
     events.push({ time: interval.blockerReadyAt.getTime(), delta: 1 });
     events.push({ time: interval.leftAt.getTime(), delta: -1 });
   }
@@ -76,6 +82,12 @@ export const computeGroupBonusEligibility = (
     }
     for (const interval of participant.intervals) {
       if (interval.blockerReadyAt === null) {
+        continue;
+      }
+      // Phase 6 tasks 8-9: an unverified device forfeits its OWN group
+      // bonus eligibility too — base points are unaffected (backlog's
+      // "exclude from group bonus only").
+      if (!interval.deviceTrusted) {
         continue;
       }
       const readyAt = interval.blockerReadyAt.getTime();

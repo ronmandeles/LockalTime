@@ -6,6 +6,7 @@ import { errorHandler } from '../../middleware/error-handler';
 import { unconfiguredAttestationProvider } from '../attestation/attestation-provider';
 import type { AttestationStore, RecordAttestationInput } from '../attestation/attestation-store';
 import { createTestJwks, type TestJwks } from '../../test-support/local-jwks';
+import type { VenuesStore } from '../venues/venues-store';
 import { mintQrToken } from './qr-token';
 import { createSessionsRouter } from './sessions.router';
 import type {
@@ -71,12 +72,28 @@ const buildFakeStore = (options: {
       store.rejoinCalledWith = { sessionId, userId, maxParticipants };
       return options.rejoinOutcome ?? 'joined';
     },
+    async joinVenueSession(): Promise<never> {
+      throw new Error('not used in this test');
+    },
+    async getSessionPreview(): Promise<never> {
+      throw new Error('not used in this test');
+    },
+    async getOpenParticipantCount(): Promise<never> {
+      throw new Error('not used in this test');
+    },
+    async getActiveStaticQrSessionId(): Promise<never> {
+      throw new Error('not used in this test');
+    },
+    async getVenueMetrics(): Promise<never> {
+      throw new Error('not used in this test');
+    },
     async closeOpenInterval(sessionId: string, userId: string, reason: DisconnectReason) {
       store.closeCalledWith = { sessionId, userId, reason };
       return options.closeResult ?? true;
     },
     async insertPresenceInterval(_s: string, _u: string, _j: string) {},
     async markBlockerReady() {},
+    async markDeviceTrust() {},
     async getSessionSummary() {
       return {
         id: SESSION_ID,
@@ -99,6 +116,7 @@ const buildFakeStore = (options: {
           leftAt: '2026-01-01T10:23:00.000Z',
           blockerReadyAt: '2026-01-01T10:00:00.000Z',
           disconnectReason: 'emergency_exit' as const,
+          deviceTrustTier: 'trusted' as const,
         },
       ];
     },
@@ -128,6 +146,23 @@ const buildFakeStore = (options: {
   return store;
 };
 
+// Phase 6 task 1: none of this file's routes (join/leave) touch venue_id
+// ownership, so a never-called fake satisfies the required dependency.
+const buildFakeVenuesStore = (): VenuesStore => ({
+  async createVenue(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
+  async listVenuesForOwner(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
+  async getVenueById(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
+  async regenerateQrToken(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
+});
+
 const buildApp = (
   store: SessionsStore,
   attestationStore: AttestationStore = buildFakeAttestationStore(),
@@ -142,6 +177,7 @@ const buildApp = (
       requireAuth: createRequireAuth(jwks.getKey),
       attestationProvider: unconfiguredAttestationProvider,
       attestationStore,
+      venuesStore: buildFakeVenuesStore(),
     }),
   );
   app.use(errorHandler);

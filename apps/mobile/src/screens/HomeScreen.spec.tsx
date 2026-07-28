@@ -19,6 +19,14 @@ jest.mock('../state/auth-store', () => ({
   useAuthStore: (selector: (state: unknown) => unknown) => mockUseAuthStore(selector),
 }));
 
+// profile-store.ts is used for real (via useProfileStore.setState below) —
+// but its hydrateProfile import chain pulls in AsyncStorage/react-native-
+// localize's real modules, which this file never otherwise mocks. Stubbed
+// here purely so importing profile-store doesn't transitively load them;
+// HomeScreen itself only ever reads the store's state, never calls
+// hydrateProfile.
+jest.mock('../services/user-profile', () => ({ fetchUserProfile: jest.fn() }));
+
 interface DeviceLocaleStub {
   readonly countryCode: string;
   readonly isRTL: boolean;
@@ -47,6 +55,7 @@ import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
 import { he } from '../i18n/locales/he';
+import { useProfileStore } from '../state/profile-store';
 import HomeScreen from './HomeScreen';
 
 // Phase 1 i18n foundation: the Home placeholder migrates onto the i18n layer.
@@ -102,6 +111,7 @@ describe('HomeScreen', () => {
       ok: true,
       value: { milestones: [], achievedMilestoneIds: new Set() },
     });
+    useProfileStore.setState({ role: null });
   });
 
   it('renders its title from the en bundle when the locale is en', async () => {
@@ -273,5 +283,43 @@ describe('HomeScreen', () => {
     await renderHomeScreenIn('en');
 
     await waitFor(() => expect(screen.getByTestId('home-total-points')).toHaveTextContent('0'));
+  });
+
+  it('does not show the manage-venues link for a plain user', async () => {
+    await renderHomeScreenIn('en');
+
+    expect(screen.queryByTestId('home-manage-venues-cta')).toBeNull();
+  });
+
+  it('shows the manage-venues link for a verified host and navigates to VenueManagement', async () => {
+    useProfileStore.setState({ role: 'verified_host' });
+
+    await renderHomeScreenIn('en');
+    fireEvent.press(screen.getByTestId('home-manage-venues-cta'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('VenueManagement');
+  });
+
+  it('shows the manage-venues link for an admin too', async () => {
+    useProfileStore.setState({ role: 'admin' });
+
+    await renderHomeScreenIn('en');
+
+    expect(screen.getByTestId('home-manage-venues-cta')).toBeOnTheScreen();
+  });
+
+  it('shows the venue-dashboard link for a verified host and navigates to VenueDashboard', async () => {
+    useProfileStore.setState({ role: 'verified_host' });
+
+    await renderHomeScreenIn('en');
+    fireEvent.press(screen.getByTestId('home-venue-dashboard-cta'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('VenueDashboard');
+  });
+
+  it('does not show the venue-dashboard link for a plain user', async () => {
+    await renderHomeScreenIn('en');
+
+    expect(screen.queryByTestId('home-venue-dashboard-cta')).toBeNull();
   });
 });

@@ -10,7 +10,19 @@ jest.mock('../state/auth-store', () => ({
   useAuthStore: { getState: () => mockGetState() },
 }));
 
-import { createSession, joinSession, leaveSession, markBlockerReady, rejoinSession } from './api-client';
+import {
+  createSession,
+  createVenue,
+  getVenueMetrics,
+  joinSession,
+  joinVenueSession,
+  leaveSession,
+  listVenues,
+  markBlockerReady,
+  previewSession,
+  regenerateVenueQr,
+  rejoinSession,
+} from './api-client';
 
 const AUTHENTICATED = {
   auth: {
@@ -109,6 +121,71 @@ describe('joinSession', () => {
   });
 });
 
+describe('joinVenueSession', () => {
+  it('posts the token to /sessions/join-venue', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(201, { sessionId: 's1' }));
+
+    const result = await joinVenueSession('venue-token-value');
+
+    expect(result).toEqual({ ok: true, value: { sessionId: 's1' } });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/sessions/join-venue');
+    expect(JSON.parse(init.body as string)).toEqual({ token: 'venue-token-value' });
+  });
+
+  it('surfaces no_active_session_at_venue untouched', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse(404, { error: { code: 'no_active_session_at_venue', message: 'nope' } }),
+    );
+
+    const result = await joinVenueSession('venue-token-value');
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.code).toBe('no_active_session_at_venue');
+  });
+});
+
+describe('previewSession', () => {
+  it('posts the token to /sessions/preview', async () => {
+    const preview = {
+      sessionId: 's1',
+      tokenKind: 'session',
+      type: 'dynamic_qr',
+      durationMode: 'fixed',
+      plannedDurationMinutes: 30,
+      status: 'active',
+      startedAt: '2026-07-29T12:00:00.000Z',
+      elapsedMinutes: 5,
+      participantCount: 3,
+      venueName: null,
+      completionBonusAvailable: false,
+    };
+    mockFetch.mockResolvedValue(jsonResponse(200, preview));
+
+    const result = await previewSession('qr-token-value');
+
+    expect(result).toEqual({ ok: true, value: preview });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/sessions/preview');
+    expect(JSON.parse(init.body as string)).toEqual({ token: 'qr-token-value' });
+  });
+
+  it.each`
+    code                            | expectedCode
+    ${'invalid_qr_token'}           | ${'invalid_qr_token'}
+    ${'session_not_found'}          | ${'session_not_found'}
+    ${'venue_not_found'}            | ${'venue_not_found'}
+    ${'no_active_session_at_venue'} | ${'no_active_session_at_venue'}
+  `('surfaces the $code failure code from the server untouched', async ({ code, expectedCode }) => {
+    mockFetch.mockResolvedValue(jsonResponse(404, { error: { code, message: 'nope' } }));
+
+    const result = await previewSession('qr-token-value');
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.code).toBe(expectedCode);
+  });
+});
+
 describe('rejoinSession', () => {
   it('posts to /sessions/:id/rejoin with no body — no token to send', async () => {
     mockFetch.mockResolvedValue(jsonResponse(201, { sessionId: 's1' }));
@@ -167,5 +244,138 @@ describe('markBlockerReady', () => {
     const result = await markBlockerReady('session-1');
 
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('createSession — venue_id (Phase 6)', () => {
+  it('includes venue_id in the request body when provided', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(201, { id: 's1', venueId: 'venue-1' }));
+
+    await createSession({
+      type: 'static_qr',
+      duration_mode: 'open_ended',
+      venue_id: 'venue-1',
+    });
+
+    const [, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(init.body as string)).toEqual({
+      type: 'static_qr',
+      duration_mode: 'open_ended',
+      venue_id: 'venue-1',
+    });
+  });
+
+  it('surfaces venue_not_owned/venue_not_found untouched', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse(403, { error: { code: 'venue_not_owned', message: 'nope' } }),
+    );
+
+    const result = await createSession({
+      type: 'static_qr',
+      duration_mode: 'open_ended',
+      venue_id: 'venue-1',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.code).toBe('venue_not_owned');
+  });
+});
+
+describe('createVenue', () => {
+  it('posts the venue name to /venues, owner_id decided server-side', async () => {
+    const venue = {
+      id: 'venue-1',
+      ownerId: 'user-1',
+      name: "Joe's Cafe",
+      addressLabel: null,
+      qrToken: 'a-signed-venue-token',
+      qrTokenIssuedAt: '2026-07-29T00:00:00.000Z',
+      createdAt: '2026-07-29T00:00:00.000Z',
+    };
+    mockFetch.mockResolvedValue(jsonResponse(201, venue));
+
+    const result = await createVenue({ name: "Joe's Cafe" });
+
+    expect(result).toEqual({ ok: true, value: venue });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/venues');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ name: "Joe's Cafe" });
+  });
+
+  it('surfaces insufficient_role untouched for a non-verified-host caller', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse(403, { error: { code: 'insufficient_role', message: 'nope' } }),
+    );
+
+    const result = await createVenue({ name: 'Sneaky Cafe' });
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.code).toBe('insufficient_role');
+  });
+});
+
+describe('listVenues', () => {
+  it('issues a GET request with no body', async () => {
+    mockFetch.mockResolvedValue(jsonResponse(200, { venues: [] }));
+
+    const result = await listVenues();
+
+    expect(result).toEqual({ ok: true, value: { venues: [] } });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/venues');
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+  });
+});
+
+describe('regenerateVenueQr', () => {
+  it('posts to /venues/:id/qr/regenerate', async () => {
+    const venue = {
+      id: 'venue-1',
+      ownerId: 'user-1',
+      name: 'Cafe',
+      addressLabel: null,
+      qrToken: 'a-new-signed-venue-token',
+      qrTokenIssuedAt: '2026-07-29T01:00:00.000Z',
+      createdAt: '2026-07-29T00:00:00.000Z',
+    };
+    mockFetch.mockResolvedValue(jsonResponse(200, venue));
+
+    const result = await regenerateVenueQr('venue-1');
+
+    expect(result).toEqual({ ok: true, value: venue });
+    const [url] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/venues/venue-1/qr/regenerate');
+  });
+});
+
+describe('getVenueMetrics', () => {
+  it('issues a GET to /venues/:id/metrics', async () => {
+    const metrics = {
+      concurrentActiveCustomers: 3,
+      sessionsInWindow: 12,
+      avgMinutesPerCustomer: 27.5,
+      windowDays: 30,
+    };
+    mockFetch.mockResolvedValue(jsonResponse(200, metrics));
+
+    const result = await getVenueMetrics('venue-1');
+
+    expect(result).toEqual({ ok: true, value: metrics });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/venues/venue-1/metrics');
+    expect(init.method).toBe('GET');
+  });
+
+  it("surfaces venue_not_owned untouched for another host's venue", async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse(403, { error: { code: 'venue_not_owned', message: 'nope' } }),
+    );
+
+    const result = await getVenueMetrics('venue-1');
+
+    expect(result.ok).toBe(false);
+    expect(!result.ok && result.error.code).toBe('venue_not_owned');
   });
 });

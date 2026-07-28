@@ -8,6 +8,7 @@ const wholeSessionInterval = (durationMinutes: number): PresenceInterval => ({
   joinedAt: START,
   leftAt: addMinutes(START, durationMinutes),
   blockerReadyAt: START,
+  deviceTrusted: true,
 });
 
 const timing = (durationMinutes: number): SessionTiming => ({
@@ -172,11 +173,17 @@ describe('computeForfeitedReward', () => {
 
   it('sums minutes across a rejoin before the emergency exit', () => {
     const intervals: PresenceInterval[] = [
-      { joinedAt: START, leftAt: addMinutes(START, 10), blockerReadyAt: START },
+      {
+        joinedAt: START,
+        leftAt: addMinutes(START, 10),
+        blockerReadyAt: START,
+        deviceTrusted: true,
+      },
       {
         joinedAt: addMinutes(START, 15),
         leftAt: addMinutes(START, 20),
         blockerReadyAt: addMinutes(START, 15),
+        deviceTrusted: true,
       },
     ];
 
