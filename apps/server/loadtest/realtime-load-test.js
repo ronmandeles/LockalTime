@@ -112,7 +112,7 @@ async function runSessionCohort(sessionId, sessionIndex, participantsPerSession)
   // One participant in this session broadcasts; everyone else's receipt
   // latency is what gets measured (n-1 expected deliveries).
   if (subscribed.length > 1) {
-    const [sender, ...rest] = subscribed;
+    const [sender] = subscribed;
     sender.channel.send({
       type: 'broadcast',
       event: 'load_test_ping',
