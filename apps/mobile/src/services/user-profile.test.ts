@@ -19,22 +19,42 @@ jest.mock(
 );
 
 const mockGetTimeZone = jest.fn<string, []>();
-jest.mock('react-native-localize', () => ({ getTimeZone: () => mockGetTimeZone() }), {
-  virtual: true,
-});
+const mockGetLocales = jest.fn<Array<{ languageCode: string }>, []>();
+jest.mock(
+  'react-native-localize',
+  () => ({
+    getTimeZone: () => mockGetTimeZone(),
+    getLocales: () => mockGetLocales(),
+  }),
+  { virtual: true },
+);
 
 const mockEq = jest.fn();
 const mockUpdate = jest.fn(() => ({ eq: mockEq }));
+const mockUpsert = jest.fn();
 const mockMaybeSingle = jest.fn();
 const mockSelectEq = jest.fn(() => ({ maybeSingle: mockMaybeSingle }));
 const mockSelect = jest.fn(() => ({ eq: mockSelectEq }));
-const mockFrom = jest.fn(() => ({ update: mockUpdate, select: mockSelect }));
+const mockFrom = jest.fn(() => ({ update: mockUpdate, select: mockSelect, upsert: mockUpsert }));
 
 jest.mock('./supabase-client', () => ({
   getSupabaseClient: () => ({ from: mockFrom }),
 }));
 
-import { REPORTED_TIMEZONE_STORAGE_KEY, fetchUserProfile, reportTimezoneIfChanged } from './user-profile';
+const mockGetToken = jest.fn();
+jest.mock('./push-registration', () => ({
+  pushRegistration: { getToken: () => mockGetToken() },
+}));
+
+import {
+  REPORTED_LOCALE_STORAGE_KEY,
+  REPORTED_PUSH_TOKEN_STORAGE_KEY,
+  REPORTED_TIMEZONE_STORAGE_KEY,
+  fetchUserProfile,
+  registerPushTokenIfChanged,
+  reportLocaleIfChanged,
+  reportTimezoneIfChanged,
+} from './user-profile';
 
 const USER_ID = 'user-1';
 
@@ -114,6 +134,144 @@ describe('reportTimezoneIfChanged', () => {
     });
 
     await expect(reportTimezoneIfChanged(USER_ID)).resolves.toBeUndefined();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe('reportLocaleIfChanged', () => {
+  beforeEach(() => {
+    mockGetItem.mockReset();
+    mockSetItem.mockReset();
+    mockSetItem.mockResolvedValue(undefined);
+    mockGetLocales.mockReset();
+    mockFrom.mockClear();
+    mockUpdate.mockClear();
+    mockEq.mockReset();
+    mockEq.mockResolvedValue({ error: null });
+  });
+
+  it('writes the resolved device locale when nothing was cached yet', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockGetLocales.mockReturnValue([{ languageCode: 'he' }]);
+
+    await reportLocaleIfChanged(USER_ID);
+
+    expect(mockGetItem).toHaveBeenCalledWith(REPORTED_LOCALE_STORAGE_KEY);
+    expect(mockFrom).toHaveBeenCalledWith('users');
+    expect(mockUpdate).toHaveBeenCalledWith({ locale: 'he' });
+    expect(mockEq).toHaveBeenCalledWith('id', USER_ID);
+    expect(mockSetItem).toHaveBeenCalledWith(REPORTED_LOCALE_STORAGE_KEY, 'he');
+  });
+
+  it('does not write when the cached value already matches the resolved locale', async () => {
+    mockGetItem.mockResolvedValue('en');
+    mockGetLocales.mockReturnValue([{ languageCode: 'en' }]);
+
+    await reportLocaleIfChanged(USER_ID);
+
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockSetItem).not.toHaveBeenCalled();
+  });
+
+  it('falls back to en for an unsupported device language, same as the app UI itself', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockGetLocales.mockReturnValue([{ languageCode: 'fr' }]);
+
+    await reportLocaleIfChanged(USER_ID);
+
+    expect(mockUpdate).toHaveBeenCalledWith({ locale: 'en' });
+  });
+
+  it('fails open when the Supabase update errors — never caches, never throws', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockGetLocales.mockReturnValue([{ languageCode: 'he' }]);
+    mockEq.mockResolvedValue({ error: { message: 'network error' } });
+
+    await expect(reportLocaleIfChanged(USER_ID)).resolves.toBeUndefined();
+    expect(mockSetItem).not.toHaveBeenCalled();
+  });
+
+  it('never rejects even on a wholly unexpected failure (e.g. native module not linked)', async () => {
+    mockGetLocales.mockImplementation(() => {
+      throw new Error('getLocales is not a function');
+    });
+
+    await expect(reportLocaleIfChanged(USER_ID)).resolves.toBeUndefined();
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe('registerPushTokenIfChanged', () => {
+  beforeEach(() => {
+    mockGetItem.mockReset();
+    mockSetItem.mockReset();
+    mockSetItem.mockResolvedValue(undefined);
+    mockGetToken.mockReset();
+    mockFrom.mockClear();
+    mockUpsert.mockReset();
+    mockUpsert.mockResolvedValue({ error: null });
+  });
+
+  it('does nothing when no push token is available — honest no-op, not a fabricated token', async () => {
+    mockGetToken.mockResolvedValue({ status: 'unavailable' });
+
+    await registerPushTokenIfChanged(USER_ID);
+
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockSetItem).not.toHaveBeenCalled();
+  });
+
+  it('upserts the token on (user_id, platform) when nothing was cached yet', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockGetToken.mockResolvedValue({ status: 'granted', token: 'device-token-1', platform: 'android' });
+
+    await registerPushTokenIfChanged(USER_ID);
+
+    expect(mockGetItem).toHaveBeenCalledWith(REPORTED_PUSH_TOKEN_STORAGE_KEY);
+    expect(mockFrom).toHaveBeenCalledWith('device_tokens');
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { user_id: USER_ID, platform: 'android', token: 'device-token-1' },
+      { onConflict: 'user_id,platform' },
+    );
+    expect(mockSetItem).toHaveBeenCalledWith(REPORTED_PUSH_TOKEN_STORAGE_KEY, 'device-token-1');
+  });
+
+  it('does not write when the cached token already matches the current one', async () => {
+    mockGetItem.mockResolvedValue('device-token-1');
+    mockGetToken.mockResolvedValue({ status: 'granted', token: 'device-token-1', platform: 'android' });
+
+    await registerPushTokenIfChanged(USER_ID);
+
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockSetItem).not.toHaveBeenCalled();
+  });
+
+  it('re-registers when the token changed since the last report (e.g. reinstall)', async () => {
+    mockGetItem.mockResolvedValue('old-token');
+    mockGetToken.mockResolvedValue({ status: 'granted', token: 'new-token', platform: 'ios' });
+
+    await registerPushTokenIfChanged(USER_ID);
+
+    expect(mockUpsert).toHaveBeenCalledWith(
+      { user_id: USER_ID, platform: 'ios', token: 'new-token' },
+      { onConflict: 'user_id,platform' },
+    );
+    expect(mockSetItem).toHaveBeenCalledWith(REPORTED_PUSH_TOKEN_STORAGE_KEY, 'new-token');
+  });
+
+  it('fails open when the Supabase upsert errors — never caches, never throws', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockGetToken.mockResolvedValue({ status: 'granted', token: 'device-token-1', platform: 'android' });
+    mockUpsert.mockResolvedValue({ error: { message: 'network error' } });
+
+    await expect(registerPushTokenIfChanged(USER_ID)).resolves.toBeUndefined();
+    expect(mockSetItem).not.toHaveBeenCalled();
+  });
+
+  it('never rejects even on a wholly unexpected failure', async () => {
+    mockGetToken.mockRejectedValue(new Error('native module not linked'));
+
+    await expect(registerPushTokenIfChanged(USER_ID)).resolves.toBeUndefined();
     expect(mockFrom).not.toHaveBeenCalled();
   });
 });

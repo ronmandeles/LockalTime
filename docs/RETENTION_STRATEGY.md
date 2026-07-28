@@ -22,8 +22,8 @@ The mechanism behind slot machines and loot boxes: unpredictable reward timing/s
 ### 4. Social proof / leaderboards / comparison — **Defer**
 Comparison against others is a strong driver (visible leaderboards, "5 friends completed a session today"). No technical blocker in principle, but a real one in practice: there is no friend graph, no follow/friend model, and no privacy design for surfacing one user's activity to another — building it well is its own phase of work, not a Phase 5 add-on. `ARCHITECTURE.md` §9 originally rejected this on anti-comparison-anxiety grounds; the pivot reopens it, but the honest reason it doesn't ship now is scope, not renewed rejection. A backlog entry is added (see below) so it's designed deliberately later rather than bolted on.
 
-### 5. Notification hooks (streak-at-risk, "come back", session invites) — **Defer**
-Arguably the single highest-leverage retention lever available (a well-timed "your streak expires in 3 hours" push is a direct, proven habit-reinforcer) — and the one most examined for whether it fights the mission: a *streak-at-risk* or *session-invite* notification still points at "go start a session," so it passes the framing test cleanly, unlike a generic "come back and look at the app" ping. The blocker is pure infrastructure: `CLAUDE.md`'s known-gaps list already flags "no `device_tokens` table exists" — there's no push delivery pipeline (FCM/APNs registration, token storage, a send path) at all. This is real, multi-task work (schema, native registration on both platforms, a send service, at least one real notification: streak-about-to-expire). A backlog entry is added so it's scoped, not lost.
+### 5. Notification hooks (streak-at-risk, "come back", session invites) — **Adopted (streak-at-risk), Phase 5.5**
+Arguably the single highest-leverage retention lever available (a well-timed "your streak expires soon" push is a direct, proven habit-reinforcer) — and the one most examined for whether it fights the mission: a *streak-at-risk* notification still points at "go start a session," so it passes the framing test cleanly, unlike a generic "come back and look at the app" ping. Implemented Phase 5.5: `public.claim_streak_risk_notifications()` fires when `streak_grace_expires_at` is within `STREAK_RISK_NOTIFICATION_WINDOW_HOURS` (6, owner decision), dispatched through a `NotificationSender` seam. Ships as a fully-wired, tested, **inert** pipeline — no Firebase project or Apple Push credentials exist yet, same posture as Play Integrity/App Attest — so the claim logic and dispatch composition are real and proven end-to-end today, only actual delivery is a stand-in. Session invites and a generic "come back" ping remain out of scope (never proposed here — a session invite implies the social/friend-graph work in #4, still deferred).
 
 ### 6. Endowed progress (starting a meter partway full) — **Reject for now, revisit with #2**
 A documented variant of the goal-gradient effect: people persist more toward a goal if they're told they're already partway there (vs. an equivalent goal starting at zero) — e.g., a 10-session milestone framed as "you're already 2/10" the moment someone signs up, rather than a plain 0/10 counter. This is a real technique, but applying it *honestly* here means literally crediting a new user with progress they haven't earned, which conflicts with the Money-Equivalent Logic Rule's spirit even though milestones aren't money — a "free" head start reads as manipulative once the user or a case-study writer notices the counter didn't start at zero. The milestone progress bar in #2 already gets the same visible-gradient benefit honestly (a real, growing number), so this is rejected rather than deferred — it isn't blocked on anything, it's just not worth doing dishonestly.
@@ -42,9 +42,10 @@ A long-horizon progression system (derived from lifetime points, a widening curv
 
 Variable/randomized rewards, dishonest endowed-progress framing, a parallel level/XP ladder.
 
-## Deferred (designed, not started — see new `backlog.md` entries)
+## Deferred (designed, not started — see `backlog.md`)
 
-- Push notification infrastructure (`device_tokens`, FCM/APNs, a send service, streak-at-risk as the first real notification).
-- Social graph + comparison surfaces (friend model, privacy design, then leaderboard/social-proof UI).
+- Social graph + comparison surfaces (friend model, privacy design, then leaderboard/social-proof UI) — `backlog.md`'s Phase 6.5.
 
-Both retire once-vague "known gap" bullets in `CLAUDE.md` into concrete, scoped backlog work — see `backlog.md`'s new Phase 5.5 (push) and the Phase 6 social-graph entry.
+## Closed
+
+- Push notification infrastructure (`device_tokens`, a send-service seam, streak-at-risk as the first real notification) — Phase 5.5, see `backlog.md` and `docs/ARCHITECTURE.md` §9.

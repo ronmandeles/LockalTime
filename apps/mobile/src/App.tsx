@@ -24,7 +24,11 @@ import StatsScreen from './screens/StatsScreen';
 import VenueDashboardScreen from './screens/VenueDashboardScreen';
 import VenueManagementScreen from './screens/VenueManagementScreen';
 import WelcomeBackScreen from './screens/WelcomeBackScreen';
-import { reportTimezoneIfChanged } from './services/user-profile';
+import {
+  registerPushTokenIfChanged,
+  reportLocaleIfChanged,
+  reportTimezoneIfChanged,
+} from './services/user-profile';
 import { hydrateActiveSessionStatus, useActiveSessionStore } from './state/active-session-store';
 import { attachAuthStateListener, useAuthStore } from './state/auth-store';
 import { hydrateOnboardingStatus, markOnboardingSeen, useOnboardingStore } from './state/onboarding-store';
@@ -106,6 +110,13 @@ const App = (): React.JSX.Element | null => {
   useEffect(() => {
     if (authenticatedUserId !== null) {
       reportTimezoneIfChanged(authenticatedUserId);
+      // Phase 5.5: same fire-and-forget, never-rejects posture as the
+      // timezone report above — reportLocaleIfChanged lets server-composed
+      // notifications (the streak-risk push) be localized;
+      // registerPushTokenIfChanged is a no-op today (no real push SDK
+      // linked yet, push-registration.ts) but wired for when one lands.
+      reportLocaleIfChanged(authenticatedUserId);
+      registerPushTokenIfChanged(authenticatedUserId);
       // Phase 6: re-hydrated fresh every authenticated session (never
       // persisted) so a manual runbook role flip is picked up on next
       // sign-in without a stale cached value.

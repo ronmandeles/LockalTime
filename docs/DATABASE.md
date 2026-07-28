@@ -1,6 +1,6 @@
 # Lockal Time — Database Schema
 
-Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. **Phase 4 task 7** (`supabase/migrations/20260728130000_grant_host_assignments_update.sql`): `session_host_assignments` gains a `service_role` `UPDATE` grant — the original Phase 2 migration only granted `select, insert`, missed until the sweep worker's real integration test tried to close a migrated-away host's assignment row and hit `permission denied`. **Phase 4 task 12** (`supabase/migrations/20260728140000_create_rejoin_session_function.sql`): `rejoin_session()`, the token-free counterpart to `join_session()` for Screen 13's Welcome Back rejoin. **Phase 5 task 2** (`supabase/migrations/20260728150000_phase5_gamification_and_stats.sql`): `user_streaks`, `user_stats`, `user_stats_daily`, `milestones` (seeded, 6 tiers), `user_milestones` created; `users.timezone` and `session_participants.stats_applied_at` added. Three deliberate deviations from this file's original blueprint below it (see the "Bonus Computation"/"Gamification" sections for why): `user_stats.sessions_disconnected`, `user_streaks.last_session_day`, `milestones.slug`. 108/108 pgTAP passing (adds `supabase/tests/phase5_gamification_test.sql`, 28 new), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, true concurrent-join-at-capacity, and create→join→disconnect→rejoin→end (proving the disconnect gap disqualifies the Completion Bonus while base points are still credited — the Phase 4 DoD's disconnect-and-rejoin line) against the live local stack; production push pending (manual, per `CLAUDE.md`). **Phase 6** (five migrations, `20260729000000` through `20260729000500`): `grant select on public.users to service_role` (the role-authorization primitive's read path); venues gets its missing `service_role` grant plus a tightened owner-only read policy; `venues.qr_token`/`qr_token_issued_at` (the static-QR venue token) + `chk_static_qr_has_venue` + a partial unique index (one active `static_qr` session per venue) + `public.join_venue_session()`; `public.get_venue_metrics()` (the B2B dashboard's data source); `session_presence_intervals`/`session_participants.device_trust_tier` + `apply_session_stats()` re-created with a 5th `p_device_trust_tier` parameter (see "Stats/Streak/Milestone Accumulation" below). 154/154 pgTAP passing (adds `supabase/tests/phase6_hardening_test.sql` + `join_venue_session_test.sql`, 26 new), plus 17 real integration tests against the live local stack. This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
+Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. **Phase 4 task 7** (`supabase/migrations/20260728130000_grant_host_assignments_update.sql`): `session_host_assignments` gains a `service_role` `UPDATE` grant — the original Phase 2 migration only granted `select, insert`, missed until the sweep worker's real integration test tried to close a migrated-away host's assignment row and hit `permission denied`. **Phase 4 task 12** (`supabase/migrations/20260728140000_create_rejoin_session_function.sql`): `rejoin_session()`, the token-free counterpart to `join_session()` for Screen 13's Welcome Back rejoin. **Phase 5 task 2** (`supabase/migrations/20260728150000_phase5_gamification_and_stats.sql`): `user_streaks`, `user_stats`, `user_stats_daily`, `milestones` (seeded, 6 tiers), `user_milestones` created; `users.timezone` and `session_participants.stats_applied_at` added. Three deliberate deviations from this file's original blueprint below it (see the "Bonus Computation"/"Gamification" sections for why): `user_stats.sessions_disconnected`, `user_streaks.last_session_day`, `milestones.slug`. 108/108 pgTAP passing (adds `supabase/tests/phase5_gamification_test.sql`, 28 new), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, true concurrent-join-at-capacity, and create→join→disconnect→rejoin→end (proving the disconnect gap disqualifies the Completion Bonus while base points are still credited — the Phase 4 DoD's disconnect-and-rejoin line) against the live local stack; production push pending (manual, per `CLAUDE.md`). **Phase 6** (five migrations, `20260729000000` through `20260729000500`): `grant select on public.users to service_role` (the role-authorization primitive's read path); venues gets its missing `service_role` grant plus a tightened owner-only read policy; `venues.qr_token`/`qr_token_issued_at` (the static-QR venue token) + `chk_static_qr_has_venue` + a partial unique index (one active `static_qr` session per venue) + `public.join_venue_session()`; `public.get_venue_metrics()` (the B2B dashboard's data source); `session_presence_intervals`/`session_participants.device_trust_tier` + `apply_session_stats()` re-created with a 5th `p_device_trust_tier` parameter (see "Stats/Streak/Milestone Accumulation" below). 154/154 pgTAP passing (adds `supabase/tests/phase6_hardening_test.sql` + `join_venue_session_test.sql`, 26 new), plus 17 real integration tests against the live local stack. **Phase 5.5** (two migrations, `20260730000000`-`20260730000100`): `device_tokens` (one row per `(user_id, platform)`, `service_role` select-only — registration is always a direct authenticated client write) + `users.locale` (extends the existing column-scoped `update` grant alongside `timezone`, needed so the server's first-ever user-facing text — the streak-risk push — can be localized); `user_streaks.risk_notification_sent_for` + `public.claim_streak_risk_notifications()` (the streak-risk dispatch job's atomic claim function, same `UPDATE ... RETURNING` pattern as `join_session()`). 175/175 pgTAP passing (adds `supabase/tests/phase5_5_push_notifications_test.sql`, 21 new), plus 4 real integration tests against the live local stack. This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
 
 Note on RLS in production: a table's RLS policies alone don't grant access — Postgres privileges (`GRANT`) must exist too, and new tables get none by default for `anon`/`authenticated` **or `service_role`** (confirmed against the real local stack in Phase 2 task 2.3 — the Node API's own service-role writes 500'd until `service_role` got explicit grants too). See `.claude/skills/supabase-integration/SKILL.md` for the pattern (table-wide `SELECT`, column-scoped `UPDATE` to exclude fields like `role`, and a `service_role` grant for every table the Node API writes to).
 
@@ -28,6 +28,10 @@ create table public.users (
                                 -- used to bucket sessions into the
                                 -- participant's LOCAL day (see
                                 -- apply_session_stats() below)
+  locale          text,        -- Phase 5.5: 'en'/'he', client-reported (same
+                                -- resolution the app's own UI uses), so
+                                -- server-composed notifications (the
+                                -- streak-risk push) can be localized
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -303,7 +307,58 @@ create table public.user_streaks (
                                           -- comparison -- same-day repeat
                                           -- sessions must not double-
                                           -- increment current_streak
-  streak_grace_expires_at timestamptz   -- last_session_at + STREAK_GRACE_HOURS
+  streak_grace_expires_at timestamptz,  -- last_session_at + STREAK_GRACE_HOURS
+  risk_notification_sent_for timestamptz  -- Phase 5.5: WHICH
+                                -- streak_grace_expires_at value the
+                                -- streak-risk push was last sent for (not
+                                -- a boolean) -- a fresh deadline (pushed
+                                -- forward by a new session) is always
+                                -- eligible again, while the same
+                                -- still-pending deadline is never
+                                -- re-claimed across repeated poll ticks
+                                -- (see claim_streak_risk_notifications()
+                                -- below)
+);
+
+-- ============================================================
+-- CLAIM_STREAK_RISK_NOTIFICATIONS(): Phase 5.5's streak-risk dispatch job
+-- atomically claims every streak within p_window_hours of expiry that
+-- hasn't already been notified for that exact deadline, in one
+-- UPDATE ... RETURNING -- the same race a naive "select candidates, then
+-- send, then mark sent" would have (a poll tick overlapping the previous
+-- one's send could re-notify before the "already notified" write lands)
+-- is closed the same way join_session()/apply_session_stats() close
+-- theirs. No separate "did they already have a session today" check is
+-- needed -- streak_grace_expires_at already IS that signal (a session
+-- pushes it past the window automatically); an already-broken streak
+-- (current_streak = 0, set by the streak-expiry job) is naturally
+-- excluded too. Node-only.
+-- ============================================================
+create function public.claim_streak_risk_notifications(
+  p_now timestamptz, p_window_hours int
+) returns table(user_id uuid)
+  language plpgsql security definer set search_path = ''
+  as $$ ... $$;
+
+-- ============================================================
+-- DEVICE_TOKENS (Phase 5.5, docs/RETENTION_STRATEGY.md §5) -- one row per
+-- (user_id, platform): registering a fresh token upserts on this
+-- constraint, so a reinstall replaces the old token instead of
+-- accumulating a duplicate (owner decision -- a second same-platform
+-- device steals the notification slot, an accepted MVP limitation).
+-- Registered directly by the client under RLS (not money-equivalent, same
+-- posture as timezone/locale) -- service_role only gets SELECT, to read
+-- send targets for the streak-risk dispatch job; there is no service_role
+-- write grant, this table is never written from Node.
+-- ============================================================
+create table public.device_tokens (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references public.users(id) on delete cascade,
+  platform     text not null check (platform in ('android', 'ios')),
+  token        text not null,
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  unique (user_id, platform)
 );
 
 -- ============================================================
@@ -418,6 +473,8 @@ Called once per finalized `session_participants` row, after that row (and its `r
 
 **Streak expiry** is a separate concern from the above: nothing at session-close time can *break* a streak, since a break is caused by the passage of time, not an event. `apps/server/src/modules/stats/streak-expiry.ts`'s `runStreakExpiry()` — the same testable-core-plus-`setInterval` split as the Phase 4 sweep worker, on its own `STREAK_EXPIRY_INTERVAL_SECONDS` cadence (300s — no debounce-window concern the way host migration has, so it can run far less often) — delegates to `SessionsStore.expireStreaks(asOf)`, a single scoped `UPDATE ... SET current_streak = 0 WHERE streak_grace_expires_at < asOf AND current_streak > 0`. Deliberately a plain `service_role`-granted UPDATE, not a `SECURITY DEFINER` function: zeroing an already-expired streak has no atomicity concern the way `apply_session_stats()`'s cross-table read-decide-write does. `longest_streak` is never touched by this job — it's a monotonic high-water mark.
 
+**Streak-risk notification (Phase 5.5)** is a third, independent concern from both of the above: neither accumulation nor expiry needs to know a notification was ever sent. `public.claim_streak_risk_notifications(p_now, p_window_hours)` (`supabase/migrations/20260730000100_streak_risk_notification_claim.sql`) atomically claims every streak within `p_window_hours` of `streak_grace_expires_at` that hasn't already been notified for that exact deadline, via a single `UPDATE ... RETURNING` — the same race a naive "select candidates, then send, then mark sent" would have (an overlapping poll tick re-notifying before the "already notified" write lands) is closed the same way `join_session()`/`apply_session_stats()` close theirs. `apps/server/src/modules/notifications/streak-risk-notifier.ts`'s `runStreakRiskNotifications()` — same testable-core-plus-`setInterval` split, `STREAK_RISK_NOTIFICATION_INTERVAL_SECONDS` cadence — calls it, looks up registered `device_tokens` + `users.locale` for whoever was claimed, and dispatches through the `NotificationSender` seam (`unconfiguredNotificationSender` today — no FCM/APNs credentials exist yet, same posture as attestation). A claimed user with no registered device token still consumes their notification window (no send attempted, no error) — the claim represents "this deadline was processed," decoupled from whether a device existed to deliver to.
+
 ## Config Constants (Node, not DB — tune here, not in migrations)
 
 | Constant | Default | Notes |
@@ -440,3 +497,5 @@ Called once per finalized `session_participants` row, after that row (and its `r
 | `VENUE_SESSION_MAX_PARTICIPANTS` | 200 | Phase 6 — a verified host's `static_qr` venue session, higher than `SESSION_MAX_PARTICIPANTS` since a business's foot traffic is a different shape of "group" than a friend session; a config constant, not a per-venue DB column, for MVP simplicity |
 | `VENUE_METRICS_WINDOW_DAYS` | 30 | Phase 6 — the trailing window `GET /venues/:id/metrics`'s "average session duration/customer" is computed over |
 | `ATTESTATION_ENFORCEMENT_ENABLED` | `false` | Phase 6 — built-but-inert: no real Play Integrity/App Attest credentials or monitor-mode data exist yet to threshold against (every recorded verdict today reads `not_configured`). Gates `attestation/trust-tier.ts`'s `applyEnforcementPolicy()`, the one place that matters — every downstream reader (`points/group-bonus.ts`, `apply_session_stats()`) just trusts whatever tier was already written. Flipping to `true` is the only remaining step once real credentials exist. |
+| `STREAK_RISK_NOTIFICATION_WINDOW_HOURS` | 6 | Phase 5.5 — owner decision: the streak-risk push fires once `streak_grace_expires_at` is within this many hours (~12.5% of `STREAK_GRACE_HOURS`) |
+| `STREAK_RISK_NOTIFICATION_INTERVAL_SECONDS` | 300 | Phase 5.5 — dispatch job cadence; no debounce concern (the claim function itself prevents a double-send), same reasoning as `STREAK_EXPIRY_INTERVAL_SECONDS` |
