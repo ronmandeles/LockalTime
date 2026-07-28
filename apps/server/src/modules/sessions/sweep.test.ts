@@ -51,6 +51,7 @@ const interval = (
   leftAt: null,
   blockerReadyAt: null,
   disconnectReason: null,
+  deviceTrustTier: 'trusted',
   ...overrides,
 });
 

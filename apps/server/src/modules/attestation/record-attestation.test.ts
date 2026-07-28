@@ -36,8 +36,9 @@ describe('recordDeviceAttestation', () => {
       rawResponse: { some: 'payload' },
     }));
 
-    await recordDeviceAttestation(provider, store, INPUT);
+    const verdict = await recordDeviceAttestation(provider, store, INPUT);
 
+    expect(verdict).toBe('MEETS_DEVICE_INTEGRITY');
     expect(store.recorded).toEqual({
       userId: INPUT.userId,
       sessionId: INPUT.sessionId,
@@ -54,7 +55,7 @@ describe('recordDeviceAttestation', () => {
       throw new Error('provider unreachable');
     });
 
-    await expect(recordDeviceAttestation(provider, store, INPUT)).resolves.toBeUndefined();
+    await expect(recordDeviceAttestation(provider, store, INPUT)).resolves.toBe('provider_error');
 
     expect(store.recorded?.verdict).toBe('provider_error');
     expect(store.recorded?.rawResponse).toMatchObject({ error: 'provider unreachable' });

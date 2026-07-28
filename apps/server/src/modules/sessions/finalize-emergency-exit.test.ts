@@ -33,11 +33,27 @@ const buildFakeStore = (
     async rejoinSession(): Promise<never> {
       throw new Error('not used in these tests');
     },
+    async joinVenueSession(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getSessionPreview(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getOpenParticipantCount(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getActiveStaticQrSessionId(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
+    async getVenueMetrics(): Promise<never> {
+      throw new Error('not used in these tests');
+    },
     async closeOpenInterval(): Promise<never> {
       throw new Error('not used in these tests');
     },
     async insertPresenceInterval() {},
     async markBlockerReady() {},
+    async markDeviceTrust() {},
     async getSessionSummary() {
       return session;
     },
@@ -91,6 +107,7 @@ const interval = (joinedAt: string, leftAt: string): PresenceIntervalRow => ({
   leftAt,
   blockerReadyAt: joinedAt,
   disconnectReason: 'emergency_exit',
+  deviceTrustTier: 'trusted',
 });
 
 describe('finalizeEmergencyExit', () => {
@@ -110,6 +127,7 @@ describe('finalizeEmergencyExit', () => {
         groupBonusEarned: false,
         completionBonusEarned: false,
         pointsEarned: 23,
+        deviceTrustTier: 'trusted',
       },
     ]);
   });

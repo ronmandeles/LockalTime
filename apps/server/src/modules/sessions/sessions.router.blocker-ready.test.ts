@@ -5,6 +5,7 @@ import { createRequireAuth } from '../../middleware/require-auth';
 import { errorHandler } from '../../middleware/error-handler';
 import { unconfiguredAttestationProvider } from '../attestation/attestation-provider';
 import { createTestJwks, type TestJwks } from '../../test-support/local-jwks';
+import type { VenuesStore } from '../venues/venues-store';
 import { createSessionsRouter } from './sessions.router';
 import type { SessionsStore } from './sessions-store';
 
@@ -32,11 +33,27 @@ const buildFakeStore = (
   async rejoinSession(): Promise<never> {
     throw new Error('not used in these tests');
   },
+  async joinVenueSession(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
+  async getSessionPreview(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
+  async getOpenParticipantCount(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
+  async getActiveStaticQrSessionId(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
+  async getVenueMetrics(): Promise<never> {
+    throw new Error('not used in these tests');
+  },
   async closeOpenInterval(): Promise<never> {
     throw new Error('not used in these tests');
   },
   async insertPresenceInterval() {},
   markBlockerReady,
+  async markDeviceTrust() {},
   async getSessionSummary(): Promise<never> {
     throw new Error('not used in these tests');
   },
@@ -86,6 +103,21 @@ const buildApp = (store: SessionsStore): express.Express => {
       requireAuth: createRequireAuth(jwks.getKey),
       attestationProvider: unconfiguredAttestationProvider,
       attestationStore: { async recordAttestation() {} },
+      // Phase 6 task 1: /:id/blocker-ready never touches venue_id ownership.
+      venuesStore: {
+        async createVenue(): Promise<never> {
+          throw new Error('not used in these tests');
+        },
+        async listVenuesForOwner(): Promise<never> {
+          throw new Error('not used in these tests');
+        },
+        async getVenueById(): Promise<never> {
+          throw new Error('not used in these tests');
+        },
+        async regenerateQrToken(): Promise<never> {
+          throw new Error('not used in these tests');
+        },
+      } satisfies VenuesStore,
     }),
   );
   app.use(errorHandler);

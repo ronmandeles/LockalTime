@@ -3,6 +3,43 @@ import { getTimeZone } from 'react-native-localize';
 
 import { getSupabaseClient } from './supabase-client';
 
+// Phase 6: the client's first-ever read of its own role. Mirrors
+// stats-repository.ts's RepositoryResult convention (a direct, RLS-
+// protected read — never a write, never recomputed — of a value that's
+// display/UI-gating only, not money-equivalent).
+export type UserRole = 'user' | 'verified_host' | 'admin';
+
+export interface UserProfileRow {
+  readonly role: UserRole;
+}
+
+export interface ProfileFailure {
+  readonly message: string;
+}
+
+export type ProfileResult<T> =
+  | { readonly ok: true; readonly value: T }
+  | { readonly ok: false; readonly error: ProfileFailure };
+
+// maybeSingle, not single: the signup trigger creates this row
+// synchronously, but a null result is still the correct "nothing to gate
+// on yet" state rather than an error, same posture as
+// stats-repository.ts's fetchUserStats for a brand-new user.
+export const fetchUserProfile = async (
+  userId: string,
+): Promise<ProfileResult<UserProfileRow | null>> => {
+  const { data, error } = await getSupabaseClient()
+    .from('users')
+    .select('role')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (error !== null) {
+    return { ok: false, error: { message: error.message } };
+  }
+  return { ok: true, value: data as unknown as UserProfileRow | null };
+};
+
 // Phase 5: reports the device's IANA timezone to users.timezone so the
 // server can bucket a finalized session into the participant's LOCAL day
 // rather than UTC (apps/server's apply_session_stats()) — see

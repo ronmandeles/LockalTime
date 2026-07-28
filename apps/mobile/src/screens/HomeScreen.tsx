@@ -17,6 +17,7 @@ import type {
   UserStreakRow,
 } from '../services/stats-repository';
 import { useAuthStore } from '../state/auth-store';
+import { useProfileStore } from '../state/profile-store';
 import { radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Home (Screen 4). Phase 5 (docs/RETENTION_STRATEGY.md §2) adds a
@@ -50,6 +51,11 @@ const HomeScreen = ({ navigation }: HomeScreenProps): React.JSX.Element => {
   const userId = useAuthStore((state) =>
     state.auth.status === 'authenticated' ? state.auth.session.user.id : null,
   );
+  // Phase 6: gates the manageVenuesCta link below. Reads the already-
+  // hydrated store directly (App.tsx fires hydrateProfile on sign-in) —
+  // this screen never fetches it itself.
+  const role = useProfileStore((state) => state.role);
+  const isVerifiedHost = role === 'verified_host' || role === 'admin';
   const [summary, setSummary] = useState<HomeSummary | null>(null);
 
   useEffect(() => {
@@ -170,6 +176,24 @@ const HomeScreen = ({ navigation }: HomeScreenProps): React.JSX.Element => {
         >
           <Text style={styles.secondaryLinkLabel}>{t('home.statsCta')}</Text>
         </TouchableOpacity>
+        {isVerifiedHost && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('VenueManagement')}
+            style={styles.secondaryLink}
+            testID="home-manage-venues-cta"
+          >
+            <Text style={styles.secondaryLinkLabel}>{t('home.manageVenuesCta')}</Text>
+          </TouchableOpacity>
+        )}
+        {isVerifiedHost && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('VenueDashboard')}
+            style={styles.secondaryLink}
+            testID="home-venue-dashboard-cta"
+          >
+            <Text style={styles.secondaryLinkLabel}>{t('home.venueDashboardCta')}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

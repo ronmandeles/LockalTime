@@ -3,6 +3,7 @@ import { computeSessionRewards } from '../points/compute-rewards';
 import type { ParticipantSummary, PresenceInterval } from '../points/types';
 import type {
   BonusType,
+  DeviceTrustTier,
   DisconnectReason,
   EndReason,
   ExitReason,
@@ -52,7 +53,18 @@ const toPresenceInterval = (row: PresenceIntervalRow): PresenceInterval => ({
   // real state this function needs to model.
   leftAt: new Date(row.leftAt as string),
   blockerReadyAt: row.blockerReadyAt === null ? null : new Date(row.blockerReadyAt),
+  deviceTrusted: row.deviceTrustTier === 'trusted',
 });
+
+// Phase 6 tasks 8-9: 'unverified' if ANY of this participant's intervals
+// this session was unverified — one participant-level tier, used for the
+// session_participants row and apply_session_stats()'s streak gate (the
+// per-interval gate inside group-bonus.ts is separate and stricter, since
+// a bonus-qualifying streak needs every overlapping interval trusted).
+const deriveParticipantDeviceTrustTier = (
+  userIntervals: readonly PresenceIntervalRow[],
+): DeviceTrustTier =>
+  userIntervals.some((row) => row.deviceTrustTier === 'unverified') ? 'unverified' : 'trusted';
 
 // Groups every interval by user and derives each user's final exit_reason
 // from their most recently closed interval. Includes EVERY participant who
@@ -61,7 +73,7 @@ const toPresenceInterval = (row: PresenceIntervalRow): PresenceInterval => ({
 // their presence too, even though the caller won't write their row again.
 const buildParticipantSummaries = (
   intervals: readonly PresenceIntervalRow[],
-): readonly ParticipantSummary[] => {
+): readonly (ParticipantSummary & { readonly deviceTrustTier: DeviceTrustTier })[] => {
   const byUser = new Map<string, PresenceIntervalRow[]>();
   for (const row of intervals) {
     const existing = byUser.get(row.userId);
@@ -82,6 +94,7 @@ const buildParticipantSummaries = (
       userId,
       exitReason: deriveExitReason(newest.disconnectReason),
       intervals: userIntervals.map(toPresenceInterval),
+      deviceTrustTier: deriveParticipantDeviceTrustTier(userIntervals),
     };
   });
 };
@@ -149,6 +162,7 @@ export const endSession = async (
     endedAt: new Date(endedAt),
   });
   const exitReasonByUserId = new Map(participants.map((p) => [p.userId, p.exitReason]));
+  const deviceTrustTierByUserId = new Map(participants.map((p) => [p.userId, p.deviceTrustTier]));
 
   const participantRows: FinalizedParticipantInput[] = [];
   const rewardsHistoryRows: RewardsHistoryRowInput[] = [];
@@ -165,6 +179,7 @@ export const endSession = async (
       groupBonusEarned: reward.groupBonusEarned,
       completionBonusEarned: reward.completionBonusEarned,
       pointsEarned: reward.pointsEarned,
+      deviceTrustTier: deviceTrustTierByUserId.get(reward.userId) ?? 'trusted',
     });
     rewardsHistoryRows.push(
       ...rewardToRewardsHistoryRows(
@@ -191,7 +206,13 @@ export const endSession = async (
   // at their own exit moment.
   await Promise.all(
     participantRows.map((row) =>
-      store.applySessionStats(sessionId, row.userId, endedAt, STREAK_GRACE_HOURS),
+      store.applySessionStats(
+        sessionId,
+        row.userId,
+        endedAt,
+        STREAK_GRACE_HOURS,
+        row.deviceTrustTier,
+      ),
     ),
   );
 

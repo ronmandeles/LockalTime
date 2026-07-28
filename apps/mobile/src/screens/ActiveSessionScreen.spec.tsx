@@ -62,8 +62,10 @@ import ActiveSessionScreen from './ActiveSessionScreen';
 // rerender). Phase 3 task 3.1 adds the blocker-violation banner.
 
 const mockNavigate = jest.fn();
+const mockReset = jest.fn();
 const navigationStub = {
   navigate: mockNavigate,
+  reset: mockReset,
 } as unknown as Parameters<typeof ActiveSessionScreen>[0]['navigation'];
 const routeStub = {
   key: 'ActiveSession',
@@ -113,6 +115,7 @@ describe('ActiveSessionScreen', () => {
       selector({ auth: { status: 'authenticated', session: { user: { id: 'host-1' } } } }),
     );
     mockNavigate.mockReset();
+    mockReset.mockReset();
     mockSetActiveSession.mockReset().mockResolvedValue(undefined);
   });
 
@@ -219,7 +222,7 @@ describe('ActiveSessionScreen', () => {
       expect(
         screen.getByText(en.activeSession.blockerViolation.message.permission_revoked),
       ).toBeOnTheScreen();
-      expect(screen.getByTestId('active-session-open-settings')).toBeOnTheScreen();
+      expect(screen.getByTestId('active-session-blocker-violation-action')).toBeOnTheScreen();
     });
 
     it('shows the service_killed message', async () => {
@@ -321,6 +324,75 @@ describe('ActiveSessionScreen', () => {
       await renderScreen();
 
       expect(mockSetActiveSession).toHaveBeenCalledWith('session-1');
+    });
+  });
+
+  describe('offline banner (Phase 6 task 7)', () => {
+    it('shows no offline banner while genuinely active', async () => {
+      mockSession({}, 'active');
+
+      await renderScreen();
+
+      expect(screen.queryByTestId('active-session-offline-banner')).toBeNull();
+    });
+
+    it('shows a quiet banner for participant_reconnecting', async () => {
+      mockSession({}, 'participant_reconnecting');
+
+      await renderScreen();
+
+      expect(screen.getByTestId('active-session-offline-banner')).toBeOnTheScreen();
+      expect(
+        screen.getByText(en.activeSession.offlineBanner.participant_reconnecting),
+      ).toBeOnTheScreen();
+    });
+
+    it('shows a prominent banner for degraded_offline', async () => {
+      mockSession({}, 'degraded_offline');
+
+      await renderScreen();
+
+      expect(screen.getByText(en.activeSession.offlineBanner.degraded_offline)).toBeOnTheScreen();
+    });
+
+    it('shows no offline banner for host_disconnected — that state has its own toast, not this banner', async () => {
+      mockSession({}, 'host_disconnected');
+
+      await renderScreen();
+
+      expect(screen.queryByTestId('active-session-offline-banner')).toBeNull();
+    });
+  });
+
+  describe('terminal-status navigation (Phase 6 task 7 — the stranded-participant fix)', () => {
+    it('resets into SessionCompletion once the status becomes completed', async () => {
+      mockSession({}, 'completed');
+
+      await renderScreen();
+
+      expect(mockReset).toHaveBeenCalledWith({
+        index: 0,
+        routes: [{ name: 'SessionCompletion', params: { sessionId: 'session-1' } }],
+      });
+    });
+
+    it('resets into SessionCompletion once the status becomes force_terminated', async () => {
+      mockSession({}, 'force_terminated');
+
+      await renderScreen();
+
+      expect(mockReset).toHaveBeenCalledWith({
+        index: 0,
+        routes: [{ name: 'SessionCompletion', params: { sessionId: 'session-1' } }],
+      });
+    });
+
+    it('never navigates away while the session is still ongoing', async () => {
+      mockSession({}, 'active');
+
+      await renderScreen();
+
+      expect(mockReset).not.toHaveBeenCalled();
     });
   });
 

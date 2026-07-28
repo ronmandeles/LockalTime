@@ -17,11 +17,15 @@ export interface RecordDeviceAttestationInput {
 // only logs. Two independent fail-open layers — a thrown provider error is
 // caught here and recorded as its own verdict; a failed DB write is
 // swallowed inside the store — so this function itself never rejects.
+//
+// Returns the verdict string (Phase 6 tasks 8-9) so callers can feed it
+// into attestation/trust-tier.ts's verdictToTrustTier() — existing callers
+// that only awaited this as a bare statement are unaffected.
 export const recordDeviceAttestation = async (
   provider: AttestationProvider,
   store: AttestationStore,
   input: RecordDeviceAttestationInput,
-): Promise<void> => {
+): Promise<string> => {
   let verdict: string;
   let rawResponse: unknown;
 
@@ -46,4 +50,6 @@ export const recordDeviceAttestation = async (
     verdict,
     rawResponse,
   });
+
+  return verdict;
 };

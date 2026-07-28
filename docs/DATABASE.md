@@ -1,6 +1,6 @@
 # Lockal Time — Database Schema
 
-Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. **Phase 4 task 7** (`supabase/migrations/20260728130000_grant_host_assignments_update.sql`): `session_host_assignments` gains a `service_role` `UPDATE` grant — the original Phase 2 migration only granted `select, insert`, missed until the sweep worker's real integration test tried to close a migrated-away host's assignment row and hit `permission denied`. **Phase 4 task 12** (`supabase/migrations/20260728140000_create_rejoin_session_function.sql`): `rejoin_session()`, the token-free counterpart to `join_session()` for Screen 13's Welcome Back rejoin. **Phase 5 task 2** (`supabase/migrations/20260728150000_phase5_gamification_and_stats.sql`): `user_streaks`, `user_stats`, `user_stats_daily`, `milestones` (seeded, 6 tiers), `user_milestones` created; `users.timezone` and `session_participants.stats_applied_at` added. Three deliberate deviations from this file's original blueprint below it (see the "Bonus Computation"/"Gamification" sections for why): `user_stats.sessions_disconnected`, `user_streaks.last_session_day`, `milestones.slug`. 108/108 pgTAP passing (adds `supabase/tests/phase5_gamification_test.sql`, 28 new), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, true concurrent-join-at-capacity, and create→join→disconnect→rejoin→end (proving the disconnect gap disqualifies the Completion Bonus while base points are still credited — the Phase 4 DoD's disconnect-and-rejoin line) against the live local stack; production push pending (manual, per `CLAUDE.md`). This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
+Status: planning blueprint, except the tables implemented so far. `users` — implemented (`supabase/migrations/20260718015352_create_users.sql`), migrated to both local and production (`LockalTime`), pgTAP-verified (`supabase/tests/users_test.sql`). The signup trigger (`supabase/migrations/20260718192504_create_users_signup_trigger.sql`) is implemented and pgTAP-verified locally (`supabase/tests/users_trigger_test.sql`); production push pending (done manually by the user per `CLAUDE.md`). **Phase 2 task 2.1** (`supabase/migrations/20260726225500_create_venues.sql`, `20260726225600_create_sessions_core.sql`): `venues`, `sessions`, `session_host_assignments`, `session_presence_intervals`, `session_participants`, `device_attestations` implemented and pgTAP-verified locally. **Phase 2 task 2.3** (`supabase/migrations/20260726225700_create_join_session_function.sql`): `join_session()` atomic-join RPC. **Phase 4 task 2** (`supabase/migrations/20260728120000_phase4_lifecycle_and_rewards.sql`): `rewards_history` created (RLS: own rows only); `sessions.end_reason` gains `force_terminated`; `session_participants.exit_reason` gains `disconnected`; `session_presence_intervals` gains `blocker_ready_at`. **Phase 4 task 7** (`supabase/migrations/20260728130000_grant_host_assignments_update.sql`): `session_host_assignments` gains a `service_role` `UPDATE` grant — the original Phase 2 migration only granted `select, insert`, missed until the sweep worker's real integration test tried to close a migrated-away host's assignment row and hit `permission denied`. **Phase 4 task 12** (`supabase/migrations/20260728140000_create_rejoin_session_function.sql`): `rejoin_session()`, the token-free counterpart to `join_session()` for Screen 13's Welcome Back rejoin. **Phase 5 task 2** (`supabase/migrations/20260728150000_phase5_gamification_and_stats.sql`): `user_streaks`, `user_stats`, `user_stats_daily`, `milestones` (seeded, 6 tiers), `user_milestones` created; `users.timezone` and `session_participants.stats_applied_at` added. Three deliberate deviations from this file's original blueprint below it (see the "Bonus Computation"/"Gamification" sections for why): `user_stats.sessions_disconnected`, `user_streaks.last_session_day`, `milestones.slug`. 108/108 pgTAP passing (adds `supabase/tests/phase5_gamification_test.sql`, 28 new), plus a real integration suite (`apps/server/integration/sessions.integration.test.ts`) covering create→join→leave, RLS, true concurrent-join-at-capacity, and create→join→disconnect→rejoin→end (proving the disconnect gap disqualifies the Completion Bonus while base points are still credited — the Phase 4 DoD's disconnect-and-rejoin line) against the live local stack; production push pending (manual, per `CLAUDE.md`). **Phase 6** (five migrations, `20260729000000` through `20260729000500`): `grant select on public.users to service_role` (the role-authorization primitive's read path); venues gets its missing `service_role` grant plus a tightened owner-only read policy; `venues.qr_token`/`qr_token_issued_at` (the static-QR venue token) + `chk_static_qr_has_venue` + a partial unique index (one active `static_qr` session per venue) + `public.join_venue_session()`; `public.get_venue_metrics()` (the B2B dashboard's data source); `session_presence_intervals`/`session_participants.device_trust_tier` + `apply_session_stats()` re-created with a 5th `p_device_trust_tier` parameter (see "Stats/Streak/Milestone Accumulation" below). 154/154 pgTAP passing (adds `supabase/tests/phase6_hardening_test.sql` + `join_venue_session_test.sql`, 26 new), plus 17 real integration tests against the live local stack. This is the consolidated, final-for-now schema reflecting every decision made during architecture planning. Update this file whenever a migration changes the shape of the data — `supabase/migrations/` is the executable source of truth, this file is the human-readable explanation of *why* it looks the way it does.
 
 Note on RLS in production: a table's RLS policies alone don't grant access — Postgres privileges (`GRANT`) must exist too, and new tables get none by default for `anon`/`authenticated` **or `service_role`** (confirmed against the real local stack in Phase 2 task 2.3 — the Node API's own service-role writes 500'd until `service_role` got explicit grants too). See `.claude/skills/supabase-integration/SKILL.md` for the pattern (table-wide `SELECT`, column-scoped `UPDATE` to exclude fields like `role`, and a `service_role` grant for every table the Node API writes to).
 
@@ -61,6 +61,11 @@ create table public.venues (
   owner_id        uuid not null references public.users(id),
   name            text not null,
   address_label   text,        -- free-text display only, never geocoded
+  qr_token        text unique not null,  -- Phase 6: the printed venue code --
+                                           -- no expiry by design, minted once
+                                           -- at creation, invalidated only by
+                                           -- a deliberate regenerate call
+  qr_token_issued_at timestamptz not null default now(),
   created_at      timestamptz not null default now()
 );
 
@@ -122,11 +127,21 @@ create table public.session_presence_intervals (
   left_at           timestamptz,      -- null while still connected
   disconnect_reason text
                       check (disconnect_reason in ('emergency_exit', 'involuntary_disconnect', 'session_ended')),
-  blocker_ready_at  timestamptz       -- Phase 4: set once the device confirms
+  blocker_ready_at  timestamptz,      -- Phase 4: set once the device confirms
                                        -- the native blocker actually started;
                                        -- null = never counts toward the Group
                                        -- Bonus 5+ threshold (still counts for
                                        -- base points). See §7 "Bonus Computation".
+  device_trust_tier text not null default 'trusted'
+                      check (device_trust_tier in ('trusted', 'unverified'))
+                                       -- Phase 6: already enforcement-gated at
+                                       -- write time (markDeviceTrust ->
+                                       -- attestation/trust-tier.ts) -- with
+                                       -- ATTESTATION_ENFORCEMENT_ENABLED=false
+                                       -- (the shipping default) this is always
+                                       -- 'trusted'. 'unverified' excludes the
+                                       -- interval from the Group Bonus only,
+                                       -- same shape as blocker_ready_at above.
 );
 
 create index idx_presence_session on public.session_presence_intervals(session_id);
@@ -150,6 +165,14 @@ create table public.session_participants (
                                            -- exactly-once guard against
                                            -- double-accumulating into
                                            -- user_stats/user_streaks
+  device_trust_tier         text not null default 'trusted'
+                              check (device_trust_tier in ('trusted', 'unverified')),
+                                           -- Phase 6: 'unverified' if ANY of
+                                           -- this participant's intervals this
+                                           -- session was unverified -- feeds
+                                           -- apply_session_stats()'s streak-
+                                           -- exclusion gate (bonus/streak only,
+                                           -- never base points/lifetime stats)
 
   unique (session_id, user_id)
 );
@@ -218,6 +241,51 @@ create index idx_presence_open on public.session_presence_intervals(session_id)
 create function public.rejoin_session(
   p_session_id uuid, p_user_id uuid, p_max_participants int
 ) returns text language plpgsql security definer set search_path = ''
+  as $$ ... $$;
+
+-- ============================================================
+-- JOIN_VENUE_SESSION(): Phase 6 task 2's venue-scoped counterpart to
+-- JOIN_SESSION() -- resolves "the venue's currently active static_qr
+-- session" and joins it in one atomic statement (same row-locking
+-- reasoning as JOIN_SESSION() -- two devices scanning the same venue QR
+-- at the same instant, right as one session ends and another starts,
+-- must not both succeed against a session that's no longer current).
+-- p_token is checked against the venue's CURRENT qr_token column, exactly
+-- like JOIN_SESSION() checks its token against sessions.qr_token -- this
+-- is what makes regenerating a venue's code actually invalidate the old
+-- printout. Returns a (outcome, session_id) row, not plain text, since
+-- resolving the session id IS this function's job -- Node doesn't know it
+-- ahead of time the way it does for a session token. Outcomes: 'joined',
+-- 'already_joined', 'invalid_token', 'venue_not_found',
+-- 'no_active_session', 'at_capacity'. Node-only.
+-- ============================================================
+create function public.join_venue_session(
+  p_venue_id uuid, p_token text, p_user_id uuid, p_max_participants int
+) returns table(outcome text, session_id uuid)
+  language plpgsql security definer set search_path = ''
+  as $$ ... $$;
+
+-- ============================================================
+-- GET_VENUE_METRICS(): Phase 6 task 5's B2B dashboard data source. A
+-- plain STABLE SQL function (not row-locking PL/pgSQL like the join
+-- functions above) -- this reads a snapshot for display, never decides or
+-- writes anything, so there's no correctness reason to serialize
+-- concurrent callers. One function rather than several Node round trips
+-- averaged in-process: PostgREST's query builder has no native
+-- avg()/count() aggregate support the way a plain SQL function does.
+-- Returns concurrent_active_customers (live open-interval count on the
+-- venue's active sessions), sessions_in_window and
+-- avg_minutes_per_customer (both over the trailing p_window_start).
+-- Node-only.
+-- ============================================================
+create function public.get_venue_metrics(
+  p_venue_id uuid, p_window_start timestamptz
+) returns table(
+    concurrent_active_customers int,
+    sessions_in_window int,
+    avg_minutes_per_customer numeric
+  )
+  language sql security definer set search_path = '' stable
   as $$ ... $$;
 
 -- ============================================================
@@ -324,6 +392,7 @@ Computed by the Node API at session-close time, from `session_presence_intervals
 4. For Completion Bonus: check the session's actual duration ≥ 60 minutes, the participant's first interval started within ~60s of `sessions.started_at`, they have exactly one interval spanning the whole session (no disconnect gaps), and `exit_reason = 'completed'`.
 5. `points_earned = round(base_points × (100 + bonus_percent) / 100)`, where `base_points = total_minutes_present × BASE_POINTS_PER_MINUTE` and `bonus_percent` is the sum of whichever bonus percentages were earned (0/10/20) — additive on the percentage, never compounded (e.g. both earned means ×1.20 once, not ×1.10 twice). Rounded once at the end, not per-bonus, to avoid compounding rounding drift.
 6. Step 1's "concurrent-participant-count" timeline only counts a participant from the moment their device confirms local blocker setup (`session_presence_intervals.blocker_ready_at`, Phase 4), never from raw `joined_at` — closes the Sybil/bonus-farming vector (§7, §8 item 9). Base points (step 5) are unaffected by this gate and still use the participant's real `joined_at`/`left_at`.
+7. **Phase 6**: an interval whose `device_trust_tier = 'unverified'` (already enforcement-gated at write time, §8 item 8) is excluded from step 1's timeline exactly like an unconfirmed `blocker_ready_at` — it contributes no event and can never push another participant over the 5-participant threshold either — and is excluded from its own Group Bonus eligibility in step 3. Base points and the Completion Bonus are unaffected by this gate.
 
 An `exit_reason` of `emergency_exit` or `disconnected` (Phase 4 — a participant who went offline and never reconnected before the session ended) forfeits both bonuses unconditionally, regardless of how close they were to qualifying; base points for actual minutes present are always kept.
 
@@ -335,7 +404,7 @@ All rules above are confirmed final — see `docs/ARCHITECTURE.md` §7/§11.
 
 ## Stats/Streak/Milestone Accumulation (Phase 5)
 
-Unlike the bonus computation above (pure functions, computed by Node and written once), streak/milestone/lifetime-aggregate accumulation is a **Postgres function**, `public.apply_session_stats(p_session_id, p_user_id, p_finalized_at, p_streak_grace_hours)` (`supabase/migrations/20260728160000_create_apply_session_stats_function.sql`). Why the split: `computeSessionRewards()` only ever needs data from the one session it's closing, so a pure Node function is the right shape. Accumulation needs to read-modify-write a *cross-session* row (`user_stats`, `user_streaks`) from **two independent Node call sites** (`end-session.ts` and `finalize-emergency-exit.ts`), either of which can race the sweep worker or each other for the same user across different sessions — a Node-side read-then-write has a lost-update window no application-level care closes. A single `SECURITY DEFINER` function does the whole read-decide-write cycle under row locks inside one transaction, the same precedent as `join_session()`/`rejoin_session()`.
+Unlike the bonus computation above (pure functions, computed by Node and written once), streak/milestone/lifetime-aggregate accumulation is a **Postgres function**, `public.apply_session_stats(p_session_id, p_user_id, p_finalized_at, p_streak_grace_hours, p_device_trust_tier default 'trusted')` (`supabase/migrations/20260728160000_create_apply_session_stats_function.sql`, 5th parameter added by Phase 6's `20260729000500_device_trust_tier.sql`). **A real Postgres gotcha from that later migration, caught by the actual `supabase test db` run**: `CREATE OR REPLACE FUNCTION` only replaces a function with the *exact same* parameter list — adding a parameter, even a defaulted one, creates a new overload instead, leaving the original 4-arg function ambiguously resolvable alongside the new 5-arg one for any plain 4-argument call. Fixed with an explicit `DROP FUNCTION IF EXISTS` on the old signature before recreating it with five. Why the split: `computeSessionRewards()` only ever needs data from the one session it's closing, so a pure Node function is the right shape. Accumulation needs to read-modify-write a *cross-session* row (`user_stats`, `user_streaks`) from **two independent Node call sites** (`end-session.ts` and `finalize-emergency-exit.ts`), either of which can race the sweep worker or each other for the same user across different sessions — a Node-side read-then-write has a lost-update window no application-level care closes. A single `SECURITY DEFINER` function does the whole read-decide-write cycle under row locks inside one transaction, the same precedent as `join_session()`/`rejoin_session()`.
 
 Called once per finalized `session_participants` row, after that row (and its `rewards_history` base/bonus rows) already exist. Returns `'applied'` or `'skipped'` (exactly-once guard via `session_participants.stats_applied_at`, or the row not existing at all).
 
@@ -343,7 +412,7 @@ Called once per finalized `session_participants` row, after that row (and its `r
 2. Resolve the participant's **local day**: `(p_finalized_at at time zone coalesce(users.timezone, 'UTC'))::date` — an unrecognized/garbage timezone string falls back to UTC rather than aborting finalization.
 3. Accumulate into `user_stats`: `total_minutes`, `total_points`, and whichever of `sessions_completed`/`sessions_emergency_exit`/`sessions_disconnected` matches `exit_reason`.
 4. Upsert `user_stats_daily` for that local day.
-5. **Streak** (`user_streaks`, any session with presence counts — `docs/RETENTION_STRATEGY.md` §1's forgiving-by-design decision): first-ever session starts it at 1; a later finalization timestamped *before* `last_session_at` (out-of-order — e.g. the sweep worker closing a stale interval after the participant already started a fresh session elsewhere) leaves the streak untouched entirely, stats still applied; the same local day as `last_session_day` doesn't double-count but still pushes `streak_grace_expires_at` forward; a gap within `STREAK_GRACE_HOURS` on a new day increments; a gap beyond it resets to 1. `longest_streak` is a monotonic high-water mark, never decremented here (only session-close code path — see the separate streak-expiry job below for how `current_streak` gets zeroed by the passage of time alone).
+5. **Streak** (`user_streaks`, any session with presence counts — `docs/RETENTION_STRATEGY.md` §1's forgiving-by-design decision): first-ever session starts it at 1; a later finalization timestamped *before* `last_session_at` (out-of-order — e.g. the sweep worker closing a stale interval after the participant already started a fresh session elsewhere) leaves the streak untouched entirely, stats still applied; the same local day as `last_session_day` doesn't double-count but still pushes `streak_grace_expires_at` forward; a gap within `STREAK_GRACE_HOURS` on a new day increments; a gap beyond it resets to 1. `longest_streak` is a monotonic high-water mark, never decremented here (only session-close code path — see the separate streak-expiry job below for how `current_streak` gets zeroed by the passage of time alone). **Phase 6**: when `p_device_trust_tier = 'unverified'`, this whole branch is skipped entirely (the streak is left exactly as it was) — steps 1-4 above (lifetime stats, daily time series) still run unconditionally; only bonus-earning (handled in Node, see above) and streak advancement are ever gated by device trust.
 6. **Milestones**: `insert into user_milestones ... select ... where sessions_required <= (just-updated total) on conflict do nothing returning milestone_id`, looped — set-based and naturally idempotent, correctly handles crossing more than one tier in a single session. Each crossing writes one `rewards_history` row (`bonus_type='milestone'`) and folds `bonus_points` into `user_stats.total_points` in the same transaction — this is what keeps `total_points == sum(rewards_history.points)` true by construction rather than by convention.
 7. Sets `stats_applied_at = p_finalized_at`.
 
@@ -368,3 +437,6 @@ Called once per finalized `session_participants` row, after that row (and its `r
 | `STREAK_GRACE_HOURS` | 48 | |
 | `STREAK_EXPIRY_INTERVAL_SECONDS` | 300 | streak-expiry job cadence (Phase 5) — no debounce concern, so it runs far less often than the session sweep |
 | `BLOCKED_APP_CATEGORIES` | `[Social Networking, Games, Entertainment]` | Fixed default-category blocklist, not per-session/per-user configurable; see `docs/ARCHITECTURE.md` §4 |
+| `VENUE_SESSION_MAX_PARTICIPANTS` | 200 | Phase 6 — a verified host's `static_qr` venue session, higher than `SESSION_MAX_PARTICIPANTS` since a business's foot traffic is a different shape of "group" than a friend session; a config constant, not a per-venue DB column, for MVP simplicity |
+| `VENUE_METRICS_WINDOW_DAYS` | 30 | Phase 6 — the trailing window `GET /venues/:id/metrics`'s "average session duration/customer" is computed over |
+| `ATTESTATION_ENFORCEMENT_ENABLED` | `false` | Phase 6 — built-but-inert: no real Play Integrity/App Attest credentials or monitor-mode data exist yet to threshold against (every recorded verdict today reads `not_configured`). Gates `attestation/trust-tier.ts`'s `applyEnforcementPolicy()`, the one place that matters — every downstream reader (`points/group-bonus.ts`, `apply_session_stats()`) just trusts whatever tier was already written. Flipping to `true` is the only remaining step once real credentials exist. |
