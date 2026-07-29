@@ -47,16 +47,32 @@ class BlockingPermissionsModule: NSObject {
       do {
         // requestAuthorization(for:) needs iOS 16+ (caught by the real
         // ios-build CI compile, Phase 7); this project's deployment
-        // target is 15.1. The iOS 15-compatible no-parameter overload is
-        // semantically identical for this app -- .individual (a person
-        // managing their own device) is the only member kind iOS 15's
-        // FamilyControls supports at all; .child-style parental
-        // supervision was the iOS 16 addition the `for:` parameter exists
-        // to select between, and this app never uses it.
+        // target is 15.1. Apple's async, no-parameter overload turned out
+        // to ALSO be iOS 16+ only (a second real CI-caught error, "missing
+        // argument for parameter 'completionHandler'" -- iOS 15.0
+        // apparently only ever exposed the completion-handler-style
+        // entry point for this call, no bare-async version at all), so the
+        // iOS 15 fallback bridges that older API via a checked
+        // continuation instead -- the standard Swift pattern for adopting
+        // async/await over a completion-handler API, and definitely
+        // available since iOS 15.0 since it's the original Objective-C-
+        // compatible entry point. .individual is the only member kind iOS
+        // 15's FamilyControls supports at all; .child-style parental
+        // supervision was the iOS 16 addition the `for:` parameter on the
+        // newer overload exists to select between, and this app never
+        // uses it.
         if #available(iOS 16.0, *) {
           try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
         } else {
-          try await AuthorizationCenter.shared.requestAuthorization()
+          try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            AuthorizationCenter.shared.requestAuthorization { error in
+              if let error {
+                continuation.resume(throwing: error)
+              } else {
+                continuation.resume()
+              }
+            }
+          }
         }
       } catch {
         // User declined, or the entitlement isn't approved yet — either way
