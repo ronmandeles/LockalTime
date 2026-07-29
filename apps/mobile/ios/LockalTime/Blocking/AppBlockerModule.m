@@ -1,6 +1,7 @@
 // Phase 3 task 3.6: classic Objective-C bridge exposing the Swift
-// AppBlockerModule (an RCTEventEmitter subclass) to React Native. NOT
-// compiled or run anywhere in this repo (no Mac).
+// AppBlockerModule (an RCTEventEmitter subclass) to React Native.
+// Compiles cleanly as of Phase 7's cloud macOS CI (see
+// AppBlockerModule.swift's header).
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 

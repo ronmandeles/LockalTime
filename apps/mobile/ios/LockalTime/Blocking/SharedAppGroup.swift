@@ -9,12 +9,11 @@ import Foundation
 // scripted Xcode wiring (apps/mobile/ios/scripts/wire-blocking-target.rb),
 // not a manual Xcode-GUI step anymore — see docs/MANUAL_QA.md's iOS section.
 //
-// Compiled for the first time in Phase 7 via cloud macOS CI
-// (.github/workflows/ci.yml's ios-build job) — written to match
-// FamilyControls/ManagedSettings/DeviceActivityMonitor's documented APIs as
-// precisely as possible; see that job's status for the current build result.
-// A real Mac/device is still needed for the functional (not just
-// compile-time) verification in docs/MANUAL_QA.md.
+// Compiles cleanly as of Phase 7's cloud macOS CI
+// (.github/workflows/ci.yml's ios-build job, BUILD SUCCEEDED) — written to
+// match FamilyControls/ManagedSettings/DeviceActivityMonitor's documented
+// APIs as precisely as possible. A real Mac/device is still needed for the
+// functional (not just compile-time) verification in docs/MANUAL_QA.md.
 enum SharedAppGroup {
   static let identifier = "group.com.lockaltime.app"
 

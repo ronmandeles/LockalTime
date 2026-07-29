@@ -66,9 +66,17 @@ Items that cannot be verified on this development machine (no Android SDK platfo
 
 ## Phase 3 — iOS native blocker bridge (task 3.6)
 
-Written since Phase 3, **compiled for the first time in Phase 7** via
-cloud macOS CI (`.github/workflows/ci.yml`'s `ios-build` job) — see that
-job's status for whether it currently passes. `apps/mobile/ios/LockalTime/Blocking/`
+Written since Phase 3, **compiled cleanly for the first time in Phase 7**
+via cloud macOS CI (`.github/workflows/ci.yml`'s `ios-build` job,
+`BUILD SUCCEEDED`) — reached across 10 real CI-triggered iterations, each
+catching one genuine, distinct bug (see `backlog.md`'s iOS build checkbox
+for the full list: an empty product name, three separate manually-
+constructed-group path-resolution bugs, two iOS-16-only APIs used at this
+project's 15.1 deployment target, a missing `import React`, and a
+`Result`-vs-`Error?` type mismatch) — a real demonstration of using CI as
+an iterative debugging feedback loop when no local device/simulator is
+available, not a one-shot guess that happened to work.
+`apps/mobile/ios/LockalTime/Blocking/`
 (`BlockingPermissionsModule.swift`, `AppBlockerModule.swift`,
 `ActivityPickerHostView.swift`, `SharedAppGroup.swift`) plus
 `apps/mobile/ios/LockalTimeBlockerExtension/` (`DeviceActivityMonitorExtension.swift`,
