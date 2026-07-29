@@ -64,12 +64,17 @@ class BlockingPermissionsModule: NSObject {
         if #available(iOS 16.0, *) {
           try await AuthorizationCenter.shared.requestAuthorization(for: .individual)
         } else {
+          // Real xcodebuild CI (Phase 7): this completion handler's
+          // parameter is Result<Void, Error>, not Error? -- an optional-
+          // binding guess that compiled fine as *syntax* but not as the
+          // actual completion-handler type the SDK declares.
           try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            AuthorizationCenter.shared.requestAuthorization { error in
-              if let error {
-                continuation.resume(throwing: error)
-              } else {
+            AuthorizationCenter.shared.requestAuthorization { result in
+              switch result {
+              case .success:
                 continuation.resume()
+              case .failure(let error):
+                continuation.resume(throwing: error)
               }
             }
           }
