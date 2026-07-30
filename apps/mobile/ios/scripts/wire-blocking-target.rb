@@ -1,0 +1,177 @@
+#!/usr/bin/env ruby
+# Phase 7 (Release Prep): scripted equivalent of docs/MANUAL_QA.md's
+# "One-time Xcode project setup" checklist for Phase 3 task 3.6 (the iOS
+# native blocker bridge) -- run once, programmatically, by the macOS CI job
+# (.github/workflows/ci.yml's ios-build job) via the xcodeproj gem, instead
+# of by hand in the Xcode GUI. This is the first thing that ever adds
+# apps/mobile/ios/LockalTime/Blocking/*.swift and the
+# LockalTimeBlockerExtension target to project.pbxproj -- everything below
+# was previously source-only, referenced by nothing.
+#
+# Idempotent: safe to re-run (checks for existing file refs/targets before
+# adding), since CI may run this against a project.pbxproj this script
+# already touched in a prior run on the same branch.
+#
+# Usage: ruby scripts/wire-blocking-target.rb   (run from apps/mobile/ios/)
+
+require 'xcodeproj'
+
+PROJECT_PATH = 'LockalTime.xcodeproj'
+DEPLOYMENT_TARGET = '15.1' # matches the existing IPHONEOS_DEPLOYMENT_TARGET
+APP_GROUP = 'group.com.lockaltime.app'
+MAIN_BUNDLE_ID = 'com.lockaltime.app'
+EXTENSION_BUNDLE_ID = "#{MAIN_BUNDLE_ID}.LockalTimeBlockerExtension"
+
+project = Xcodeproj::Project.open(PROJECT_PATH)
+main_target = project.targets.find { |t| t.name == 'LockalTime' }
+raise "LockalTime target not found" if main_target.nil?
+
+lockaltime_group = project.main_group['LockalTime']
+raise "LockalTime group not found" if lockaltime_group.nil?
+
+# ---------------------------------------------------------------------
+# 1. Blocking/ Swift + Obj-C files -> LockalTime target
+# ---------------------------------------------------------------------
+# Phase 7 debugging note: this used to be
+# `lockaltime_group['Blocking'] || lockaltime_group.new_group('Blocking', 'Blocking')`
+# (a group nested under lockaltime_group, with a path relative to it). Real
+# xcodebuild CI caught it: "Build input files cannot be found:
+# .../ios/Blocking/AppBlockerModule.swift" etc. (missing the LockalTime/
+# path segment) -- the build got far enough to actually check these Sources
+# once the other path-resolution bugs this file documents were fixed one at
+# a time, revealing this group had the exact same problem all along.
+# lockaltime_group (project.main_group['LockalTime']) apparently does not
+# reliably contribute its own path when a *new* child group's path is
+# composed relative to it -- whatever this project's original scaffolding
+# set for its `path` attribute, new_group-relative-to-it doesn't resolve the
+# way a plain nested folder would. Anchoring directly at project.main_group
+# with an explicit full path (the same pattern that already worked for
+# LockalTimeBlockerExtension's own group below) sidesteps the issue instead
+# of depending on a group whose path behavior isn't fully understood.
+blocking_group = project.main_group['Blocking'] || project.main_group.new_group('Blocking', 'LockalTime/Blocking')
+
+blocking_files = Dir.glob('LockalTime/Blocking/*.{swift,m}').sort
+shared_app_group_ref = nil
+
+blocking_files.each do |path|
+  basename = File.basename(path)
+  existing = blocking_group.files.find { |f| f.path == basename }
+  file_ref = existing || blocking_group.new_reference(basename)
+  shared_app_group_ref = file_ref if basename == 'SharedAppGroup.swift'
+
+  already_in_target = main_target.source_build_phase.files_references.include?(file_ref)
+  main_target.add_file_references([file_ref]) unless already_in_target
+end
+
+# ---------------------------------------------------------------------
+# 2. Bridging header + entitlements build settings on LockalTime
+# ---------------------------------------------------------------------
+main_target.build_configurations.each do |config|
+  config.build_settings['SWIFT_OBJC_BRIDGING_HEADER'] = 'LockalTime/LockalTime-Bridging-Header.h'
+  config.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'LockalTime/LockalTime.entitlements'
+  # App Groups + Family Controls need the real "Signing & Capabilities" UI
+  # entry too on a signed build (this only points at the entitlements
+  # file); CODE_SIGN_STYLE/team assignment stays whatever CI's build
+  # invocation passes (see ci.yml -- this repo has no distribution
+  # cert/profile yet, so CI builds unsigned/for the simulator).
+end
+
+# ---------------------------------------------------------------------
+# 3. en.lproj / he.lproj Localizable.strings
+# ---------------------------------------------------------------------
+# Phase 7 debugging note: an earlier version of this script built a real
+# Xcode "localization variant group" (PBXVariantGroup, manually
+# constructed via project.new(...) and appended to lockaltime_group.children
+# directly) -- real xcodebuild CI caught the same class of path-resolution
+# bug this file's SharedAppGroup.swift handling hit: "Build input file
+# cannot be found: .../ios/en.lproj/Localizable.strings" (missing the
+# LockalTime/ segment). Manually constructing a PBXGroup/PBXVariantGroup
+# and appending to `.children` directly, rather than going through the
+# gem's own new_group/new_reference helpers, appears to skip some
+# parent-linking bookkeeping those helpers do, which broke path
+# resolution specifically for that manually-built group's children (while
+# blocking_group, built via the proper `new_group` helper, resolved
+# correctly for its own files). Simplest robust fix: skip the variant-
+# group UI grouping feature entirely and add both files as ordinary
+# resources, anchored at project root the same way the SharedAppGroup.swift
+# fix above is -- Xcode just won't show them merged as one logical file in
+# the navigator (cosmetic only); CFBundleLocalizations (already in
+# Info.plist) plus the correct en.lproj/he.lproj folder structure on disk
+# is all NSLocalizedString actually needs at runtime.
+%w[en he].each do |locale|
+  path = "LockalTime/#{locale}.lproj/Localizable.strings"
+  already_added = main_target.resources_build_phase.files_references.any? { |f| f.path == path }
+  next if already_added
+
+  file_ref = project.main_group.new_reference(path)
+  file_ref.name = "#{locale}.lproj/Localizable.strings"
+  main_target.add_resources([file_ref])
+end
+
+# ---------------------------------------------------------------------
+# 4. LockalTimeBlockerExtension target (DeviceActivityMonitor extension)
+# ---------------------------------------------------------------------
+ext_target = project.targets.find { |t| t.name == 'LockalTimeBlockerExtension' }
+
+if ext_target.nil?
+  ext_target = project.new_target(:app_extension, 'LockalTimeBlockerExtension', :ios, DEPLOYMENT_TARGET)
+
+  ext_group = project.main_group.new_group('LockalTimeBlockerExtension', 'LockalTimeBlockerExtension')
+  ext_swift_ref = ext_group.new_reference('DeviceActivityMonitorExtension.swift')
+  ext_target.add_file_references([ext_swift_ref])
+
+  # SharedAppGroup.swift lives in the main app's Blocking/ group but must
+  # compile into BOTH targets. docs/MANUAL_QA.md's original (manual, Xcode
+  # GUI) instruction shared ONE file reference across both targets'
+  # membership -- reusing blocking_group's existing reference here hit a
+  # real, CI-caught build error ("Build input file cannot be found:
+  # .../ios/Blocking/SharedAppGroup.swift", missing the LockalTime/ path
+  # segment) that only manifested for the SECOND (extension) target's
+  # Sources build phase referencing that shared fileRef -- some group-path-
+  # resolution interaction with a <group>-sourceTree reference used by two
+  # targets that this project's structure doesn't play well with. Rather
+  # than keep guessing at that blind, this creates a SECOND
+  # PBXFileReference for the extension target specifically, with an
+  # explicit path from the project root (main_group's own sourceTree, the
+  # same anchor DeviceActivityMonitorExtension.swift above already resolves
+  # correctly from) -- Xcode shows the file twice in the navigator, but
+  # both reference the identical physical file, and per-target file
+  # references are a normal, fully supported Xcode pattern (the "shared
+  # Target Membership checkbox" is a GUI convenience, not the only valid
+  # way to compile one file into two targets).
+  raise "SharedAppGroup.swift file reference not found" if shared_app_group_ref.nil?
+  ext_shared_app_group_ref = project.main_group.new_reference('LockalTime/Blocking/SharedAppGroup.swift')
+  ext_shared_app_group_ref.name = 'SharedAppGroup.swift'
+  ext_target.add_file_references([ext_shared_app_group_ref])
+
+  ext_target.build_configurations.each do |config|
+    # Phase 7 debugging note: project.new_target(:app_extension, ...) does
+    # NOT default PRODUCT_NAME the way Xcode's own "New Target" wizard
+    # does -- left unset, it resolves to an empty string, so the built
+    # product is literally named ".appex" (no name before the extension),
+    # and Xcode's build system treats the per-arch merge step and the
+    # product's own output as two commands colliding on that one identical
+    # (empty) path -- "Multiple commands produce '.../.appex'". Caught by
+    # the real ios-build CI run (.github/workflows/ci.yml), not locally
+    # (no Mac to catch it with beforehand).
+    config.build_settings['PRODUCT_NAME'] = '$(TARGET_NAME)'
+    config.build_settings['INFOPLIST_FILE'] = 'LockalTimeBlockerExtension/Info.plist'
+    config.build_settings['CODE_SIGN_ENTITLEMENTS'] = 'LockalTimeBlockerExtension/LockalTimeBlockerExtension.entitlements'
+    config.build_settings['PRODUCT_BUNDLE_IDENTIFIER'] = EXTENSION_BUNDLE_ID
+    config.build_settings['SWIFT_VERSION'] = '5.0'
+    config.build_settings['SKIP_INSTALL'] = 'YES'
+    config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = DEPLOYMENT_TARGET
+  end
+
+  # Embed the built .appex into the host app's PlugIns directory, and make
+  # the host app depend on (build before) the extension.
+  main_target.add_dependency(ext_target)
+  embed_phase = main_target.new_copy_files_build_phase('Embed Foundation Extensions')
+  embed_phase.symbol_dst_subfolder_spec = :plug_ins
+  embed_build_file = embed_phase.add_file_reference(ext_target.product_reference)
+  embed_build_file.settings = { 'ATTRIBUTES' => ['RemoveHeaderOnCopy'] }
+end
+
+project.save
+
+puts 'wire-blocking-target.rb: done.'

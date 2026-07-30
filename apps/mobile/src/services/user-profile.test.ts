@@ -29,6 +29,7 @@ jest.mock(
   { virtual: true },
 );
 
+const mockIs = jest.fn();
 const mockEq = jest.fn();
 const mockUpdate = jest.fn(() => ({ eq: mockEq }));
 const mockUpsert = jest.fn();
@@ -47,9 +48,11 @@ jest.mock('./push-registration', () => ({
 }));
 
 import {
+  ACCEPTED_TOS_STORAGE_KEY,
   REPORTED_LOCALE_STORAGE_KEY,
   REPORTED_PUSH_TOKEN_STORAGE_KEY,
   REPORTED_TIMEZONE_STORAGE_KEY,
+  acceptTosIfNeeded,
   fetchUserProfile,
   registerPushTokenIfChanged,
   reportLocaleIfChanged,
@@ -198,6 +201,66 @@ describe('reportLocaleIfChanged', () => {
 
     await expect(reportLocaleIfChanged(USER_ID)).resolves.toBeUndefined();
     expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe('acceptTosIfNeeded', () => {
+  beforeEach(() => {
+    mockGetItem.mockReset();
+    mockSetItem.mockReset();
+    mockSetItem.mockResolvedValue(undefined);
+    mockFrom.mockClear();
+    mockUpdate.mockClear();
+    mockEq.mockReset();
+    mockEq.mockReturnValue({ is: mockIs });
+    mockIs.mockReset();
+    mockIs.mockResolvedValue({ error: null });
+  });
+
+  it('conditionally writes tos_accepted_at when nothing is cached yet', async () => {
+    mockGetItem.mockResolvedValue(null);
+
+    await acceptTosIfNeeded(USER_ID);
+
+    expect(mockGetItem).toHaveBeenCalledWith(ACCEPTED_TOS_STORAGE_KEY);
+    expect(mockFrom).toHaveBeenCalledWith('users');
+    expect(mockUpdate).toHaveBeenCalledWith({ tos_accepted_at: expect.any(String) });
+    expect(mockEq).toHaveBeenCalledWith('id', USER_ID);
+    // The database condition (not the cache) is what actually prevents a
+    // second acceptance from bumping the timestamp — this must always be
+    // sent, even though the cache below also short-circuits most calls.
+    expect(mockIs).toHaveBeenCalledWith('tos_accepted_at', null);
+    expect(mockSetItem).toHaveBeenCalledWith(ACCEPTED_TOS_STORAGE_KEY, 'true');
+  });
+
+  it('does not call Supabase at all when already cached as accepted', async () => {
+    mockGetItem.mockResolvedValue('true');
+
+    await acceptTosIfNeeded(USER_ID);
+
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it('fails open when the cache read throws — treats it as not yet accepted', async () => {
+    mockGetItem.mockRejectedValue(new Error('storage unavailable'));
+
+    await expect(acceptTosIfNeeded(USER_ID)).resolves.toBeUndefined();
+    expect(mockFrom).toHaveBeenCalledWith('users');
+  });
+
+  it('fails open when the Supabase update errors — never caches, never throws', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockIs.mockResolvedValue({ error: { message: 'network error' } });
+
+    await expect(acceptTosIfNeeded(USER_ID)).resolves.toBeUndefined();
+    expect(mockSetItem).not.toHaveBeenCalled();
+  });
+
+  it('fails open when caching after a successful (possibly no-op) write throws', async () => {
+    mockGetItem.mockResolvedValue(null);
+    mockSetItem.mockRejectedValue(new Error('storage unavailable'));
+
+    await expect(acceptTosIfNeeded(USER_ID)).resolves.toBeUndefined();
   });
 });
 

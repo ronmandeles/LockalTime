@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import type { RootStackParamList } from '../navigation/types';
 import { createVenue, listVenues, regenerateVenueQr } from '../services/api-client';
 import type { VenueResponse } from '../services/api-client';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Venue management (Phase 6, B2B) — reachable only from Home's
 // manageVenuesCta link, itself gated on useProfileStore's role. The server
@@ -195,7 +195,7 @@ const VenueManagementScreen = (_props: VenueManagementScreenProps): React.JSX.El
           value={name}
           onChangeText={setName}
           placeholder={t('venueManagement.namePlaceholder')}
-          placeholderTextColor="#888888"
+          placeholderTextColor={colors.placeholder}
           testID="venue-management-name-input"
         />
 
@@ -205,7 +205,7 @@ const VenueManagementScreen = (_props: VenueManagementScreenProps): React.JSX.El
           value={addressLabel}
           onChangeText={setAddressLabel}
           placeholder={t('venueManagement.addressPlaceholder')}
-          placeholderTextColor="#888888"
+          placeholderTextColor={colors.placeholder}
           testID="venue-management-address-input"
         />
 
@@ -228,26 +228,26 @@ const VenueManagementScreen = (_props: VenueManagementScreenProps): React.JSX.El
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.md,
   },
   confirmActionLabel: {
     ...typography.bodyStrong,
-    color: '#B00020',
+    color: colors.danger,
     minHeight: sizing.minTouchTarget,
   },
   confirmBody: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   confirmCancelLabel: {
     ...typography.bodyStrong,
-    color: '#666666',
+    color: colors.textMuted,
     minHeight: sizing.minTouchTarget,
   },
   confirmRow: {
@@ -257,11 +257,11 @@ const styles = StyleSheet.create({
   },
   confirmTitle: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.md,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -270,7 +270,7 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.caption,
-    color: '#B00020',
+    color: colors.danger,
     marginTop: spacing.sm,
   },
   form: {
@@ -278,22 +278,22 @@ const styles = StyleSheet.create({
   },
   input: {
     ...typography.body,
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
-    color: '#222222',
+    color: colors.textPrimary,
     height: sizing.inputHeight,
     marginTop: spacing.sm,
     paddingHorizontal: spacing.md,
   },
   label: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.lg,
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
@@ -304,52 +304,52 @@ const styles = StyleSheet.create({
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   qrLabel: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.sm,
   },
   qrValue: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.xs,
   },
   regenerateLabel: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.sm,
     minHeight: sizing.minTouchTarget,
   },
   retryLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.sm,
   },
   successText: {
     ...typography.caption,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.xs,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   venueAddress: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   venueCard: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: radius.lg,
     marginTop: spacing.md,
     padding: spacing.md,
   },
   venueName: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

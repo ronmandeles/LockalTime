@@ -12,9 +12,12 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@sentry/node": "^10.68.0",
     "@supabase/supabase-js": "^2.45.0",
     "dotenv": "^16.6.1",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.6.1",
+    "helmet": "^8.3.0",
     "jose": "^5.9.6",
     "zod": "^3.23.8"
   },

@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 import type { RootStackParamList } from '../navigation/types';
 import { getVenueMetrics, listVenues } from '../services/api-client';
 import type { VenueMetricsResponse, VenueResponse } from '../services/api-client';
-import { radius, spacing, typography } from '../theme/tokens';
+import { colors, radius, spacing, typography } from '../theme/tokens';
 
 // B2B dashboard (Phase 6 task 6, ARCHITECTURE.md §10) — verified_host/admin
 // only, reached only from Home's manageVenuesCta area (gated the same way
@@ -176,15 +176,15 @@ const VenueDashboardScreen = (_props: VenueDashboardScreenProps): React.JSX.Elem
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.md,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -193,40 +193,40 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.caption,
-    color: '#B00020',
+    color: colors.danger,
     marginTop: spacing.md,
   },
   retryLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.lg,
   },
   sessionsInWindow: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.sm,
   },
   statCaption: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   statTile: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: radius.xl,
     marginTop: spacing.lg,
     padding: spacing.lg,
   },
   statValue: {
     ...typography.display,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   venueOption: {
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
     justifyContent: 'center',
@@ -236,14 +236,14 @@ const styles = StyleSheet.create({
   },
   venueOptionLabel: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   venueOptionLabelSelected: {
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   venueOptionSelected: {
-    backgroundColor: '#222222',
-    borderColor: '#222222',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   venuePicker: {
     marginTop: spacing.md,

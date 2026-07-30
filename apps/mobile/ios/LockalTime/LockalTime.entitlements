@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Phase 3 task 3.6 (backlog.md): not yet referenced by the Xcode project —
-  "Signing & Capabilities" > App Groups (group.com.lockaltime.app) and
-  Family Controls must be added to the LockalTime target manually in Xcode,
-  which will generate/link an entitlements file itself (can point it at
-  this one). Family Controls requires Apple's entitlement approval (task
-  3.7's application) before it will actually work on a real device/App
-  Store build, even with this file wired in correctly.
+  Phase 3 task 3.6 (backlog.md): referenced by the LockalTime target's
+  CODE_SIGN_ENTITLEMENTS build setting via Phase 7's scripted Xcode wiring
+  (apps/mobile/ios/scripts/wire-blocking-target.rb) rather than the
+  Signing & Capabilities GUI. Family Controls still requires Apple's
+  entitlement approval (docs/apple-family-controls-entitlement-application.md)
+  before it works on a real device/App Store build, even with this file
+  wired in correctly -- see docs/MANUAL_QA.md's Phase 7 credentials section.
 -->
 <plist version="1.0">
 <dict>

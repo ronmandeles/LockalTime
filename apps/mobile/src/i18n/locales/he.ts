@@ -14,6 +14,7 @@ export const he: TranslationSchema = {
     manageVenuesCta: 'ניהול מקומות עסק',
     venueDashboardCta: 'פעילות מקום העסק',
     friendsCta: 'חברים',
+    settingsCta: 'הגדרות',
     summary: {
       streakCount: '{{count}} ימי רצף',
       streakNone: 'התחילו רצף היום',
@@ -271,6 +272,12 @@ export const he: TranslationSchema = {
       body: 'האימייל הזה כבר רשום עם אמצעי התחברות אחר. התחברו עם האימייל כדי לשמור על חשבון אחד.',
       useEmail: 'התחברות עם אימייל',
     },
+    legalDisclosure: {
+      prefix: 'בהמשך השימוש, אתם מסכימים ל',
+      termsOfService: 'תנאי השימוש',
+      and: 'ול',
+      privacyPolicy: 'מדיניות הפרטיות',
+    },
   },
   venueManagement: {
     title: 'מקומות העסק שלכם',
@@ -336,6 +343,23 @@ export const he: TranslationSchema = {
       confirm: 'הסרה',
       cancel: 'ביטול',
       error: 'לא הצלחנו להסיר את החבר. נסו שוב.',
+    },
+  },
+  settings: {
+    title: 'הגדרות',
+    signOut: 'התנתקות',
+    signOutError: 'לא הצלחנו להתנתק. נסו שוב.',
+    legal: {
+      title: 'משפטי',
+      termsOfService: 'תנאי שימוש',
+      privacyPolicy: 'מדיניות פרטיות',
+    },
+    deleteAccount: {
+      title: 'מחיקת חשבון',
+      body: 'פעולה זו מוחקת לצמיתות את החשבון שלכם ואת כל הנתונים שלו — נקודות, רצפים, היסטוריית סשנים וחברים. לא ניתן לבטל פעולה זו.',
+      holdToDelete: 'החזיקו כדי למחוק את החשבון',
+      cancel: 'ביטול',
+      error: 'לא הצלחנו למחוק את החשבון. נסו שוב.',
     },
   },
 };

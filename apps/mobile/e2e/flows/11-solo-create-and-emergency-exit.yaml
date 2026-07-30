@@ -1,0 +1,48 @@
+appId: com.lockaltime.app
+---
+# Golden path 2/2, flow 2 of 2: verify the OTP just requested (10), create a
+# solo session with a duration deliberately much longer than the time this
+# flow takes (30 min) so there's no race against auto-completion, then
+# Emergency Exit via the real hold-to-confirm interaction
+# (EmergencyExitScreen.tsx's HOLD_DURATION_MS = 1500ms) and verify the
+# completion screen reflects the forfeited-bonus outcome, not a normal
+# completion.
+- tapOn:
+    id: 'auth-code-input'
+- inputText: '${OTP_CODE}'
+- tapOn:
+    id: 'auth-code-verify-cta'
+- assertVisible:
+    id: 'home-screen'
+- tapOn:
+    id: 'home-create-session-cta'
+- assertVisible:
+    id: 'create-session-screen'
+- tapOn:
+    id: 'create-session-type-solo'
+- tapOn:
+    id: 'create-session-minutes-input'
+- inputText: '30'
+- tapOn:
+    id: 'create-session-submit'
+- assertVisible:
+    id: 'active-session-screen'
+- tapOn:
+    id: 'active-session-emergency-exit'
+- assertVisible:
+    id: 'emergency-exit-screen'
+# EmergencyExitScreen.tsx requires a genuine hold (not a tap) lasting
+# HOLD_DURATION_MS (1500ms) — verify against a real Maestro CLI that
+# longPressOn's default press duration exceeds that; pass an explicit
+# duration if the installed Maestro version supports it, e.g.:
+#   - longPressOn: { id: 'emergency-exit-hold', duration: 2000 }
+- longPressOn:
+    id: 'emergency-exit-hold'
+- assertVisible:
+    id: 'session-completion-screen'
+- assertVisible:
+    id: 'session-completion-points'
+- tapOn:
+    id: 'session-completion-done'
+- assertVisible:
+    id: 'home-screen'

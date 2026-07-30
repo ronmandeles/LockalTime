@@ -16,6 +16,9 @@ const buildFakeUsersStore = (roles: Record<string, UserRole>): UsersStore => ({
     }
     return role;
   },
+  async deleteAccount(): Promise<void> {
+    // not exercised by these tests
+  },
 });
 
 const buildApp = (

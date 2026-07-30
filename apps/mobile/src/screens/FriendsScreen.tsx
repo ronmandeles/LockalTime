@@ -19,7 +19,7 @@ import type {
 } from '../services/api-client';
 import { removeFriend } from '../services/friends-repository';
 import { useAuthStore } from '../state/auth-store';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Friends leaderboard (Phase 6.5, docs/RETENTION_STRATEGY.md §4) — reached
 // from Home's friendsCta link, available to every user (not role-gated,
@@ -175,7 +175,7 @@ const FriendsScreen = (_props: FriendsScreenProps): React.JSX.Element => {
           value={query}
           onChangeText={setQuery}
           placeholder={t('friends.search.placeholder')}
-          placeholderTextColor="#888888"
+          placeholderTextColor={colors.placeholder}
           testID="friends-search-input"
         />
         <TouchableOpacity onPress={handleSearchSubmit} testID="friends-search-submit">
@@ -317,20 +317,20 @@ const FriendsScreen = (_props: FriendsScreenProps): React.JSX.Element => {
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   actionLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     minHeight: sizing.minTouchTarget,
   },
   activeToday: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
   },
   body: {
     ...typography.body,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   confirmRow: {
     flexDirection: 'row',
@@ -338,11 +338,11 @@ const styles = StyleSheet.create({
   },
   confirmTitle: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.md,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.caption,
-    color: '#B00020',
+    color: colors.danger,
     marginTop: spacing.sm,
   },
   leaderboardInfo: {
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
   },
   rank: {
     ...typography.bodyStrong,
-    color: '#666666',
+    color: colors.textMuted,
     minWidth: sizing.minTouchTarget / 2,
   },
   requestActions: {
@@ -382,15 +382,15 @@ const styles = StyleSheet.create({
   },
   retryLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.sm,
   },
   searchInput: {
     ...typography.body,
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
-    color: '#222222',
+    color: colors.textPrimary,
     flex: 1,
     height: sizing.inputHeight,
     paddingHorizontal: spacing.md,
@@ -409,7 +409,7 @@ const styles = StyleSheet.create({
   },
   searchSubmitLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     minHeight: sizing.minTouchTarget,
   },
   section: {
@@ -417,15 +417,15 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   subduedLabel: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

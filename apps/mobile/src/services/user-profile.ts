@@ -145,6 +145,49 @@ export const reportLocaleIfChanged = async (userId: string): Promise<void> => {
 // FCM/APNs SDK is linked (push-registration.ts) — honest, not faked.
 export const REPORTED_PUSH_TOKEN_STORAGE_KEY = '@lockal-time/reported-push-token';
 
+// Phase 7 (Release Prep): records the first time this user's device saw
+// them proceed past the ToS/Privacy Policy disclosure on AuthScreen — a
+// direct client write, not a Node endpoint, same posture as timezone/locale
+// above (not money-equivalent, not a security boundary). Conditioned on
+// `.is('tos_accepted_at', null)` rather than an unconditional overwrite:
+// once recorded, the acceptance timestamp must never be silently bumped by
+// a later sign-in. The AsyncStorage cache only saves a redundant no-op
+// network call on every subsequent session — correctness comes from the
+// database condition, not the cache.
+export const ACCEPTED_TOS_STORAGE_KEY = '@lockal-time/accepted-tos';
+
+export const acceptTosIfNeeded = async (userId: string): Promise<void> => {
+  try {
+    let alreadyAccepted: string | null = null;
+    try {
+      alreadyAccepted = await AsyncStorage.getItem(ACCEPTED_TOS_STORAGE_KEY);
+    } catch {
+      // Fail open — worst case, one unnecessary (still-conditional) write below.
+    }
+    if (alreadyAccepted === 'true') {
+      return;
+    }
+
+    const { error } = await getSupabaseClient()
+      .from('users')
+      .update({ tos_accepted_at: new Date().toISOString() })
+      .eq('id', userId)
+      .is('tos_accepted_at', null);
+    if (error !== null) {
+      return; // Fail open — see header comment; next call retries.
+    }
+
+    try {
+      await AsyncStorage.setItem(ACCEPTED_TOS_STORAGE_KEY, 'true');
+    } catch {
+      // Fail open — the write already succeeded (or was already a no-op);
+      // a failure only here means the next call redundantly re-checks.
+    }
+  } catch {
+    // Outer fail-open net — see reportTimezoneIfChanged's header comment.
+  }
+};
+
 export const registerPushTokenIfChanged = async (userId: string): Promise<void> => {
   try {
     const result = await pushRegistration.getToken();

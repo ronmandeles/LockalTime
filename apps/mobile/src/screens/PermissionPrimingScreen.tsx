@@ -4,7 +4,7 @@ import { AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { useTranslation } from 'react-i18next';
 
 import { blockingPermissions, requestBatteryOptimizationExemption } from '../services/blocking-permissions';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Permission-priming screen (Screen 2), DESIGN_GUIDELINES §9: one screen
 // resolving the "why permissions" hesitation, one primary action per state
@@ -137,15 +137,15 @@ const PermissionPrimingScreen = ({
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.md,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -158,14 +158,14 @@ const styles = StyleSheet.create({
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   proceedAnyway: {
     alignItems: 'center',
@@ -177,11 +177,11 @@ const styles = StyleSheet.create({
   },
   proceedAnywayLabel: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

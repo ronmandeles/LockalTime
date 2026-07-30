@@ -27,7 +27,23 @@ const SUPABASE_SERVICE_ROLE_KEY =
 
 jest.setTimeout(30000);
 
+// How long to wait for a delivered event after each write attempt, and the
+// total budget across all attempts. The total sits well under the 45s
+// per-test timeout below so an exhausted budget throws THIS file's
+// descriptive error rather than a bare, undiagnosable jest timeout.
+const CDC_ATTEMPT_TIMEOUT_MS = 1000;
+const CDC_TOTAL_BUDGET_MS = 30000;
+
+type PresenceRow = { session_id: string; user_id: string };
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Resolves with the promise's value if it settles within `ms`, else null.
+// Deliberately does NOT cancel the underlying promise: the caller races the
+// same long-lived `received` across every retry, so an event delivered late
+// (from an earlier attempt) still counts on a subsequent pass.
+const settleWithin = <T>(promise: Promise<T>, ms: number): Promise<T | null> =>
+  Promise.race([promise, sleep(ms).then(() => null)]);
 
 const waitForSubscribed = (channel: ReturnType<ReturnType<typeof createClient>['channel']>) =>
   new Promise<void>((resolve, reject) => {
@@ -140,8 +156,8 @@ describe('session realtime channel (local Supabase)', () => {
 
     try {
       const channel = subscriberClient.channel(`session:${sessionId}`);
-      const received = new Promise((resolve) => {
-        channel.on(
+      const received = new Promise<{ new: PresenceRow }>((resolve) => {
+        channel.on<PresenceRow>(
           'postgres_changes',
           {
             event: 'INSERT',
@@ -153,21 +169,46 @@ describe('session realtime channel (local Supabase)', () => {
         );
       });
       await waitForSubscribed(channel);
-      // The walsender can take a moment to attach the new subscription
-      // after the client-side 'SUBSCRIBED' callback fires — a write
-      // immediately after subscribing can race ahead of it. Empirically
-      // flaky at 500ms under load from a full test-suite run; 1.5s has
-      // proven reliable.
-      await sleep(1500);
 
-      const { error: insertError } = await adminClient
-        .from('session_presence_intervals')
-        .insert({ session_id: sessionId, user_id: hostId });
-      if (insertError !== null) {
-        throw new Error(`failed to insert presence interval: ${insertError.message}`);
+      // 'SUBSCRIBED' is the channel-JOIN ack; it does not guarantee the
+      // server-side Postgres CDC subscription is live and consuming WAL. A
+      // single write into that gap is MISSED outright rather than merely
+      // delayed — which is the observed CI failure shape: a 45s timeout
+      // after having waited only 1.5s, never a late delivery. No sleep value
+      // fixes a missed window (this one was already re-tuned 500ms -> 1.5s
+      // and still failed ~2 runs in 3), so write repeatedly and stop the
+      // moment an event is actually observed. Each attempt is a fresh
+      // chance; once CDC is live the next insert lands. Synchronizing on the
+      // condition, not guessing a duration — and agnostic to WHICH piece
+      // (slot attach, poller startup, setAuth propagation) was late.
+      //
+      // Inserting several rows is harmless: `received` resolves on the first
+      // delivered event and every row carries the same session_id/user_id,
+      // so the assertions below hold regardless of which insert won.
+      const deadline = Date.now() + CDC_TOTAL_BUDGET_MS;
+      let attempts = 0;
+      let payload: { new: PresenceRow } | null = null;
+
+      while (payload === null && Date.now() < deadline) {
+        attempts += 1;
+        const { error: insertError } = await adminClient
+          .from('session_presence_intervals')
+          .insert({ session_id: sessionId, user_id: hostId });
+        if (insertError !== null) {
+          throw new Error(`failed to insert presence interval: ${insertError.message}`);
+        }
+        payload = await settleWithin(received, CDC_ATTEMPT_TIMEOUT_MS);
       }
 
-      const payload = (await received) as { new: { session_id: string; user_id: string } };
+      if (payload === null) {
+        throw new Error(
+          `no postgres_changes INSERT event for session ${sessionId} after ${attempts} write ` +
+            `attempt(s) over ${CDC_TOTAL_BUDGET_MS}ms — the realtime CDC subscription never ` +
+            `went live (the table IS in the supabase_realtime publication and the host DOES ` +
+            `pass is_session_participant(), so suspect realtime service startup, not config)`,
+        );
+      }
+
       expect(payload.new.session_id).toBe(sessionId);
       expect(payload.new.user_id).toBe(hostId);
 
@@ -175,9 +216,11 @@ describe('session realtime channel (local Supabase)', () => {
     } finally {
       await subscriberClient.auth.signOut();
     }
-    // Own timeout, longer than the file-level jest.setTimeout(30000):
-    // CDC delivery timing under load from a full test-suite run has shown
-    // occasional flakiness at 30s (walsender attach + auth propagation are
-    // both variable, not fully deterministic).
+    // Own timeout, longer than the file-level jest.setTimeout(30000): this
+    // test spends up to CDC_TOTAL_BUDGET_MS (30s) on the retry loop alone,
+    // plus admin user creation and sign-in. The gap between that budget and
+    // this timeout is deliberate — it guarantees the loop's descriptive
+    // error fires first, so a real failure names the cause instead of
+    // surfacing as a bare jest timeout the way it did in CI.
   }, 45000);
 });

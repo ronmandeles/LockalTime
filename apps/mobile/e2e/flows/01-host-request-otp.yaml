@@ -1,0 +1,32 @@
+appId: com.lockaltime.app
+---
+# Phase 7 (Release Prep) E2E golden path 1/2: "create -> join -> complete".
+# Split into four sequential flows (this is 1 of 4) because the real email-
+# OTP code has to be read from Mailpit between requesting it and entering
+# it — Maestro flows are static YAML with no HTTP step of their own, so
+# e2e/run.sh calls out to fetch-otp.js between flows and passes the code
+# into the next one via `-e OTP_CODE=...`. See e2e/README.md.
+- launchApp:
+    clearState: true
+- tapOn:
+    id: 'onboarding-skip'
+    optional: true
+- tapOn:
+    id: 'permission-allow-cta'
+    optional: true
+# The real blocking-permissions module deterministically reports "denied"
+# in this environment (no way to grant a real OS permission from Maestro),
+# landing on the fallback screen — proceed anyway, same as a real user
+# would if they decline.
+- tapOn:
+    id: 'permission-proceed-anyway'
+    optional: true
+- assertVisible:
+    id: 'auth-screen'
+- tapOn:
+    id: 'auth-email-input'
+- inputText: '${TEST_HOST_EMAIL}'
+- tapOn:
+    id: 'auth-email-continue-cta'
+- assertVisible:
+    id: 'auth-code-input'

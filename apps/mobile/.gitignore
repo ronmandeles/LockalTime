@@ -35,6 +35,11 @@ local.properties
 !debug.keystore
 .kotlin/
 
+# Phase 7 (Release Prep): real release-signing secrets. Generated locally
+# per docs/DEPLOYMENT.md's runbook, referenced by android/app/build.gradle,
+# never committed — see android/keystore.properties.example for the shape.
+android/keystore.properties
+
 # node.js
 #
 node_modules/

@@ -38,5 +38,8 @@ module.exports = {
       env: { jest: true },
     },
   ],
-  ignorePatterns: ['dist/', 'coverage/', 'node_modules/'],
+  // loadtest/ is a standalone, plain-Node CJS ops script (Phase 7) run
+  // directly with `node`, not part of the TS app build — it deliberately
+  // doesn't follow the app's TS/import-order/module conventions.
+  ignorePatterns: ['dist/', 'coverage/', 'node_modules/', 'loadtest/'],
 };

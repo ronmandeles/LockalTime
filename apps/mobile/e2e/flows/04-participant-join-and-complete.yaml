@@ -1,0 +1,42 @@
+appId: com.lockaltime.app
+---
+# Golden path 1/2, flow 4 of 4: verify the OTP just requested (03), join the
+# host's session via "enter code manually" (ScanSessionScreen's real
+# escape-hatch input, not actual camera QR scanning — Maestro can't easily
+# drive a physical/simulated camera at a rendered QR code, so this exercises
+# the join *logic* end-to-end without that), pasting the token 02 copied to
+# the clipboard, then rides the session out to its own completion screen.
+- tapOn:
+    id: 'auth-code-input'
+- inputText: '${OTP_CODE}'
+- tapOn:
+    id: 'auth-code-verify-cta'
+- assertVisible:
+    id: 'home-screen'
+- tapOn:
+    id: 'home-scan-qr-cta'
+- assertVisible:
+    id: 'scan-session-screen'
+- tapOn:
+    id: 'scan-session-token-input'
+- pasteText
+- tapOn:
+    id: 'scan-session-continue'
+- assertVisible:
+    id: 'session-details-screen'
+- assertVisible:
+    id: 'session-details-participant-count'
+- tapOn:
+    id: 'session-details-join'
+- assertVisible:
+    id: 'active-session-screen'
+- extendedWaitUntil:
+    visible:
+      id: 'session-completion-screen'
+    timeout: 90000
+- assertVisible:
+    id: 'session-completion-points'
+- tapOn:
+    id: 'session-completion-done'
+- assertVisible:
+    id: 'home-screen'
