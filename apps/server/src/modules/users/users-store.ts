@@ -15,6 +15,12 @@ const VALID_ROLES: ReadonlySet<string> = new Set<UserRole>(['user', 'verified_ho
 // apps/server/integration/users.integration.test.ts.
 export interface UsersStore {
   getUserRole(userId: string): Promise<UserRole>;
+  // Phase 7 (Release Prep): the App Store/Play Store-mandated account
+  // deletion path. Deletes the auth.users row via the admin API (requires
+  // the service-role client -- an anon/user-scoped client has no
+  // auth.admin surface); every dependent table cascades via its existing
+  // `on delete cascade` FK, so this is the one call that needs to exist.
+  deleteAccount(userId: string): Promise<void>;
 }
 
 export const createSupabaseUsersStore = (client: SupabaseClient): UsersStore => ({
@@ -39,5 +45,16 @@ export const createSupabaseUsersStore = (client: SupabaseClient): UsersStore => 
       throw new ApiError(500, 'user_role_lookup_failed', `Unrecognized role value: ${data.role}`);
     }
     return data.role as UserRole;
+  },
+
+  async deleteAccount(userId) {
+    const { error } = await client.auth.admin.deleteUser(userId);
+    // Idempotent by design: a client retry (e.g. a network timeout on a
+    // first call that actually succeeded server-side) must not surface as
+    // a failure when the desired end state -- this account no longer
+    // exists -- is already true.
+    if (error !== null && error.code !== 'user_not_found') {
+      throw new ApiError(500, 'account_deletion_failed', error.message);
+    }
   },
 });

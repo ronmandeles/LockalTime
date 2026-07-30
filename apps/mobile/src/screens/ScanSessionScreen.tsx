@@ -7,7 +7,7 @@ import { useCameraPermission } from 'react-native-vision-camera';
 
 import QrCodeCamera from '../components/QrCodeCamera';
 import type { RootStackParamList } from '../navigation/types';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // QR Scan (Screen 7). Phase 3 task 3.5 wires the real camera (deferred from
 // Phase 2 — docs/MANUAL_QA.md — until native Pod/Gradle linking work was
@@ -90,7 +90,7 @@ const ScanSessionScreen = ({ navigation }: ScanSessionScreenProps): React.JSX.El
       <TextInput
         style={styles.input}
         placeholder={t('scanSession.tokenPlaceholder')}
-        placeholderTextColor="#888888"
+        placeholderTextColor={colors.placeholder}
         value={tokenText}
         onChangeText={setTokenText}
         autoCapitalize="none"
@@ -120,15 +120,15 @@ const ScanSessionScreen = ({ navigation }: ScanSessionScreenProps): React.JSX.El
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.md,
   },
   cameraContainer: {
-    backgroundColor: '#000000',
+    backgroundColor: colors.black,
     flex: 1,
   },
   cameraSwitch: {
@@ -137,16 +137,16 @@ const styles = StyleSheet.create({
   },
   cameraSwitchBody: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginBottom: spacing.sm,
     textAlign: 'center',
   },
   cameraSwitchLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   },
   enterManuallyLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   enterManuallyLink: {
     alignItems: 'center',
@@ -170,22 +170,22 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.caption,
-    color: '#B00020',
+    color: colors.danger,
     marginTop: spacing.sm,
   },
   input: {
     ...typography.body,
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
-    color: '#222222',
+    color: colors.textPrimary,
     height: sizing.inputHeight,
     marginTop: spacing.lg,
     paddingHorizontal: spacing.md,
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
@@ -193,11 +193,11 @@ const styles = StyleSheet.create({
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

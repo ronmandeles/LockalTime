@@ -12,7 +12,7 @@ import {
 
 import { useTranslation } from 'react-i18next';
 
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Onboarding carousel (Screen 1), DESIGN_GUIDELINES §9: exactly three pages,
 // each resolving one hesitation, with pagination dots, skip on non-final
@@ -121,16 +121,16 @@ const OnboardingScreen = ({ onComplete }: OnboardingScreenProps): React.JSX.Elem
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingTop: spacing.xl,
   },
   dot: {
-    backgroundColor: '#CCCCCC',
+    backgroundColor: colors.borderStrong,
     borderRadius: radius.full,
     height: spacing.sm,
     marginEnd: spacing.xs,
@@ -138,7 +138,7 @@ const styles = StyleSheet.create({
     width: spacing.sm,
   },
   dotActive: {
-    backgroundColor: '#444444',
+    backgroundColor: colors.primary,
   },
   dotsRow: {
     flexDirection: 'row',
@@ -153,16 +153,16 @@ const styles = StyleSheet.create({
   },
   pageBody: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.md,
   },
   pageTitle: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   skip: {
     alignItems: 'center',
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
   },
   skipLabel: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   skipSlot: {
     alignSelf: 'flex-end',

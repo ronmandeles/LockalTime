@@ -8,7 +8,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { createSession, listVenues } from '../services/api-client';
 import type { DurationMode, SessionType, VenueResponse } from '../services/api-client';
 import { useProfileStore } from '../state/profile-store';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Create Session (Screen 5), DESIGN_GUIDELINES §0: an acquisition surface,
 // full design effort. Mode + duration form -> POST /sessions -> navigates
@@ -210,7 +210,7 @@ const CreateSessionScreen = ({ navigation }: CreateSessionScreenProps): React.JS
           style={styles.input}
           keyboardType="number-pad"
           placeholder={t('createSession.duration.minutesPlaceholder')}
-          placeholderTextColor="#888888"
+          placeholderTextColor={colors.placeholder}
           value={minutesText}
           onChangeText={setMinutesText}
           testID="create-session-minutes-input"
@@ -235,15 +235,15 @@ const CreateSessionScreen = ({ navigation }: CreateSessionScreenProps): React.JS
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.sm,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -252,27 +252,27 @@ const styles = StyleSheet.create({
   },
   error: {
     ...typography.caption,
-    color: '#B00020',
+    color: colors.danger,
     marginTop: spacing.sm,
   },
   input: {
     ...typography.body,
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
-    color: '#222222',
+    color: colors.textPrimary,
     height: sizing.inputHeight,
     marginTop: spacing.sm,
     paddingHorizontal: spacing.md,
   },
   label: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.lg,
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
@@ -283,15 +283,15 @@ const styles = StyleSheet.create({
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   toggle: {
     alignItems: 'center',
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
     flex: 1,
@@ -300,10 +300,10 @@ const styles = StyleSheet.create({
   },
   toggleLabel: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   toggleLabelSelected: {
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   toggleRow: {
     flexDirection: 'row',
@@ -311,11 +311,11 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   toggleSelected: {
-    backgroundColor: '#222222',
-    borderColor: '#222222',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   venueOption: {
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
     justifyContent: 'center',
@@ -325,14 +325,14 @@ const styles = StyleSheet.create({
   },
   venueOptionLabel: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   venueOptionLabelSelected: {
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   venueOptionSelected: {
-    backgroundColor: '#222222',
-    borderColor: '#222222',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
 });
 

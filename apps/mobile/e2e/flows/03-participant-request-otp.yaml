@@ -1,0 +1,17 @@
+appId: com.lockaltime.app
+---
+# Golden path 1/2, flow 3 of 4: a second test account requests its own OTP.
+# Deliberately no `clearState` here (unlike 01) — flow 02 ended by signing
+# out, which leaves the app on AuthScreen with onboarding/permission already
+# handled; clearing state again would just force an unnecessary re-run of
+# those one-time gates.
+- launchApp
+- assertVisible:
+    id: 'auth-screen'
+- tapOn:
+    id: 'auth-email-input'
+- inputText: '${TEST_PARTICIPANT_EMAIL}'
+- tapOn:
+    id: 'auth-email-continue-cta'
+- assertVisible:
+    id: 'auth-code-input'

@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Linking, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useTranslation } from 'react-i18next';
 
+import { API_BASE_URL } from '../config/api-config';
 import {
   requestEmailOtp,
   signInWithApple,
@@ -13,7 +14,7 @@ import {
   type AuthSession,
 } from '../services/auth-service';
 import { nativeSignIn, type NativeSignInResult } from '../services/native-sign-in';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Auth screen (Screen 3), backlog: "Auth error states: wrong OTP, network
 // failure, OAuth account-linking dialog". Two-step passwordless email flow
@@ -205,6 +206,30 @@ const AuthScreen = (): React.JSX.Element => {
             >
               <Text style={styles.providerCtaLabel}>{t('auth.providers.apple')}</Text>
             </TouchableOpacity>
+
+            <Text style={styles.legalDisclosure} testID="auth-legal-disclosure">
+              {t('auth.legalDisclosure.prefix')}{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => {
+                  Linking.openURL(`${API_BASE_URL}/legal/terms`).catch(() => undefined);
+                }}
+                testID="auth-terms-link"
+              >
+                {t('auth.legalDisclosure.termsOfService')}
+              </Text>{' '}
+              {t('auth.legalDisclosure.and')}{' '}
+              <Text
+                style={styles.legalLink}
+                onPress={() => {
+                  Linking.openURL(`${API_BASE_URL}/legal/privacy`).catch(() => undefined);
+                }}
+                testID="auth-privacy-link"
+              >
+                {t('auth.legalDisclosure.privacyPolicy')}
+              </Text>
+              .
+            </Text>
           </>
         ) : (
           <>
@@ -249,15 +274,15 @@ const AuthScreen = (): React.JSX.Element => {
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.sm,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -269,12 +294,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dialog: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     borderRadius: radius.xl,
     padding: spacing.lg,
   },
   dialogOverlay: {
-    backgroundColor: '#44444488',
+    backgroundColor: colors.overlay,
     bottom: 0,
     end: 0,
     justifyContent: 'center',
@@ -285,15 +310,26 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...typography.caption,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.sm,
+  },
+  legalDisclosure: {
+    ...typography.caption,
+    color: colors.textMuted,
+    marginTop: spacing.lg,
+    textAlign: 'center',
+  },
+  legalLink: {
+    ...typography.caption,
+    color: colors.textPrimary,
+    textDecorationLine: 'underline',
   },
   input: {
     ...typography.body,
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
-    color: '#222222',
+    color: colors.textPrimary,
     height: sizing.inputHeight,
     marginTop: spacing.md,
     paddingEnd: spacing.md,
@@ -301,7 +337,7 @@ const styles = StyleSheet.create({
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
@@ -309,11 +345,11 @@ const styles = StyleSheet.create({
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   providerCta: {
     alignItems: 'center',
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
     justifyContent: 'center',
@@ -322,16 +358,16 @@ const styles = StyleSheet.create({
   },
   providerCtaLabel: {
     ...typography.body,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   stepTitle: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.md,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

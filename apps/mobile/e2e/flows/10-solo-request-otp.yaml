@@ -1,0 +1,24 @@
+appId: com.lockaltime.app
+---
+# Golden path 2/2, flow 1 of 2: "create -> emergency exit". Single account,
+# single device — no join/second-account choreography needed here.
+- launchApp:
+    clearState: true
+- tapOn:
+    id: 'onboarding-skip'
+    optional: true
+- tapOn:
+    id: 'permission-allow-cta'
+    optional: true
+- tapOn:
+    id: 'permission-proceed-anyway'
+    optional: true
+- assertVisible:
+    id: 'auth-screen'
+- tapOn:
+    id: 'auth-email-input'
+- inputText: '${TEST_SOLO_EMAIL}'
+- tapOn:
+    id: 'auth-email-continue-cta'
+- assertVisible:
+    id: 'auth-code-input'

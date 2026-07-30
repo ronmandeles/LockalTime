@@ -3,6 +3,15 @@ import { I18nManager } from 'react-native';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
+// @sentry/react-native ships untranspiled ESM that the RN jest preset
+// doesn't transform (Babel would need to walk its whole dependency tree on
+// every test importing App) — mocked here the same way every other native-
+// touching module in this codebase is (react-native-localize,
+// blocking-permissions, etc.), rather than paying that transform cost.
+// initMonitoring is a true no-op anyway while SENTRY_DSN is empty
+// (config/monitoring-config.ts) — no behavior under test depends on it.
+jest.mock('./services/monitoring', () => ({ initMonitoring: () => undefined }));
+
 import App from './App';
 import { en } from './i18n/locales/en';
 import { useActiveSessionStore } from './state/active-session-store';

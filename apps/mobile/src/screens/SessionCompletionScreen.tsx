@@ -9,7 +9,7 @@ import { fetchRewardsHistory, fetchSessionParticipant } from '../services/sessio
 import type { RewardsHistoryRow, SessionParticipantRow } from '../services/session-repository';
 import { clearActiveSession } from '../state/active-session-store';
 import { useAuthStore } from '../state/auth-store';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Session Completion (Screen 10), DESIGN_GUIDELINES §0: an acquisition
 // surface — full design effort, reached either from a normal session end
@@ -142,18 +142,18 @@ const SessionCompletionScreen = ({
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   breakdown: {
     marginTop: spacing.lg,
   },
   breakdownLabel: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   breakdownRow: {
     alignItems: 'center',
@@ -163,15 +163,15 @@ const styles = StyleSheet.create({
   },
   breakdownValue: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   caption: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   doneCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
@@ -188,32 +188,32 @@ const styles = StyleSheet.create({
   },
   doneCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   forfeitedNote: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.lg,
   },
   pointsCard: {
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: radius.xl,
     marginTop: spacing.lg,
     paddingVertical: spacing.xl,
   },
   pointsLabel: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
   },
   pointsValue: {
     ...typography.display,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.xs,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

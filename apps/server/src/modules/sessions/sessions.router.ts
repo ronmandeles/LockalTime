@@ -2,7 +2,10 @@ import type { RequestHandler } from 'express';
 import { Router } from 'express';
 import { z } from 'zod';
 
-import { ATTESTATION_ENFORCEMENT_ENABLED } from '../../config/constants';
+import {
+  ATTESTATION_ENFORCEMENT_ENABLED,
+  FIXED_SESSION_MAX_DURATION_MINUTES,
+} from '../../config/constants';
 import { ApiError } from '../../middleware/api-error';
 import type { AttestationProvider } from '../attestation/attestation-provider';
 import type { AttestationStore } from '../attestation/attestation-store';
@@ -56,7 +59,15 @@ const createSessionBodySchema = z
   .object({
     type: z.enum(['solo', 'dynamic_qr', 'static_qr']),
     duration_mode: z.enum(['fixed', 'open_ended']).default('fixed'),
-    planned_duration_minutes: z.number().int().positive().optional(),
+    // Capped at FIXED_SESSION_MAX_DURATION_MINUTES (24h) — see its own doc
+    // comment for why: the iOS native module's DeviceActivitySchedule
+    // wiring assumes no session (fixed or open-ended) exceeds 24h.
+    planned_duration_minutes: z
+      .number()
+      .int()
+      .positive()
+      .max(FIXED_SESSION_MAX_DURATION_MINUTES)
+      .optional(),
     venue_id: z.string().uuid().optional(),
     attestation: attestationSchema.optional(),
   })

@@ -11,8 +11,8 @@ import SwiftUI
 // asked again unless they want to change categories later (not built yet;
 // there's no "change blocked categories" entry point in the app today).
 //
-// NOT compiled or run anywhere in this repo (no Mac) — see
-// SharedAppGroup.swift's header for the same caveat.
+// Compiled for the first time in Phase 7 via cloud macOS CI — see
+// SharedAppGroup.swift's header for the same note.
 struct ActivityPickerHostView: View {
   @State private var selection: FamilyActivitySelection
   private let onDone: (FamilyActivitySelection?) -> Void

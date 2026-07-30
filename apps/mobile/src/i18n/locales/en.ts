@@ -16,6 +16,9 @@ export const en = {
     venueDashboardCta: 'Venue activity',
     // Phase 6.5 — available to every user, not role-gated.
     friendsCta: 'Friends',
+    // Phase 7 (Release Prep) — sign-out and account deletion's one entry
+    // point, available to every user.
+    settingsCta: 'Settings',
     // Phase 5 gamification summary card — copy is PLACEHOLDER, flagged for
     // the deferred copy pass. Streak/milestones stay visually quiet per
     // ARCHITECTURE.md §9 (a fact being stated, not a prize being dangled).
@@ -319,6 +322,18 @@ export const en = {
       body: 'This email is already registered with a different sign-in method. Sign in with your email to keep everything in one account.',
       useEmail: 'Sign in with email',
     },
+    // Phase 7 (Release Prep): a passive disclosure, not a blocking
+    // checkbox — this screen handles both new and returning users through
+    // the same flow (Supabase email-OTP creates the account on first
+    // verify), so there is no separate "sign up" moment to gate. Tapping
+    // either link opens the corresponding server-hosted route
+    // (GET /legal/terms, /legal/privacy) via Linking.openURL.
+    legalDisclosure: {
+      prefix: 'By continuing, you agree to our',
+      termsOfService: 'Terms of Service',
+      and: 'and',
+      privacyPolicy: 'Privacy Policy',
+    },
   },
   // Phase 6 (B2B) — verified_host/admin only, gated at the route by
   // useProfileStore's role. Copy is PLACEHOLDER, flagged for the deferred
@@ -397,6 +412,26 @@ export const en = {
       confirm: 'Remove',
       cancel: 'Cancel',
       error: "We couldn't remove this friend. Please try again.",
+    },
+  },
+  // Settings (Phase 7, Release Prep) — sign-out and the App/Play Store-
+  // mandated account deletion path both live here, the app's first
+  // settings/account surface.
+  settings: {
+    title: 'Settings',
+    signOut: 'Sign out',
+    signOutError: "We couldn't sign you out. Please try again.",
+    legal: {
+      title: 'Legal',
+      termsOfService: 'Terms of Service',
+      privacyPolicy: 'Privacy Policy',
+    },
+    deleteAccount: {
+      title: 'Delete account',
+      body: 'This permanently deletes your account and all its data — points, streaks, session history, and friends. This cannot be undone.',
+      holdToDelete: 'Hold to delete account',
+      cancel: 'Cancel',
+      error: "We couldn't delete your account. Please try again.",
     },
   },
 };

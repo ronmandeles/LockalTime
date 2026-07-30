@@ -12,7 +12,7 @@ import { useSession } from '../hooks/use-session';
 import type { RootStackParamList } from '../navigation/types';
 import { setActiveSession } from '../state/active-session-store';
 import { useAuthStore } from '../state/auth-store';
-import { sizing, spacing, typography } from '../theme/tokens';
+import { colors, sizing, spacing, typography } from '../theme/tokens';
 
 // Phase 6 task 7: statuses whose own realtime-connectivity meaning
 // deserves a dedicated banner, distinct from host_disconnected (which
@@ -191,7 +191,9 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
       {route.params.qrToken !== undefined && (
         <View style={styles.qrCard}>
           <Text style={styles.qrLabel}>{t('activeSession.qrLabel')}</Text>
-          <Text style={styles.qrValue}>{route.params.qrToken}</Text>
+          <Text style={styles.qrValue} testID="active-session-qr-value">
+            {route.params.qrToken}
+          </Text>
         </View>
       )}
 
@@ -229,20 +231,20 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.sm,
   },
   caption: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.sm,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -251,7 +253,7 @@ const styles = StyleSheet.create({
   },
   emergencyExitLabel: {
     ...typography.caption,
-    color: '#999999',
+    color: colors.textFaint,
     marginTop: spacing['2xl'],
     minHeight: sizing.minTouchTarget,
     textAlign: 'center',
@@ -259,7 +261,7 @@ const styles = StyleSheet.create({
   },
   participantRow: {
     ...typography.body,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.xs,
   },
   participants: {
@@ -267,47 +269,47 @@ const styles = StyleSheet.create({
   },
   qrCard: {
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     marginTop: spacing.lg,
     padding: spacing.md,
   },
   qrLabel: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
   },
   qrValue: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.xs,
   },
   sectionTitle: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   status: {
     ...typography.body,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   timerCard: {
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     marginTop: spacing.lg,
     paddingVertical: spacing.lg,
   },
   timerLabel: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
   },
   timerValue: {
     ...typography.display,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

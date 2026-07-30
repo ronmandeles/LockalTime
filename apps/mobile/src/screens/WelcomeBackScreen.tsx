@@ -6,7 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { fetchSession } from '../services/session-repository';
 import type { SessionRow } from '../services/session-repository';
 import { clearActiveSession, resolveWelcomeBack } from '../state/active-session-store';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Screen 13 — Welcome Back / Session Interrupted (Phase 4 task 12,
 // ARCHITECTURE.md §2 item 13). A pre-navigator conditional gate, same shape
@@ -83,15 +83,15 @@ const WelcomeBackScreen = ({ sessionId }: WelcomeBackScreenProps): React.JSX.Ele
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: '#444444',
+    color: colors.textSecondary,
     marginTop: spacing.md,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingBottom: spacing.xl,
     paddingEnd: spacing.xl,
@@ -104,18 +104,18 @@ const styles = StyleSheet.create({
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
   },
 });
 

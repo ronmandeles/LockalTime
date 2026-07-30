@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { i18n as I18nInstance } from 'i18next';
 
+import { SENTRY_DSN } from './config/monitoring-config';
 import { I18nProvider } from './i18n/I18nProvider';
 import { initI18n } from './i18n/init-i18n';
 import type { SupportedLocale } from './i18n/resolve-device-locale';
@@ -21,11 +22,13 @@ import PermissionPrimingScreen from './screens/PermissionPrimingScreen';
 import ScanSessionScreen from './screens/ScanSessionScreen';
 import SessionCompletionScreen from './screens/SessionCompletionScreen';
 import SessionDetailsScreen from './screens/SessionDetailsScreen';
+import SettingsScreen from './screens/SettingsScreen';
 import StatsScreen from './screens/StatsScreen';
 import VenueDashboardScreen from './screens/VenueDashboardScreen';
 import VenueManagementScreen from './screens/VenueManagementScreen';
 import WelcomeBackScreen from './screens/WelcomeBackScreen';
 import {
+  acceptTosIfNeeded,
   registerPushTokenIfChanged,
   reportLocaleIfChanged,
   reportTimezoneIfChanged,
@@ -38,7 +41,15 @@ import {
   markPermissionStepHandled,
   usePermissionStore,
 } from './state/permission-store';
+import { initMonitoring } from './services/monitoring';
 import { hydrateProfile, resetProfile } from './state/profile-store';
+
+// Phase 7 (Release Prep): crash/error monitoring, initialized once at
+// module load — as early as possible, so it can capture errors that occur
+// before the first render, not inside a useEffect. A true no-op today
+// (SENTRY_DSN is empty, config/monitoring-config.ts) — safe to run
+// unconditionally, including under every test that imports this module.
+initMonitoring(SENTRY_DSN);
 
 // Testable app factory (the runtime shell is index.js, which only registers
 // this component) — mirrors the app.ts/server.ts split in apps/server.
@@ -118,6 +129,13 @@ const App = (): React.JSX.Element | null => {
       // linked yet, push-registration.ts) but wired for when one lands.
       reportLocaleIfChanged(authenticatedUserId);
       registerPushTokenIfChanged(authenticatedUserId);
+      // Phase 7: records ToS/Privacy acceptance the first time this user
+      // ever reaches an authenticated session — AuthScreen shows the
+      // disclosure with links on every entry step, this is what stamps a
+      // server-side timestamp once (idempotent: a no-op after the first
+      // successful call, see user-profile.ts's `.is('tos_accepted_at',
+      // null)` condition).
+      acceptTosIfNeeded(authenticatedUserId);
       // Phase 6: re-hydrated fresh every authenticated session (never
       // persisted) so a manual runbook role flip is picked up on next
       // sign-in without a stale cached value.
@@ -215,6 +233,7 @@ const App = (): React.JSX.Element | null => {
           <RootStack.Screen name="VenueManagement" component={VenueManagementScreen} />
           <RootStack.Screen name="VenueDashboard" component={VenueDashboardScreen} />
           <RootStack.Screen name="Friends" component={FriendsScreen} />
+          <RootStack.Screen name="Settings" component={SettingsScreen} />
           <RootStack.Screen name="CreateSession" component={CreateSessionScreen} />
           <RootStack.Screen name="ScanSession" component={ScanSessionScreen} />
           <RootStack.Screen

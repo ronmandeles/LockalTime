@@ -3,6 +3,16 @@ import FamilyControls
 import Foundation
 import ManagedSettings
 import Network
+// React Native visibility (RCTEventEmitter, RCTPromiseResolveBlock/
+// RCTPromiseRejectBlock) via the same Swift-module import
+// AppDelegate.swift already uses successfully (confirmed by real
+// xcodebuild CI, Phase 7) -- this RN template is Swift-native
+// (CocoaPods modular headers), not classic bridging-header-only
+// Objective-C interop, so `import React` is the actual mechanism, not
+// LockalTime-Bridging-Header.h's #import lines (which this file doesn't
+// need once this import is present, but are left in place as a harmless,
+// documented fallback for any future Objective-C-only file added here).
+import React
 
 // Phase 3 task 3.6 (backlog.md): the real iOS AppBlockerModule
 // (apps/mobile/src/services/app-blocker.ts's native seam). Applies the
@@ -163,19 +173,36 @@ class AppBlockerModule: RCTEventEmitter {
     store.shield.webDomainCategories = .specific(selection.categoryTokens)
   }
 
+  // ManagedSettingsStore.clearAllSettings() needs iOS 16+ (caught by the
+  // real ios-build CI compile, Phase 7 -- this project's deployment target
+  // is 15.1, the earliest iOS version FamilyControls itself supports, so
+  // clearing exactly the two shield properties applyShield() sets, rather
+  // than bumping the whole app's minimum iOS version for one call, is the
+  // narrower fix). Semantically equivalent here since this module never
+  // sets anything else on the store.
   private func clearShield() {
-    ManagedSettingsStore().clearAllSettings()
+    let store = ManagedSettingsStore()
+    store.shield.applicationCategories = nil
+    store.shield.webDomainCategories = nil
   }
 
   // DeviceActivitySchedule describes a time-of-day window (e.g. "9:00 to
   // 17:00 every day it's scheduled for"), not an arbitrary absolute
   // start/end — Apple's framework interprets intervalEnd < intervalStart as
   // "wraps into the next day", which correctly handles a session that
-  // happens to cross midnight, but has NOT been reasoned through fully for
-  // sessions that might span more than 24h (shouldn't happen: fixed
-  // sessions are bounded by product design, and open-ended ones are capped
-  // at exactly 24h below). Treat this as an accepted rough edge pending
-  // real-device verification.
+  // happens to cross midnight. A session longer than 24h would silently
+  // truncate to (duration mod 24h) here (only hour/minute/second survive
+  // the round trip below, the day is discarded) -- Phase 7's code review
+  // (backlog.md) found this was NOT actually enforced anywhere despite this
+  // comment's original assumption, and closed it server-side:
+  // FIXED_SESSION_MAX_DURATION_MINUTES (apps/server/src/config/constants.ts)
+  // now caps a fixed session's planned_duration_minutes at 24h, matching
+  // OPEN_ENDED_SESSION_MAX_HOURS' existing bound for open-ended sessions
+  // below -- so every session this module ever schedules is now guaranteed
+  // <= 24h. The exact-24h boundary itself (start and end landing on the
+  // identical time-of-day) is still an accepted rough edge pending
+  // real-device verification, same as it already was for the open-ended
+  // cap before this phase.
   private func scheduleMonitoring(endsAt: Date?) {
     let calendar = Calendar.current
     let now = Date()

@@ -8,7 +8,7 @@ import type { RootStackParamList } from '../navigation/types';
 import { fetchSessionHistory, HISTORY_PAGE_SIZE } from '../services/stats-repository';
 import type { HistoryFilter, SessionHistoryRow } from '../services/stats-repository';
 import { useAuthStore } from '../state/auth-store';
-import { radius, spacing, typography } from '../theme/tokens';
+import { colors, radius, spacing, typography } from '../theme/tokens';
 
 // History (Screen 11), DESIGN_GUIDELINES §0: an acquisition surface — full
 // design effort. Solo/Group/All filter is local screen state (matching
@@ -203,14 +203,14 @@ const HistoryScreen = (_props: HistoryScreenProps): React.JSX.Element => {
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   centered: {
     alignItems: 'center',
     marginTop: spacing['2xl'],
   },
   chip: {
-    backgroundColor: '#EFEFEF',
+    backgroundColor: colors.surface,
     borderRadius: radius.sm,
     marginEnd: spacing.xs,
     paddingHorizontal: spacing.sm,
@@ -218,14 +218,14 @@ const styles = StyleSheet.create({
   },
   chipLabel: {
     ...typography.caption,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   chipRow: {
     flexDirection: 'row',
     marginTop: spacing.xs,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     paddingEnd: spacing.xl,
     paddingStart: spacing.xl,
@@ -233,11 +233,11 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     ...typography.body,
-    color: '#666666',
+    color: colors.textMuted,
     textAlign: 'center',
   },
   filterChip: {
-    borderColor: '#CCCCCC',
+    borderColor: colors.borderStrong,
     borderRadius: radius.full,
     borderWidth: 1,
     marginEnd: spacing.sm,
@@ -246,21 +246,21 @@ const styles = StyleSheet.create({
   },
   filterChipLabel: {
     ...typography.caption,
-    color: '#444444',
+    color: colors.textSecondary,
   },
   filterChipLabelSelected: {
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   filterChipSelected: {
-    backgroundColor: '#222222',
-    borderColor: '#222222',
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
   filterRow: {
     flexDirection: 'row',
     marginBottom: spacing.lg,
   },
   retryButton: {
-    borderColor: '#222222',
+    borderColor: colors.primary,
     borderRadius: radius.md,
     borderWidth: 1,
     marginTop: spacing.md,
@@ -269,16 +269,16 @@ const styles = StyleSheet.create({
   },
   retryButtonLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   row: {
-    borderBottomColor: '#EFEFEF',
+    borderBottomColor: colors.surface,
     borderBottomWidth: 1,
     paddingVertical: spacing.md,
   },
   rowDate: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
   },
   rowHeader: {
     alignItems: 'center',
@@ -287,21 +287,21 @@ const styles = StyleSheet.create({
   },
   rowMinutes: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   rowPoints: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   rowType: {
     ...typography.body,
-    color: '#222222',
+    color: colors.textPrimary,
     marginTop: spacing.xs,
   },
   title: {
     ...typography.heading,
-    color: '#222222',
+    color: colors.textPrimary,
     marginBottom: spacing.lg,
   },
 });

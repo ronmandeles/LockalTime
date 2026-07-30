@@ -18,7 +18,7 @@ import type {
 } from '../services/stats-repository';
 import { useAuthStore } from '../state/auth-store';
 import { useProfileStore } from '../state/profile-store';
-import { radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
 // Home (Screen 4). Phase 5 (docs/RETENTION_STRATEGY.md §2) adds a
 // gamification summary card — streak, lifetime points, and a milestone
@@ -183,6 +183,13 @@ const HomeScreen = ({ navigation }: HomeScreenProps): React.JSX.Element => {
         >
           <Text style={styles.secondaryLinkLabel}>{t('home.friendsCta')}</Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => navigation.navigate('Settings')}
+          style={styles.secondaryLink}
+          testID="home-settings-cta"
+        >
+          <Text style={styles.secondaryLinkLabel}>{t('home.settingsCta')}</Text>
+        </TouchableOpacity>
         {isVerifiedHost && (
           <TouchableOpacity
             onPress={() => navigation.navigate('VenueManagement')}
@@ -206,13 +213,13 @@ const HomeScreen = ({ navigation }: HomeScreenProps): React.JSX.Element => {
   );
 };
 
-// Neutral grayscale only — the color palette is intentionally deferred.
+// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   actions: {
     gap: spacing.md,
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background,
     flex: 1,
     justifyContent: 'flex-start',
     paddingBottom: spacing.xl,
@@ -225,27 +232,27 @@ const styles = StyleSheet.create({
   },
   milestoneCaption: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.md,
   },
   primaryCta: {
     alignItems: 'center',
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.md,
     height: sizing.buttonHeight,
     justifyContent: 'center',
   },
   primaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#FFFFFF',
+    color: colors.onPrimary,
   },
   progressFill: {
-    backgroundColor: '#222222',
+    backgroundColor: colors.primary,
     borderRadius: radius.full,
     height: '100%',
   },
   progressTrack: {
-    backgroundColor: '#E0E0E0',
+    backgroundColor: colors.border,
     borderRadius: radius.full,
     height: 8,
     marginTop: spacing.xs,
@@ -253,7 +260,7 @@ const styles = StyleSheet.create({
   },
   secondaryCta: {
     alignItems: 'center',
-    borderColor: '#222222',
+    borderColor: colors.primary,
     borderRadius: radius.md,
     borderWidth: 1,
     height: sizing.buttonHeight,
@@ -261,7 +268,7 @@ const styles = StyleSheet.create({
   },
   secondaryCtaLabel: {
     ...typography.bodyStrong,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   secondaryLink: {
     alignItems: 'center',
@@ -270,7 +277,7 @@ const styles = StyleSheet.create({
   },
   secondaryLinkLabel: {
     ...typography.body,
-    color: '#666666',
+    color: colors.textMuted,
   },
   secondaryLinkRow: {
     flexDirection: 'row',
@@ -280,18 +287,18 @@ const styles = StyleSheet.create({
   },
   streakText: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginTop: spacing.xs,
   },
   summaryCard: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: colors.surface,
     borderRadius: radius.xl,
     marginBottom: spacing['2xl'],
     padding: spacing.lg,
   },
   summaryCaption: {
     ...typography.caption,
-    color: '#666666',
+    color: colors.textMuted,
     marginStart: spacing.sm,
   },
   summaryRow: {
@@ -300,11 +307,11 @@ const styles = StyleSheet.create({
   },
   summaryValue: {
     ...typography.display,
-    color: '#222222',
+    color: colors.textPrimary,
   },
   title: {
     ...typography.display,
-    color: '#222222',
+    color: colors.textPrimary,
     marginBottom: spacing['2xl'],
     textAlign: 'center',
   },

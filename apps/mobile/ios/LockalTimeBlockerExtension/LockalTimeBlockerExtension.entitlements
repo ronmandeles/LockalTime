@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-  Phase 3 task 3.6 (backlog.md): reference entitlements for the
-  DeviceActivityMonitor extension target — same App Groups identifier as
-  the main app (LockalTime.entitlements) so both can read/write
-  SharedAppGroup's UserDefaults suite, plus Family Controls since this
-  extension calls ManagedSettingsStore directly. Not wired into any real
-  Xcode target in this repo — see DeviceActivityMonitorExtension.swift's
-  header.
+  Phase 3 task 3.6 (backlog.md): entitlements for the LockalTimeBlockerExtension
+  target — same App Groups identifier as the main app (LockalTime.entitlements)
+  so both can read/write SharedAppGroup's UserDefaults suite, plus Family
+  Controls since this extension calls ManagedSettingsStore directly. Wired
+  in via Phase 7's scripted Xcode setup
+  (apps/mobile/ios/scripts/wire-blocking-target.rb) — see
+  DeviceActivityMonitorExtension.swift's header.
 -->
 <plist version="1.0">
 <dict>

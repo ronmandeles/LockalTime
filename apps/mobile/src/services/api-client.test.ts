@@ -13,6 +13,7 @@ jest.mock('../state/auth-store', () => ({
 import {
   createSession,
   createVenue,
+  deleteAccount,
   getVenueMetrics,
   joinSession,
   joinVenueSession,
@@ -49,6 +50,18 @@ const jsonResponse = (status: number, body: unknown) => ({
   ok: status >= 200 && status < 300,
   status,
   json: async () => body,
+  text: async () => JSON.stringify(body),
+});
+
+// 204 No Content — Phase 7's DELETE /account, the first endpoint with no
+// response body at all on success.
+const emptyResponse = (status: number) => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => {
+    throw new Error('should never be called for an empty body — use text()');
+  },
+  text: async () => '',
 });
 
 describe('createSession', () => {
@@ -482,5 +495,38 @@ describe('listFriends', () => {
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
     expect(url).toContain('/friends');
     expect(init.method).toBe('GET');
+  });
+});
+
+describe('deleteAccount', () => {
+  it('issues a DELETE to /account with no body, handling the 204 No Content response', async () => {
+    mockFetch.mockResolvedValue(emptyResponse(204));
+
+    const result = await deleteAccount();
+
+    expect(result).toEqual({ ok: true, value: {} });
+    const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain('/account');
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBeUndefined();
+  });
+
+  it('never calls fetch when there is no authenticated session', async () => {
+    mockGetState.mockReturnValue(UNAUTHENTICATED);
+
+    const result = await deleteAccount();
+
+    expect(result).toEqual({ ok: false, error: { code: 'unauthenticated', message: 'No active session' } });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('maps a server error envelope to a typed failure', async () => {
+    mockFetch.mockResolvedValue(
+      jsonResponse(500, { error: { code: 'account_deletion_failed', message: 'nope' } }),
+    );
+
+    const result = await deleteAccount();
+
+    expect(result).toEqual({ ok: false, error: { code: 'account_deletion_failed', message: 'nope' } });
   });
 });

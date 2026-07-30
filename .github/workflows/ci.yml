@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Phase 7: lets a feature branch trigger a manual run (e.g. to verify the
+  # ios-build job) without needing a PR into main first.
+  workflow_dispatch: {}
 
 # Cancel superseded runs on the same ref — keeps the queue clear during
 # autonomous runs that push once per closed task.
@@ -83,3 +86,48 @@ jobs:
         working-directory: apps/mobile
       - run: npm run test:integration
         working-directory: apps/mobile
+
+  ios-build:
+    name: ios (macOS CI — first real xcodebuild compile)
+    # Phase 7 (Release Prep): the Swift blocker code
+    # (apps/mobile/ios/LockalTime/Blocking/, LockalTimeBlockerExtension/)
+    # has existed since Phase 3 task 3.6 but was never compiled — no Mac
+    # available locally (CLAUDE.md's standing constraint). This job does
+    # the one-time Xcode project wiring docs/MANUAL_QA.md documents for a
+    # human to do by hand, scripted instead
+    # (ios/scripts/wire-blocking-target.rb via the xcodeproj gem), then
+    # builds for the Simulator with code signing disabled — this job
+    # verifies the Swift actually COMPILES and LINKS, not that it's ready
+    # for a signed device/App Store build (that needs the real Family
+    # Controls entitlement approval + a distribution cert, both still
+    # owner-actioned per docs/MANUAL_QA.md).
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      - run: npm ci
+      - name: Install xcodeproj gem
+        run: gem install xcodeproj --no-document
+      - name: Wire the Blocking/ target + LockalTimeBlockerExtension into project.pbxproj
+        run: ruby scripts/wire-blocking-target.rb
+        working-directory: apps/mobile/ios
+      - name: pod install
+        run: pod install --repo-update
+        working-directory: apps/mobile/ios
+      - name: xcodebuild (Simulator, unsigned)
+        run: |
+          xcodebuild build \
+            -workspace LockalTime.xcworkspace \
+            -scheme LockalTime \
+            -sdk iphonesimulator \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+        working-directory: apps/mobile/ios
