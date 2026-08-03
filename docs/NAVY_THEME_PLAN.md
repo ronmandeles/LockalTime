@@ -137,7 +137,7 @@ Both reference screens are 1179×2556 px @3x ⇒ **393×852 pt** logical.
 | Title | ink 21.3 ⇒ ~22 bold, centered | `typography.display` (28) — see note |
 | Body | 3 lines, pitch 22, muted, centered | `typography.body` + `textMuted` ✅ |
 | CTA | **52.3** tall | `sizing.buttonHeight` ✅ |
-| "Maybe later" link | ink 13, colour `#45643C` | see OD2; **do not copy the colour** — it measures **3.14:1 on black and fails WCAG AA** |
+| "Maybe later" link | ink 13, colour `#45643C` | `typography.body` + `colors.textMuted` — **do not copy the reference's colour**, it measures **3.14:1 on black and fails WCAG AA** |
 
 > **Title-size note:** the reference uses ~34 pt on the welcome screen and ~22 pt on the permission screen — a deliberate hierarchy. Mapping those to the new `displayLarge` (34) and the existing `display` (28) preserves the hierarchy using tokens we already have. The permission title lands 6 pt larger than the reference; that is an accepted, documented deviation rather than a fourth display size.
 
