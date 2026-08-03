@@ -16,24 +16,35 @@ The owner wants Lockal Time's **onboarding flow** to look like that reference, w
 
 | Question | Decision |
 |---|---|
+| New-user flow | **Welcome → Permission → Login → Home.** Exactly the three screens that exist today — nothing added, nothing removed |
 | Which screens | **Restyle Screens 1, 2 and 3** (Welcome, Permission, Auth) to the reference's visual language |
 | New screens | **No.** Do not build the reference's pronoun screen or profile/avatar screen |
-| Database changes | **None.** This task is styling + one screen's structure |
+| Database changes | **None.** This task is styling, plus one screen's structure and one screen's flow |
 | Theme scope | **Whole app goes dark**, so no screen clashes with the restyled flow |
 | Background | **Pure black `#000000`**, exactly like the reference. Navy is the *accent* only |
 | Screen 1 structure | **Collapse the 3-page carousel to a single welcome page** |
 | CTA | **Gradient**, not a flat fill |
 | Logo | **Bare ring mark**, no teal backdrop tile |
+| Screen 2 badge glyph | **Reuse the Lockal Time ring mark** inside the tinted circle — no icon library, no new dependency |
+| Screen 2 "maybe later" | **Match the reference** — show the skip link during priming, not only after a denial |
 
 ### Owner was told and accepted
 1. Collapsing Screen 1 to one page **drops two screens' worth of copy** (`howSessionsWork`, `whyPermissionsMatter`) from both locales. "How sessions work" is then explained nowhere in onboarding.
 2. A *true* navy on black is too low-contrast to be usable, so the accent is a **brighter navy-blue** (`#3563D8` family) rather than a deep `#1B2A6B`.
 3. `react-native-safe-area-context` gets its **first real use**; a `SafeAreaProvider` must be mounted in `App.tsx`, touching the app shell.
 
-### ⚠️ Two open decisions — ask the owner before implementing
+### ⚠️ The one deliberate behaviour change — "maybe later" during priming
 
-- **OD1 — the Screen 2 badge glyph.** The reference (IMG_3888) shows a shield-with-lock icon inside a tinted circle. **The project has no icon library at all** — no `react-native-svg`, no vector-icons, and not one screen uses `Image`. Options: (a) a `🔒` emoji in a `<Text>` — zero dependencies, and the reference's own profile screen is emoji-forward, so it suits the design language; (b) reuse the `LogoMark` ring — brand-consistent but says nothing about permissions; (c) add `react-native-svg` — a native dependency, and the only real risk to the macOS `ios-build` CI job in this whole task. **Recommendation: (a).**
-- **OD2 — "maybe later" on the permission screen.** The reference shows a secondary text link under the CTA in the *priming* state. Lockal Time deliberately shows its equivalent (`permission-proceed-anyway`) **only after a denial**. Adding it to the priming state lets users skip the permission without ever attempting it — that is a **funnel change, not a restyle**. **Recommendation: do not add it**; keep the current flow and accept the small visual difference.
+Everything else in this task is styling. **This is not**, and it was decided by the owner with the trade-off stated explicitly.
+
+Today `PermissionPrimingScreen` shows only "Allow" in its `priming` state; the escape hatch (`permission-proceed-anyway`) appears **only after the user has actually declined** the OS permission. The reference shows a "maybe later" link under the CTA immediately, and the owner chose to match it.
+
+**Consequence to expect:** more users will reach Home without ever attempting the screen-time permission — and blocking does not function without it. Those users land in a working app whose core feature silently does nothing. The recovery path already exists (the permission is re-requestable later), but the grant rate will drop. This was accepted knowingly; do not silently re-litigate it, and do not quietly implement the old behaviour instead.
+
+Implementation notes:
+- Add the link to the **priming** state, firing the existing `onHandled` callback — the same contract the denied state's proceed-anyway already uses. The screen stays storage-agnostic; the `App` gate still owns what "handled" means.
+- Give it its **own** `testID` (`permission-maybe-later`) and its **own** i18n key (`permissionPriming.maybeLater`). Do not reuse `permissionPriming.denied.proceedAnyway` — the two links appear in different states and their copy should be free to diverge.
+- The denied state keeps its own proceed-anyway exactly as-is.
 
 ---
 
@@ -142,7 +153,9 @@ Black gives more headroom than navy did, but the gradient is still squeezed from
 Sampled from IMG_3890 / IMG_3891: option buttons and text inputs are `#1C1C1D`; emoji tiles are `#2C2C2D`. These are the iOS system dark greys. The reference keeps surfaces **neutral** and lets the accent carry all the colour — this plan does the same.
 
 ### F7 — There is no icon library ✅
-No `react-native-svg`, no vector-icons, no icon package in `apps/mobile/package.json`, and no screen uses `Image`. See **OD1**.
+No `react-native-svg`, no vector-icons, no icon package in `apps/mobile/package.json`, and no screen uses `Image`. The reference's shield-and-lock glyph therefore cannot be drawn as-is.
+
+**Resolved:** reuse the Lockal Time **ring mark** (`LogoMark`, F3) inside the tinted badge circle. Zero new dependencies, fully under our control at any size, and it keeps the macOS `ios-build` CI job untouched — adding `react-native-svg` would have been the only native-linking risk in this whole task.
 
 ---
 
@@ -287,7 +300,11 @@ The reference is 393×852 pt. On a 320×568 pt phone the Screen 1 stack (hero 16
 **Fix:** replace with a single-page RTL check; add new items from E5, E6, E10, E11.
 
 ### E13 — Screen 2 and 3 specs will need updating 🔴
-`PermissionPrimingScreen.spec.tsx` and `AuthScreen.spec.tsx` exist and pin structure/behaviour. Adding the icon badge, centring text and swapping the CTA fill will touch them (and they need the E7 mock if the screens adopt `SafeAreaView`). Behavioural assertions — the priming/denied state machine, the `AppState` re-check, the OTP steps — **must keep passing unchanged**; this is a restyle, not a behaviour change. If a behavioural test fails, you changed something you shouldn't have.
+`PermissionPrimingScreen.spec.tsx` and `AuthScreen.spec.tsx` pin structure and behaviour. Adding the icon badge, centring text and swapping the CTA fill will touch them (and they need the E7 mock if the screens adopt `SafeAreaView`).
+
+**Exactly one behavioural assertion is allowed to change:** the new priming-state "maybe later" link (§1). Add tests for it — that it renders in the priming state, fires `onHandled` once, and that the denied state still has its own separate proceed-anyway.
+
+**Everything else must keep passing unmodified** — the priming/denied state machine, the `AppState` re-check on return from Settings, the battery-optimization fire-and-forget, and every OTP step on Screen 3. If one of those fails, you changed something you shouldn't have; fix the code, not the test.
 
 ### E14 — The app icon stays teal ℹ️
 The launcher icon is a white ring on teal `#0F6B5C`. After this change the app is black-and-navy but its home-screen icon is still teal. The owner said keep the logo as-is, so this is in scope as-is — flag it as a follow-up.
@@ -306,25 +323,26 @@ npx jest --silent           # confirm baseline: 55 suites, 667 tests green
 ```
 > `npm install` may leave a one-line `package-lock.json` diff marking macOS-only `fsevents` as `"dev": true`. That is Linux-vs-macOS churn — `git checkout -- package-lock.json`, don't commit it.
 
-### Step 1 — Resolve OD1 and OD2 with the owner
-Do not start Step 4 without answers.
-
-### Step 2 — Tokens (test first)
+### Step 1 — Tokens (test first)
 Update `src/theme/tokens.test.ts` (all colour values + 3 new colour keys; `displayLarge` in the ramp shape **and** the line-height array; `heroLogo` + `iconBadge` in sizing), then `src/theme/tokens.ts` per §4.
 `npx jest src/theme` → green. Then `npx jest` → per F1 there should be **no** other failures. If a screen spec fails here you've found an inverted assumption the audit missed — investigate, don't paper over it.
 
-### Step 3 — `AuthScreen` dialog fix (E3)
+### Step 2 — `AuthScreen` dialog fix (E3)
 `dialog` → `colors.surface` + `borderWidth: 1` + `borderColor: colors.borderStrong`.
 
-### Step 4 — Shared pieces (test first)
-- `src/components/LogoMark.tsx` — ring + inner dot at F3's ratios. Props: `size` (default `sizing.heroLogo`), `color` (default `colors.textPrimary`). Ring = `View` with `borderRadius: radius.full` and `borderWidth = round(size × 0.0964)`; dot = centred `View` at `size × 0.4217`. Give it a `testID`.
-- `src/components/IconBadge.tsx` — Ø`sizing.iconBadge` circle, `backgroundColor: colors.primarySubtle`, `borderRadius: radius.full`, centring its child (the OD1 glyph).
-- `src/components/GradientButton.tsx` — the CTA shared by all three screens: `height: sizing.buttonHeight`, `borderRadius: radius.lg`, the F2 gradient, label `typography.bodyStrong` / `colors.onPrimary`. Extracting this once avoids repeating the gradient literal in three files and keeps the "no ad-hoc values" rule honest.
+### Step 3 — Shared pieces (test first)
+- `src/components/LogoMark.tsx` — ring + inner dot at F3's ratios. Props: `size` (default `sizing.heroLogo`), `color` (default `colors.textPrimary`). Ring = `View` with `borderRadius: radius.full` and `borderWidth = round(size × 0.0964)`; dot = centred `View` at `size × 0.4217`. Give it a `testID`. Used at two sizes: the Screen 1 hero (`sizing.heroLogo`) and inside the Screen 2 badge.
+- `src/components/IconBadge.tsx` — Ø`sizing.iconBadge` circle, `backgroundColor: colors.primarySubtle`, `borderRadius: radius.full`, centring its child. On Screen 2 that child is a `LogoMark` tinted `colors.primary`, sized to roughly half the badge (≈48) so it sits inside the circle the way the reference's glyph does.
+- `src/components/GradientButton.tsx` — the CTA shared by all three screens: `height: sizing.buttonHeight`, `borderRadius: radius.lg`, the F2 gradient, label `typography.bodyStrong` / `colors.onPrimary`. Extracting this once avoids repeating the gradient literal in three files and keeps the "no ad-hoc values" rule honest. Accepts a `testID` so each screen keeps its own.
 
-### Step 5 — i18n (E9)
-Edit `en.ts` first (it defines the schema), then `he.ts`. `npx jest src/i18n` and `npx tsc --noEmit`.
+### Step 4 — i18n (E9)
+Edit `en.ts` first (it defines the schema), then `he.ts`. Two changes:
+1. The onboarding key surgery in E9.
+2. **Add `permissionPriming.maybeLater`** in both locales for the new priming-state link (§1). Suggested copy — en: `'Maybe later'`; he: `'אולי אחר כך'` (the reference's own wording).
 
-### Step 6 — Screen 1, `OnboardingScreen` (test first)
+`npx jest src/i18n` and `npx tsc --noEmit`.
+
+### Step 5 — Screen 1, `OnboardingScreen` (test first)
 Rewrite the spec: drop carousel/dots/skip/next tests; keep and adapt en-copy, he-copy, `onboarding-screen` testID, `onComplete`-fires, CTA-height-token. Add: logo renders, container background, CTA declares the gradient. Add the E7 mock.
 ```
 SafeAreaView          flex:1, backgroundColor: colors.background
@@ -337,30 +355,31 @@ SafeAreaView          flex:1, backgroundColor: colors.background
                       label t('onboarding.getStarted')
 ```
 
-### Step 7 — Screen 2, `PermissionPrimingScreen`
-Keep the priming/denied state machine and the `AppState` listener **exactly as they are**. Restyle only:
-- add `IconBadge` above the title in both states
+### Step 6 — Screen 2, `PermissionPrimingScreen`
+Keep the priming/denied state machine, the `AppState` listener and the battery-optimization call **exactly as they are**. Then:
+- add `IconBadge` (containing a `primary`-tinted `LogoMark`) above the title in both states
 - centre title and body (`textAlign: 'center'`), title → `typography.display`, body → `colors.textMuted`
 - CTA → `GradientButton` (`radius.lg`, gradient — replacing `radius.md` + flat `primary`)
-- keep `proceedAnyway` in the denied state only, unless OD2 says otherwise
+- **add the "maybe later" link to the priming state** (§1): `testID="permission-maybe-later"`, label `t('permissionPriming.maybeLater')`, `typography.body` in `colors.textMuted`, wrapped to `sizing.minTouchTarget`, firing `onHandled`. Deliberately **not** the reference's `#45643C` — that measures 3.14:1 and fails AA
+- the denied state keeps its own `permission-proceed-anyway` unchanged
 
-### Step 8 — Screen 3, `AuthScreen`
+### Step 7 — Screen 3, `AuthScreen`
 Same visual language, no behaviour change: primary CTAs → `GradientButton`; inputs and provider buttons → `colors.surface` fill with `borderStrong` borders; title → `typography.display`; body/labels → `textMuted`; legal disclosure → `textFaint` with `primary` links.
 
-### Step 9 — App shell
+### Step 8 — App shell
 Wrap `App.tsx`'s tree in `<SafeAreaProvider>` and add the E4 `StatusBar`. Add the E7 mock to `App.spec.tsx` / `App.auth-gate.spec.tsx` if they fail.
 
-### Step 10 — `App.spec.tsx` (E1) and Maestro flows (E2)
+### Step 9 — `App.spec.tsx` (E1) and Maestro flows (E2)
 
-### Step 11 — Native launch backgrounds (E5, E6) — both manual-QA only
+### Step 10 — Native launch backgrounds (E5, E6) — both manual-QA only
 
-### Step 12 — Docs
+### Step 11 — Docs
 - `docs/DESIGN_GUIDELINES.md`: **§5** (`displayLarge`), **§6** (`heroLogo`, `iconBadge`), **§9** (Screen 1 is one welcome page; the flow is still Onboarding → Permission → Auth, satisfying §9's "max 3–5 screens"), **§11** (dark mode no longer deferred — the app *is* dark; still no light variant, no theme switching), **§12** (rewrite the palette table as black + navy accent, with §4's contrast ratios).
 - `docs/MANUAL_QA.md`: E12 + new items from E5, E6, E10, E11.
 - `CLAUDE.md`: update the status paragraph (the palette is now black + navy, Screen 1 is a single welcome page).
 - `backlog.md`: add the task, ticked.
 
-### Step 13 — Verify and commit
+### Step 12 — Verify and commit
 ```bash
 cd apps/mobile
 npx jest && npm run lint && npm run typecheck
@@ -377,9 +396,9 @@ Commit to `claude/first-screen-navy-theme-rxh1ff`, then `git push -u origin clau
 - [ ] Screens 1–3 share one visual language: black background, centred hero/badge, bold title, muted body, full-width navy gradient CTA
 - [ ] Screen 1 is a single welcome page — no carousel, dots, skip, or `next` copy anywhere, **including `App.spec.tsx` and the Maestro flows**
 - [ ] Every other screen repainted via tokens alone, with no light-theme remnant
-- [ ] **No behavioural change** on Screens 2–3: the permission state machine and the OTP flow pass their existing tests unmodified
+- [ ] **Exactly one behavioural change**, and it is the intended one: the priming-state "maybe later" link. The permission state machine, the `AppState` re-check and the whole OTP flow pass their existing tests unmodified
 - [ ] `en`/`he` in parity; no hardcoded strings
-- [ ] Docs in Step 12 updated in the same commit
+- [ ] Docs in Step 11 updated in the same commit
 - [ ] Pushed to `claude/first-screen-navy-theme-rxh1ff`
 
 ## 8. Explicitly out of scope
