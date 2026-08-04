@@ -56,7 +56,9 @@ describe('subscribeToSessionChannel', () => {
     const onPresenceSync = jest.fn();
     subscribeToSessionChannel(SESSION_ID, { onPresenceSync });
 
-    const presenceHandler = mockChannel.on.mock.calls.find(([type, filter]) => type === 'presence' && filter.event === 'sync')?.[2];
+    const presenceHandler = mockChannel.on.mock.calls.find(
+      ([type, filter]) => type === 'presence' && filter.event === 'sync',
+    )?.[2];
     presenceHandler();
 
     expect(onPresenceSync).toHaveBeenCalledWith(mockChannel.presenceState());
@@ -83,7 +85,11 @@ describe('subscribeToSessionChannel', () => {
     const call = mockChannel.on.mock.calls.find(
       ([type, filter]) => type === 'postgres_changes' && filter.table === 'sessions',
     );
-    expect(call?.[1]).toMatchObject({ schema: 'public', table: 'sessions', filter: `id=eq.${SESSION_ID}` });
+    expect(call?.[1]).toMatchObject({
+      schema: 'public',
+      table: 'sessions',
+      filter: `id=eq.${SESSION_ID}`,
+    });
 
     call?.[2]({ new: { id: SESSION_ID, status: 'active' } });
     expect(onSessionRowChange).toHaveBeenCalledWith({ new: { id: SESSION_ID, status: 'active' } });
@@ -94,7 +100,8 @@ describe('subscribeToSessionChannel', () => {
     subscribeToSessionChannel(SESSION_ID, { onPresenceIntervalChange });
 
     const call = mockChannel.on.mock.calls.find(
-      ([type, filter]) => type === 'postgres_changes' && filter.table === 'session_presence_intervals',
+      ([type, filter]) =>
+        type === 'postgres_changes' && filter.table === 'session_presence_intervals',
     );
     expect(call?.[1]).toMatchObject({
       schema: 'public',
@@ -132,18 +139,15 @@ describe('subscribeToSessionChannel', () => {
       expect(onConnectionStateChange).toHaveBeenCalledWith('connected');
     });
 
-    it.each(['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'])(
-      'reports disconnected on %s',
-      (status) => {
-        const onConnectionStateChange = jest.fn();
-        subscribeToSessionChannel(SESSION_ID, { onConnectionStateChange });
+    it.each(['CHANNEL_ERROR', 'TIMED_OUT', 'CLOSED'])('reports disconnected on %s', (status) => {
+      const onConnectionStateChange = jest.fn();
+      subscribeToSessionChannel(SESSION_ID, { onConnectionStateChange });
 
-        const statusCallback = mockChannel.subscribe.mock.calls[0]?.[0];
-        statusCallback(status);
+      const statusCallback = mockChannel.subscribe.mock.calls[0]?.[0];
+      statusCallback(status);
 
-        expect(onConnectionStateChange).toHaveBeenCalledWith('disconnected');
-      },
-    );
+      expect(onConnectionStateChange).toHaveBeenCalledWith('disconnected');
+    });
 
     it('reports connected again on a later resubscribe (auto-reconnect)', () => {
       const onConnectionStateChange = jest.fn();

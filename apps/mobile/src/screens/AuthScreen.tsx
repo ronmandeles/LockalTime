@@ -313,7 +313,10 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...typography.caption,
-    color: colors.textPrimary,
+    // `danger`, matching every other screen's inline errors. Rendering these
+    // in `textPrimary` left the copy itself as the only signal that anything
+    // had gone wrong.
+    color: colors.danger,
     marginTop: spacing.sm,
   },
   legalDisclosure: {
@@ -325,8 +328,9 @@ const styles = StyleSheet.create({
   legalLink: {
     ...typography.caption,
     // The accent reads as "this is tappable" where an underline alone on
-    // faint text does not.
-    color: colors.primary,
+    // faint text does not — but `link`, not `primary`: the button accent is
+    // below the 4.5:1 text bar on black (see tokens.ts).
+    color: colors.link,
     textDecorationLine: 'underline',
   },
   input: {

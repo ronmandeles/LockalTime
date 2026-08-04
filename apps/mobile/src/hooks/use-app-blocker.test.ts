@@ -29,7 +29,7 @@ const buildFakeModule = (): AppBlockerModule & { emit: (event: BlockerEvent) => 
   return {
     start: jest.fn(async () => undefined),
     stop: jest.fn(async () => undefined),
-    getStatus: jest.fn(async () => ({ state: 'inactive' }) as const),
+    getStatus: jest.fn(async () => ({ state: 'inactive' } as const)),
     addEventListener: (listener) => {
       listeners.push(listener);
       return () => {

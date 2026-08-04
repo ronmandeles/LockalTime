@@ -39,12 +39,15 @@ describe('blockingPermissions with a native module registered', () => {
     mockRequest.mockReset();
   });
 
-  it.each(['android', 'ios'] as const)('getStatus forwards a granted native result on %s', async (os) => {
-    setPlatform(os);
-    mockGetStatus.mockResolvedValue({ status: 'granted' });
+  it.each(['android', 'ios'] as const)(
+    'getStatus forwards a granted native result on %s',
+    async (os) => {
+      setPlatform(os);
+      mockGetStatus.mockResolvedValue({ status: 'granted' });
 
-    await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'granted' });
-  });
+      await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'granted' });
+    },
+  );
 
   it('getStatus forwards a denied native result (the weakest-link report)', async () => {
     setPlatform('android');
@@ -60,16 +63,19 @@ describe('blockingPermissions with a native module registered', () => {
     await expect(blockingPermissions.getStatus()).resolves.toEqual({ status: 'undetermined' });
   });
 
-  it.each(['android', 'ios'] as const)('request forwards the native request outcome on %s', async (os) => {
-    setPlatform(os);
-    mockRequest.mockResolvedValue({ status: 'undetermined' });
+  it.each(['android', 'ios'] as const)(
+    'request forwards the native request outcome on %s',
+    async (os) => {
+      setPlatform(os);
+      mockRequest.mockResolvedValue({ status: 'undetermined' });
 
-    await expect(blockingPermissions.request()).resolves.toEqual({ status: 'undetermined' });
-    expect(mockRequest).toHaveBeenCalledTimes(1);
-  });
+      await expect(blockingPermissions.request()).resolves.toEqual({ status: 'undetermined' });
+      expect(mockRequest).toHaveBeenCalledTimes(1);
+    },
+  );
 });
 
-describe('blockingPermissions with no native module registered (today\'s real state until a build links one)', () => {
+describe("blockingPermissions with no native module registered (today's real state until a build links one)", () => {
   beforeEach(() => {
     delete (NativeModules as Record<string, unknown>).BlockingPermissionsModule;
   });

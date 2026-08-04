@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Linking, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
@@ -15,8 +15,9 @@ import AuthScreen from './AuthScreen';
 // through `.default` because the shipped mock module is a default export —
 // the idiomatic one-liner without it fails with "useSafeAreaInsets is not a
 // function". It reports all insets 0, so assertions see token padding only.
-jest.mock('react-native-safe-area-context', () =>
-  require('react-native-safe-area-context/jest/mock').default,
+jest.mock(
+  'react-native-safe-area-context',
+  () => require('react-native-safe-area-context/jest/mock').default,
 );
 
 // Auth screen (Screen 3), backlog: "Auth error states: wrong OTP, network
@@ -84,13 +85,9 @@ const EN_US: DeviceLocaleStub = {
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>();
 
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getLocales: () => mockGetLocales(),
+}));
 
 // Local structural stubs for the service results: the spec pins the contract
 // the screen consumes, including the 'provider_email_conflict' kind that
@@ -366,6 +363,24 @@ describe('error state (a): wrong or expired OTP', () => {
     expect(screen.getByTestId('auth-code-input')).toBeOnTheScreen();
     expect(screen.getByTestId('auth-code-verify-cta')).toBeOnTheScreen();
     expect(screen.queryByTestId('auth-email-input')).toBeNull();
+  });
+
+  it('styles the error in the danger colour, not as ordinary body text', async () => {
+    // Every other screen in the app already renders inline errors in
+    // `danger`; this one rendered them in `textPrimary`, i.e. identical to
+    // the copy around it. On a dark theme that is worse, not just
+    // inconsistent — the only remaining signal that something went wrong is
+    // the wording itself.
+    mockVerifyEmailOtp.mockResolvedValue(INVALID_CODE_FAILURE);
+    await renderAuthIn('en');
+    await driveToCodeEntry();
+
+    await fireEvent.changeText(screen.getByTestId('auth-code-input'), '000000');
+    await fireEvent.press(screen.getByTestId('auth-code-verify-cta'));
+
+    const error = await screen.findByText(en.auth.codeEntry.errors.invalidCode);
+    const style = StyleSheet.flatten(error.props.style as StyleProp<TextStyle>);
+    expect(style.color).toBe(colors.danger);
   });
 
   it('clears the invalid-code error once a corrected code verifies', async () => {

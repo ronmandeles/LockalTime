@@ -31,7 +31,9 @@ import GradientButton from './GradientButton';
 const flattenedStyle = (testID: string): ViewStyle =>
   StyleSheet.flatten(screen.getByTestId(testID).props.style as StyleProp<ViewStyle>);
 
-const gradientOf = (testID: string): { type: string; direction?: string | undefined } & {
+const gradientOf = (
+  testID: string,
+): { type: string; direction?: string | undefined } & {
   colorStops: ReadonlyArray<{ color: unknown }>;
 } => {
   const { experimental_backgroundImage: backgroundImage } = flattenedStyle(testID);

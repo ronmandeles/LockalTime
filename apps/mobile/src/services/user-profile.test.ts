@@ -6,28 +6,20 @@
 const mockGetItem = jest.fn<Promise<string | null>, [string]>();
 const mockSetItem = jest.fn<Promise<void>, [string, string]>();
 
-jest.mock(
-  '@react-native-async-storage/async-storage',
-  () => ({
-    __esModule: true,
-    default: {
-      getItem: (key: string) => mockGetItem(key),
-      setItem: (key: string, value: string) => mockSetItem(key, value),
-    },
-  }),
-  { virtual: true },
-);
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: {
+    getItem: (key: string) => mockGetItem(key),
+    setItem: (key: string, value: string) => mockSetItem(key, value),
+  },
+}));
 
 const mockGetTimeZone = jest.fn<string, []>();
 const mockGetLocales = jest.fn<Array<{ languageCode: string }>, []>();
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getTimeZone: () => mockGetTimeZone(),
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getTimeZone: () => mockGetTimeZone(),
+  getLocales: () => mockGetLocales(),
+}));
 
 const mockIs = jest.fn();
 const mockEq = jest.fn();
@@ -286,7 +278,11 @@ describe('registerPushTokenIfChanged', () => {
 
   it('upserts the token on (user_id, platform) when nothing was cached yet', async () => {
     mockGetItem.mockResolvedValue(null);
-    mockGetToken.mockResolvedValue({ status: 'granted', token: 'device-token-1', platform: 'android' });
+    mockGetToken.mockResolvedValue({
+      status: 'granted',
+      token: 'device-token-1',
+      platform: 'android',
+    });
 
     await registerPushTokenIfChanged(USER_ID);
 
@@ -301,7 +297,11 @@ describe('registerPushTokenIfChanged', () => {
 
   it('does not write when the cached token already matches the current one', async () => {
     mockGetItem.mockResolvedValue('device-token-1');
-    mockGetToken.mockResolvedValue({ status: 'granted', token: 'device-token-1', platform: 'android' });
+    mockGetToken.mockResolvedValue({
+      status: 'granted',
+      token: 'device-token-1',
+      platform: 'android',
+    });
 
     await registerPushTokenIfChanged(USER_ID);
 
@@ -324,7 +324,11 @@ describe('registerPushTokenIfChanged', () => {
 
   it('fails open when the Supabase upsert errors — never caches, never throws', async () => {
     mockGetItem.mockResolvedValue(null);
-    mockGetToken.mockResolvedValue({ status: 'granted', token: 'device-token-1', platform: 'android' });
+    mockGetToken.mockResolvedValue({
+      status: 'granted',
+      token: 'device-token-1',
+      platform: 'android',
+    });
     mockUpsert.mockResolvedValue({ error: { message: 'network error' } });
 
     await expect(registerPushTokenIfChanged(USER_ID)).resolves.toBeUndefined();

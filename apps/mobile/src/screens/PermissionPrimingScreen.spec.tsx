@@ -58,8 +58,10 @@ import PermissionPrimingScreen from './PermissionPrimingScreen';
 // (.claude/skills/i18n/SKILL.md); the he renders below prove both states' copy flows
 // through i18n. Real OS dialogs/settings round-trips are not JS-testable and
 // live on the manual QA checklist when the native module lands (Phase 3).
-// react-native-localize is mocked virtually as established; the service
-// module is mocked virtually (it does not exist until Stage B); no test
+// react-native-localize and the blocking-permissions service are both mocked
+// normally: BOTH modules really exist, and `{ virtual: true }` on a module
+// that resolves for real makes jest's choice between mock and real
+// non-deterministic across workers (it made this suite flaky). No test
 // touches a real locale, bridge, or the OS settings app.
 
 interface DeviceLocaleStub {
@@ -78,13 +80,9 @@ const EN_US: DeviceLocaleStub = {
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>();
 
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getLocales: () => mockGetLocales(),
+}));
 
 interface PermissionStatusStub {
   readonly status: 'granted' | 'denied' | 'undetermined';
@@ -99,25 +97,22 @@ const mockRequestBatteryOptimizationExemption = jest.fn<Promise<void>, []>();
 // directly) fails these tests. getStatus is stubbed but unasserted: the App
 // gate keys off the persisted handled flag in Phase 1, not live status, but
 // an implementation consulting it must not break.
-jest.mock(
-  '../services/blocking-permissions',
-  () => ({
-    blockingPermissions: {
-      getStatus: () => mockGetStatus(),
-      request: () => mockRequest(),
-    },
-    requestBatteryOptimizationExemption: () => mockRequestBatteryOptimizationExemption(),
-  }),
-  { virtual: true },
-);
+jest.mock('../services/blocking-permissions', () => ({
+  blockingPermissions: {
+    getStatus: () => mockGetStatus(),
+    request: () => mockRequest(),
+  },
+  requestBatteryOptimizationExemption: () => mockRequestBatteryOptimizationExemption(),
+}));
 
 // The screen renders inside a SafeAreaView, whose hook throws outright
 // ("No safe area value available...") without a provider above it. Reached
 // through `.default` because the shipped mock module is a default export —
 // the idiomatic one-liner without it fails with "useSafeAreaInsets is not a
 // function". It reports all insets 0, so assertions see token padding only.
-jest.mock('react-native-safe-area-context', () =>
-  require('react-native-safe-area-context/jest/mock').default,
+jest.mock(
+  'react-native-safe-area-context',
+  () => require('react-native-safe-area-context/jest/mock').default,
 );
 
 const renderPermissionPrimingIn = async (
@@ -178,9 +173,7 @@ describe('PermissionPrimingScreen', () => {
     mockRequestBatteryOptimizationExemption.mockReset();
     mockRequestBatteryOptimizationExemption.mockResolvedValue(undefined);
     // Linking is the one OS touchpoint; spied so no test opens real settings.
-    openSettingsSpy = jest
-      .spyOn(Linking, 'openSettings')
-      .mockImplementation(async () => undefined);
+    openSettingsSpy = jest.spyOn(Linking, 'openSettings').mockImplementation(async () => undefined);
     addEventListenerSpy = jest.spyOn(AppState, 'addEventListener');
   });
 
@@ -303,7 +296,7 @@ describe('PermissionPrimingScreen', () => {
       expect(mockRequestBatteryOptimizationExemption).not.toHaveBeenCalled();
     });
 
-    it('is a distinct affordance from the denied state\'s proceed-anyway', async () => {
+    it("is a distinct affordance from the denied state's proceed-anyway", async () => {
       await renderPermissionPrimingIn('en');
       expect(screen.queryByTestId('permission-proceed-anyway')).toBeNull();
 

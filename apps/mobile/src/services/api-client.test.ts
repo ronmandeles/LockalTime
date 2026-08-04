@@ -33,7 +33,11 @@ import {
 const AUTHENTICATED = {
   auth: {
     status: 'authenticated',
-    session: { accessToken: 'token-abc', refreshToken: 'r', user: { id: 'user-1', email: 'a@b.com' } },
+    session: {
+      accessToken: 'token-abc',
+      refreshToken: 'r',
+      user: { id: 'user-1', email: 'a@b.com' },
+    },
   },
 };
 const UNAUTHENTICATED = { auth: { status: 'unauthenticated' } };
@@ -69,7 +73,11 @@ describe('createSession', () => {
     const session = { id: 's1', hostId: 'user-1', qrToken: null };
     mockFetch.mockResolvedValue(jsonResponse(201, session));
 
-    const result = await createSession({ type: 'solo', duration_mode: 'fixed', planned_duration_minutes: 30 });
+    const result = await createSession({
+      type: 'solo',
+      duration_mode: 'fixed',
+      planned_duration_minutes: 30,
+    });
 
     expect(result).toEqual({ ok: true, value: session });
     const [url, init] = mockFetch.mock.calls[0] as [string, RequestInit];
@@ -88,7 +96,11 @@ describe('createSession', () => {
       jsonResponse(400, { error: { code: 'invalid_request', message: 'bad body' } }),
     );
 
-    const result = await createSession({ type: 'solo', duration_mode: 'fixed', planned_duration_minutes: 30 });
+    const result = await createSession({
+      type: 'solo',
+      duration_mode: 'fixed',
+      planned_duration_minutes: 30,
+    });
 
     expect(result).toEqual({ ok: false, error: { code: 'invalid_request', message: 'bad body' } });
   });
@@ -96,16 +108,27 @@ describe('createSession', () => {
   it('never calls fetch when there is no authenticated session', async () => {
     mockGetState.mockReturnValue(UNAUTHENTICATED);
 
-    const result = await createSession({ type: 'solo', duration_mode: 'fixed', planned_duration_minutes: 30 });
+    const result = await createSession({
+      type: 'solo',
+      duration_mode: 'fixed',
+      planned_duration_minutes: 30,
+    });
 
-    expect(result).toEqual({ ok: false, error: { code: 'unauthenticated', message: 'No active session' } });
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'unauthenticated', message: 'No active session' },
+    });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('maps a network failure (fetch throws) to a typed failure, never throwing itself', async () => {
     mockFetch.mockRejectedValue(new Error('offline'));
 
-    const result = await createSession({ type: 'solo', duration_mode: 'fixed', planned_duration_minutes: 30 });
+    const result = await createSession({
+      type: 'solo',
+      duration_mode: 'fixed',
+      planned_duration_minutes: 30,
+    });
 
     expect(result).toEqual({ ok: false, error: { code: 'network_error', message: 'offline' } });
   });
@@ -217,11 +240,11 @@ describe('rejoinSession', () => {
   });
 
   it.each`
-    code                          | expectedCode
-    ${'session_not_found'}        | ${'session_not_found'}
-    ${'session_not_joinable'}     | ${'session_not_joinable'}
-    ${'not_a_prior_participant'}  | ${'not_a_prior_participant'}
-    ${'session_at_capacity'}      | ${'session_at_capacity'}
+    code                         | expectedCode
+    ${'session_not_found'}       | ${'session_not_found'}
+    ${'session_not_joinable'}    | ${'session_not_joinable'}
+    ${'not_a_prior_participant'} | ${'not_a_prior_participant'}
+    ${'session_at_capacity'}     | ${'session_at_capacity'}
   `('surfaces the $code failure code from the server untouched', async ({ code, expectedCode }) => {
     mockFetch.mockResolvedValue(jsonResponse(409, { error: { code, message: 'nope' } }));
 
@@ -401,7 +424,13 @@ describe('getVenueMetrics', () => {
 describe('searchUsers', () => {
   it('issues a GET with the query string, url-encoded', async () => {
     const results = [
-      { id: 'user-2', username: 'alice', displayName: 'Alice', avatarUrl: null, relationship: 'none' },
+      {
+        id: 'user-2',
+        username: 'alice',
+        displayName: 'Alice',
+        avatarUrl: null,
+        relationship: 'none',
+      },
     ];
     mockFetch.mockResolvedValue(jsonResponse(200, { results }));
 
@@ -516,7 +545,10 @@ describe('deleteAccount', () => {
 
     const result = await deleteAccount();
 
-    expect(result).toEqual({ ok: false, error: { code: 'unauthenticated', message: 'No active session' } });
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'unauthenticated', message: 'No active session' },
+    });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -527,6 +559,9 @@ describe('deleteAccount', () => {
 
     const result = await deleteAccount();
 
-    expect(result).toEqual({ ok: false, error: { code: 'account_deletion_failed', message: 'nope' } });
+    expect(result).toEqual({
+      ok: false,
+      error: { code: 'account_deletion_failed', message: 'nope' },
+    });
   });
 });

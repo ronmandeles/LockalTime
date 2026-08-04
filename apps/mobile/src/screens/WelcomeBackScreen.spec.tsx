@@ -20,9 +20,14 @@ interface DeviceLocaleStub {
   readonly languageCode: string;
   readonly languageTag: string;
 }
-const EN_US: DeviceLocaleStub = { countryCode: 'US', isRTL: false, languageCode: 'en', languageTag: 'en-US' };
+const EN_US: DeviceLocaleStub = {
+  countryCode: 'US',
+  isRTL: false,
+  languageCode: 'en',
+  languageTag: 'en-US',
+};
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>(() => [EN_US]);
-jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }), { virtual: true });
+jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }));
 
 import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
@@ -92,7 +97,10 @@ describe('WelcomeBackScreen', () => {
   });
 
   it('shows the Rejoin CTA with no elapsed-time line for a still-pending session (not started yet)', async () => {
-    mockFetchSession.mockResolvedValue({ ok: true, value: { status: 'pending', started_at: null } });
+    mockFetchSession.mockResolvedValue({
+      ok: true,
+      value: { status: 'pending', started_at: null },
+    });
 
     await renderScreen();
 
@@ -110,7 +118,10 @@ describe('WelcomeBackScreen', () => {
 
     fireEvent.press(screen.getByTestId('welcome-back-rejoin'));
 
-    expect(mockResolveWelcomeBack).toHaveBeenCalledWith({ screen: 'SessionDetails', sessionId: SESSION_ID });
+    expect(mockResolveWelcomeBack).toHaveBeenCalledWith({
+      screen: 'SessionDetails',
+      sessionId: SESSION_ID,
+    });
     expect(mockClearActiveSession).not.toHaveBeenCalled();
   });
 

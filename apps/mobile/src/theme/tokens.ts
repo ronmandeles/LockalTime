@@ -47,6 +47,13 @@ export const colors = {
   primarySubtle: '#0C1428',
   onPrimary: '#FFFFFF',
 
+  // The accent again, lightened until it is legible AS TEXT. `primary` is
+  // 3.93:1 on black — fine for a fill or a border (WCAG's non-text bar is
+  // 3:1), below the 4.5:1 a word has to clear. Inline links therefore get
+  // their own token rather than reusing `primary`, which is the mistake this
+  // token exists to make impossible (text-color-usage.test.ts enforces it).
+  link: '#5B8AF0',
+
   // Semantic (§11's original deferred list: "success/warning colors") —
   // lightened for the dark surface; the old dark values (#B00020 etc.) are
   // unreadable on black.

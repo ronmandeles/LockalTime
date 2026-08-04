@@ -39,7 +39,8 @@ import OnboardingScreen from './OnboardingScreen';
 //
 // Determinism: no assertion depends on animations or timers; the window size
 // is stubbed explicitly wherever it matters. react-native-localize is mocked
-// virtually as established; no test reads the machine's real locale.
+// normally (the package is installed); no test reads the machine's real
+// locale.
 
 interface DeviceLocaleStub {
   readonly countryCode: string;
@@ -57,13 +58,9 @@ const EN_US: DeviceLocaleStub = {
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>();
 
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getLocales: () => mockGetLocales(),
+}));
 
 // The screen renders inside a SafeAreaView, whose hook throws outright
 // ("No safe area value available...") without a provider above it. The
@@ -71,8 +68,9 @@ jest.mock(
 // `.default`, since the mock module is a default export — the idiomatic
 // one-liner without it fails with "useSafeAreaInsets is not a function".
 // It reports all insets 0, so any assertion below sees token padding only.
-jest.mock('react-native-safe-area-context', () =>
-  require('react-native-safe-area-context/jest/mock').default,
+jest.mock(
+  'react-native-safe-area-context',
+  () => require('react-native-safe-area-context/jest/mock').default,
 );
 
 const renderOnboardingIn = async (

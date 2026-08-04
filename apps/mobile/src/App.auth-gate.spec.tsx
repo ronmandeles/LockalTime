@@ -10,8 +10,9 @@ jest.mock('./services/monitoring', () => ({ initMonitoring: () => undefined }));
 
 // See App.spec.tsx's identical mock for why: the real SafeAreaProvider
 // renders an empty native host view under Jest, hiding every screen below it.
-jest.mock('react-native-safe-area-context', () =>
-  require('react-native-safe-area-context/jest/mock').default,
+jest.mock(
+  'react-native-safe-area-context',
+  () => require('react-native-safe-area-context/jest/mock').default,
 );
 
 import App from './App';
@@ -69,13 +70,9 @@ const EN_US: DeviceLocaleStub = {
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>();
 
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getLocales: () => mockGetLocales(),
+}));
 
 // react-native-vision-camera's native module doesn't exist in Jest (Phase 3
 // task 3.5) — App.tsx transitively renders ScanSessionScreen via
@@ -208,18 +205,14 @@ const mockGetItem = jest.fn<Promise<string | null>, [string]>();
 const mockRemoveItem = jest.fn<Promise<void>, [string]>();
 const mockSetItem = jest.fn<Promise<void>, [string, string]>();
 
-jest.mock(
-  '@react-native-async-storage/async-storage',
-  () => ({
-    __esModule: true,
-    default: {
-      getItem: (key: string) => mockGetItem(key),
-      removeItem: (key: string) => mockRemoveItem(key),
-      setItem: (key: string, value: string) => mockSetItem(key, value),
-    },
-  }),
-  { virtual: true },
-);
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: {
+    getItem: (key: string) => mockGetItem(key),
+    removeItem: (key: string) => mockRemoveItem(key),
+    setItem: (key: string, value: string) => mockSetItem(key, value),
+  },
+}));
 
 // Same literal-key convention as App.spec.tsx: the store suites pin the same
 // literals, so drift on either side fails one of the two.

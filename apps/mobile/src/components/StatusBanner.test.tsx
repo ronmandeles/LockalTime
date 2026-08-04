@@ -20,7 +20,12 @@ describe('StatusBanner', () => {
   it('renders and fires an action when both actionLabel and onAction are provided', async () => {
     const onAction = jest.fn();
     await render(
-      <StatusBanner message="Blocked" actionLabel="Open Settings" onAction={onAction} testID="banner" />,
+      <StatusBanner
+        message="Blocked"
+        actionLabel="Open Settings"
+        onAction={onAction}
+        testID="banner"
+      />,
     );
 
     fireEvent.press(screen.getByTestId('banner-action'));

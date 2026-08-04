@@ -70,17 +70,25 @@ describe('dark launch surfaces', () => {
 
   describe('Android window background', () => {
     it('declares a black window background on AppTheme', () => {
-      const styles = readNativeFile(join('android', 'app', 'src', 'main', 'res', 'values', 'styles.xml'));
-      const colors = readNativeFile(join('android', 'app', 'src', 'main', 'res', 'values', 'colors.xml'));
+      const styles = readNativeFile(
+        join('android', 'app', 'src', 'main', 'res', 'values', 'styles.xml'),
+      );
+      const colors = readNativeFile(
+        join('android', 'app', 'src', 'main', 'res', 'values', 'colors.xml'),
+      );
 
-      expect(styles).toMatch(/<item name="android:windowBackground">@color\/window_background<\/item>/);
+      expect(styles).toMatch(
+        /<item name="android:windowBackground">@color\/window_background<\/item>/,
+      );
       expect(colors).toMatch(/<color name="window_background">#FF000000<\/color>/);
     });
 
     it('tells the OS to draw LIGHT status-bar icons over it', () => {
       // windowLightStatusBar=true means DARK icons (for a light bar). On a
       // black bar that is exactly backwards, and the clock/battery disappear.
-      const styles = readNativeFile(join('android', 'app', 'src', 'main', 'res', 'values', 'styles.xml'));
+      const styles = readNativeFile(
+        join('android', 'app', 'src', 'main', 'res', 'values', 'styles.xml'),
+      );
 
       expect(styles).toMatch(/<item name="android:windowLightStatusBar">false<\/item>/);
     });

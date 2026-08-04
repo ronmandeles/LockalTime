@@ -28,9 +28,7 @@ const EN_US: DeviceLocaleStub = {
 };
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>(() => [EN_US]);
-jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }), {
-  virtual: true,
-});
+jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }));
 
 import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
@@ -192,7 +190,10 @@ describe('HistoryScreen', () => {
   });
 
   it('retries the fetch when the retry button is pressed', async () => {
-    mockFetchSessionHistory.mockResolvedValueOnce({ ok: false, error: { message: 'network error' } });
+    mockFetchSessionHistory.mockResolvedValueOnce({
+      ok: false,
+      error: { message: 'network error' },
+    });
 
     await renderScreen();
     await waitFor(() => expect(screen.getByTestId('history-retry')).toBeOnTheScreen());
@@ -205,7 +206,10 @@ describe('HistoryScreen', () => {
 
   it('requests the next page with a cursor of the last row’s ended_at on scroll-to-end', async () => {
     const fullPage = Array.from({ length: 20 }, (_unused, index) =>
-      row({ id: `session-${index}`, ended_at: `2026-08-01T10:${String(index).padStart(2, '0')}:00.000Z` }),
+      row({
+        id: `session-${index}`,
+        ended_at: `2026-08-01T10:${String(index).padStart(2, '0')}:00.000Z`,
+      }),
     );
     mockFetchSessionHistory.mockResolvedValueOnce({ ok: true, value: fullPage });
 

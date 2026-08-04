@@ -39,13 +39,9 @@ const FR_FR: DeviceLocaleStub = {
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>();
 
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getLocales: () => mockGetLocales(),
+}));
 
 describe('initI18n', () => {
   beforeEach(() => {

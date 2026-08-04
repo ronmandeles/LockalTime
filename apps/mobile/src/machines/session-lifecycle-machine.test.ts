@@ -115,24 +115,25 @@ describe('SessionLifecycleMachine', () => {
   });
 
   describe('every other (state, event) pair is ignored', () => {
-    const definedPairs = new Set(TRANSITIONS.map((t) => `${t.from}:${t.event.type}:${JSON.stringify(t.event)}`));
+    const definedPairs = new Set(
+      TRANSITIONS.map((t) => `${t.from}:${t.event.type}:${JSON.stringify(t.event)}`),
+    );
 
     const ignoredCases = ALL_STATES.flatMap((state) =>
-      ALL_EVENTS.filter((event) => !definedPairs.has(`${state}:${event.type}:${JSON.stringify(event)}`)).map(
-        (event) => ({ state, event }),
-      ),
+      ALL_EVENTS.filter(
+        (event) => !definedPairs.has(`${state}:${event.type}:${JSON.stringify(event)}`),
+      ).map((event) => ({ state, event })),
     );
 
-    it.each(ignoredCases.map(({ state, event }) => [state, JSON.stringify(event), state, event] as const))(
-      '%s ignores %s (stays %s)',
-      (_state, _eventLabel, expectedState, event) => {
-        const actor = actorAt(expectedState);
+    it.each(
+      ignoredCases.map(({ state, event }) => [state, JSON.stringify(event), state, event] as const),
+    )('%s ignores %s (stays %s)', (_state, _eventLabel, expectedState, event) => {
+      const actor = actorAt(expectedState);
 
-        actor.send(event);
+      actor.send(event);
 
-        expect(actor.getSnapshot().value).toBe(expectedState);
-        actor.stop();
-      },
-    );
+      expect(actor.getSnapshot().value).toBe(expectedState);
+      actor.stop();
+    });
   });
 });

@@ -33,9 +33,14 @@ interface DeviceLocaleStub {
   readonly languageCode: string;
   readonly languageTag: string;
 }
-const EN_US: DeviceLocaleStub = { countryCode: 'US', isRTL: false, languageCode: 'en', languageTag: 'en-US' };
+const EN_US: DeviceLocaleStub = {
+  countryCode: 'US',
+  isRTL: false,
+  languageCode: 'en',
+  languageTag: 'en-US',
+};
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>(() => [EN_US]);
-jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }), { virtual: true });
+jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }));
 
 import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
@@ -151,7 +156,10 @@ describe('SessionCompletionScreen', () => {
         points_earned: 45,
       },
     });
-    mockFetchRewardsHistory.mockResolvedValue({ ok: true, value: [{ points: 45, bonus_type: 'base' }] });
+    mockFetchRewardsHistory.mockResolvedValue({
+      ok: true,
+      value: [{ points: 45, bonus_type: 'base' }],
+    });
 
     await renderScreen();
 
@@ -175,7 +183,10 @@ describe('SessionCompletionScreen', () => {
         points_earned: 23,
       },
     });
-    mockFetchRewardsHistory.mockResolvedValue({ ok: true, value: [{ points: 23, bonus_type: 'base' }] });
+    mockFetchRewardsHistory.mockResolvedValue({
+      ok: true,
+      value: [{ points: 23, bonus_type: 'base' }],
+    });
 
     await renderScreen();
 
@@ -201,7 +212,9 @@ describe('SessionCompletionScreen', () => {
 
     await renderScreen();
 
-    await waitFor(() => expect(screen.getByText(en.sessionCompletion.title.left)).toBeOnTheScreen());
+    await waitFor(() =>
+      expect(screen.getByText(en.sessionCompletion.title.left)).toBeOnTheScreen(),
+    );
   });
 
   it('shows the minutes-present count', async () => {
@@ -233,7 +246,10 @@ describe('SessionCompletionScreen', () => {
   });
 
   it('shows a not-ready state when the fetch fails', async () => {
-    mockFetchSessionParticipant.mockResolvedValue({ ok: false, error: { message: 'network error' } });
+    mockFetchSessionParticipant.mockResolvedValue({
+      ok: false,
+      error: { message: 'network error' },
+    });
 
     await renderScreen();
 

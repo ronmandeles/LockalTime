@@ -109,6 +109,7 @@ describe('color palette (DESIGN_GUIDELINES §12)', () => {
       primaryGradientEnd: '#3B6FE0',
       primarySubtle: '#0C1428',
       onPrimary: '#FFFFFF',
+      link: '#5B8AF0',
       danger: '#FF6B7A',
       warning: '#F0A34A',
       success: '#4ADE80',
@@ -129,16 +130,16 @@ describe('color palette (DESIGN_GUIDELINES §12)', () => {
   };
 
   const contrastRatio = (foreground: string, background: string): number => {
-    const [lighter, darker] = [
-      relativeLuminance(foreground),
-      relativeLuminance(background),
-    ].sort((a, b) => b - a) as [number, number];
+    const [lighter, darker] = [relativeLuminance(foreground), relativeLuminance(background)].sort(
+      (a, b) => b - a,
+    ) as [number, number];
     return (lighter + 0.05) / (darker + 0.05);
   };
 
   it('keeps every text token at WCAG AA (4.5:1) on both background and surface', () => {
     const textTokens = [
       colors.textPrimary,
+      colors.link,
       colors.textSecondary,
       colors.textMuted,
       colors.textFaint,
