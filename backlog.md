@@ -150,7 +150,7 @@ Prerequisites: Phase 6.
 **DoD:** a user can see friend activity without any friend's individual session data being exposed beyond what the privacy design explicitly allows; adding/removing a friend is instant and RLS-verified from both sides.
 
 ## Phase 7 — Release Prep
-Prerequisites: Phase 6 (Phase 6.5 also complete, sits ahead of Phase 6 on `dev`).
+Prerequisites: Phase 6 (Phase 6.5 also complete, sitting ahead of Phase 6 — historical note: this was recorded when a `dev` branch existed; the convention now branches off `main` and merges straight back, see `CLAUDE.md`).
 
 **Planned 2026-07-28** (see conversation) as an end-to-end phase plan before any code, per the working contract — this phase touches nearly every item on `CLAUDE.md`'s "known gaps" list, so each one was surfaced and confirmed before task-writing rather than assumed. Locked decisions:
 - **Production API hosting:** a PaaS (Railway/Render/Fly.io-style), not serverless — the sweep/streak-expiry/streak-risk-notification workers are long-running `setInterval` processes (Phase 4/5/5.5 decisions) that would need real rearchitecting to run on a stateless serverless platform; a PaaS runs them as-is.
