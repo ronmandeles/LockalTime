@@ -207,3 +207,19 @@ Task order (grouped by track; a track's tasks are prerequisites for later tracks
 
 **DoD:** E2E suite green in CI against a real staging deployment (not just local Supabase); production API deployed and reachable with hardened security headers/rate-limiting; account deletion works end-to-end and is reachable from the app; ToS/Privacy Policy content exists and is linked from onboarding; iOS compiles for the first time via cloud CI; Android release build uses the restored multi-ABI + real signing config; both store listings' privacy labels are accurate; a beta ring has run on real hardware before public submission. Entitlement/credential items (Family Controls, FCM/APNs, Play Integrity/App Attest) are approved, or the fallback is explicitly documented — the same "confirmed or documented" bar the original draft's DoD already set.
 
+
+---
+
+## Phase 8 (planned, not started) — Black + Navy Theme & Onboarding Restyle
+
+Owner-approved 2026-08-03. **The full plan lives in [docs/NAVY_THEME_PLAN.md](docs/NAVY_THEME_PLAN.md)** — self-contained and executable from a session with no prior context. Nothing below is implemented; the branch `claude/first-screen-navy-theme-rxh1ff` currently holds the plan document and nothing else.
+
+- [ ] **Repaint the whole app to a pure-black palette with a navy-blue accent** — replaces the Phase 7 light teal palette outright. Verified as a single-file change: all 17 screens already read semantic tokens from `theme/tokens.ts` with zero raw hex literals, and no spec asserts a colour. Adds `primaryGradientStart`/`End`/`primarySubtle`, `typography.displayLarge` (34), `sizing.heroLogo` (160) and `sizing.iconBadge` (100)
+- [ ] **Screen 1 (Onboarding)** — collapse the 3-page carousel to a single welcome page: ring-logo hero, `displayLarge` title, muted body, full-width navy gradient CTA. Drops the `howSessionsWork` / `whyPermissionsMatter` copy from both locales (owner-accepted)
+- [ ] **Screen 2 (Permission Priming)** — 100pt circular badge holding the ring mark, centred copy, gradient CTA. **Plus the one deliberate behaviour change in this phase:** a "maybe later" link during the *priming* state, not only after a denial (owner chose to match the reference; expect a lower screen-time permission grant rate)
+- [ ] **Screen 3 (Auth)** — same visual language, no behaviour change; the OTP flow and account-linking dialog keep their existing tests unmodified
+- [ ] **App shell** — mount `SafeAreaProvider` (its first real use) and a light-content `StatusBar`; fix the iOS `LaunchScreen.storyboard` and Android `windowBackground` white cold-start flashes
+- [ ] **Fallout the plan already identifies** — `App.spec.tsx` presses an `onboarding-skip` that ceases to exist; two Maestro flows tap it under `optional: true` so they no-op and then fail at an unrelated assertion; `AuthScreen`'s dialog uses `colors.background` and would become invisible; the safe-area Jest mock needs `.default` or every spec touching `SafeAreaView` throws
+- [ ] **Docs** — `DESIGN_GUIDELINES.md` §5, §6, §9, §11, §12 (§12's teal palette is superseded); `MANUAL_QA.md`'s obsolete onboarding-carousel section; `CLAUDE.md` status
+
+**DoD:** mobile suite green (baseline 55 suites / 667 tests, differing only by deliberate additions/removals); lint and typecheck clean; no carousel, dots, skip or `next` copy anywhere including `App.spec.tsx` and the Maestro flows; `en`/`he` in parity; exactly one behavioural change (the priming-state "maybe later") and no other. No database changes — `supabase test db` is not required.
