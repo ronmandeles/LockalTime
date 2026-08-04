@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
+import { StatusBar } from 'react-native';
 
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import type { i18n as I18nInstance } from 'i18next';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { SENTRY_DSN } from './config/monitoring-config';
 import { I18nProvider } from './i18n/I18nProvider';
@@ -43,6 +45,7 @@ import {
 } from './state/permission-store';
 import { initMonitoring } from './services/monitoring';
 import { hydrateProfile, resetProfile } from './state/profile-store';
+import { colors } from './theme/tokens';
 
 // Phase 7 (Release Prep): crash/error monitoring, initialized once at
 // module load — as early as possible, so it can capture errors that occur
@@ -71,7 +74,11 @@ const handlePermissionHandled = (): void => {
   markPermissionStepHandled();
 };
 
-const App = (): React.JSX.Element | null => {
+// Everything below the shell: the first-launch gates and the navigator. Split
+// out so the shell above it (safe-area provider, status bar) mounts exactly
+// once and wraps every branch — including the blank hydration gate, which
+// returns null.
+const AppContent = (): React.JSX.Element | null => {
   const [i18nInstance, setI18nInstance] = useState<I18nInstance | null>(null);
   const onboarding = useOnboardingStore((state) => state.onboarding);
   const permissionStep = usePermissionStore((state) => state.permissionStep);
@@ -257,5 +264,18 @@ const App = (): React.JSX.Element | null => {
     </I18nProvider>
   );
 };
+
+const App = (): React.JSX.Element => (
+  // SafeAreaProvider is required by every screen that uses SafeAreaView —
+  // the hook throws without it, so this is load-bearing, not decorative.
+  <SafeAreaProvider>
+    {/* The app is dark on every screen, so the OS must be told to draw
+        LIGHT status-bar content. Without this, Android renders dark icons on
+        a dark background and the clock/battery become invisible.
+        `backgroundColor` is Android-only; `barStyle` covers both platforms. */}
+    <StatusBar backgroundColor={colors.background} barStyle="light-content" />
+    <AppContent />
+  </SafeAreaProvider>
+);
 
 export default App;

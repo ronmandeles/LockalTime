@@ -250,26 +250,15 @@ export const en = {
     minutesElapsed: '{{count}} minutes into this session so far',
     rejoin: 'Rejoin session',
   },
-  // Onboarding copy is PLACEHOLDER, flagged for the deferred copy pass. Each
-  // page resolves one hesitation (DESIGN_GUIDELINES §9): why this app / how
-  // sessions work / why the permission ask is coming.
+  // Onboarding copy is PLACEHOLDER, flagged for the deferred copy pass. One
+  // welcome page carrying the value proposition — the three-page carousel
+  // (how sessions work / why the permission ask is coming) was collapsed to a
+  // single screen, so that copy no longer exists anywhere in onboarding.
+  // Re-introducing it somewhere is an open product/copy call
+  // (docs/NAVY_THEME_PLAN.md §8).
   onboarding: {
-    pages: {
-      valueProposition: {
-        title: 'Time together, undistracted',
-        body: 'Lockal Time blocks distracting apps while you and your friends are actually together — so being present is the easy choice.',
-      },
-      howSessionsWork: {
-        title: 'Sessions are simple',
-        body: "Start a session or scan a friend's QR code. Distracting apps stay blocked until the session ends, and you earn points for every minute you're present.",
-      },
-      whyPermissionsMatter: {
-        title: 'One permission makes it real',
-        body: "To truly block apps, your phone requires a screen-time permission. We'll ask on the next screen — it's only ever used during a session you chose to start.",
-      },
-    },
-    skip: 'Skip',
-    next: 'Next',
+    title: 'Time together, undistracted',
+    body: 'Lockal Time blocks distracting apps while you and your friends are actually together — so being present is the easy choice.',
     getStarted: 'Get Started',
   },
   // Permission-priming copy (Screen 2) is PLACEHOLDER, flagged for the
@@ -280,6 +269,11 @@ export const en = {
     title: 'Allow app blocking',
     body: 'To block distracting apps for real, your phone needs a screen-time permission. It blocks a fixed set of categories — social, games, and entertainment — and only while a session you joined is running. It is never used outside a session.',
     allow: 'Allow',
+    // Shown in the PRIMING state, beside Allow — distinct from the denied
+    // state's proceedAnyway below, which appears only after a real refusal.
+    // Two separate keys because the two links live in different states and
+    // their copy should be free to diverge.
+    maybeLater: 'Maybe later',
     denied: {
       title: 'Permission not granted',
       body: "Without it, apps won't actually be blocked during your sessions. You can grant it any time from your phone's settings, or continue without blocking for now.",

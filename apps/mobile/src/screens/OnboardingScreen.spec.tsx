@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 import { fireEvent, render, screen } from '@testing-library/react-native';
 
@@ -7,39 +7,39 @@ import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
 import { he } from '../i18n/locales/he';
-import { sizing } from '../theme/tokens';
+import { colors, sizing, typography } from '../theme/tokens';
 import OnboardingScreen from './OnboardingScreen';
 
-// Onboarding carousel (Screen 1), DESIGN_GUIDELINES §9: exactly 3 pages, each
-// resolving one hesitation (value proposition / how sessions work / why
-// permissions matter — placeholder copy, flagged for the later copy pass),
-// with pagination dots, a skip affordance on non-final pages, and one clear
-// primary action per state (§1): Next on non-final pages, Get Started on the
-// final page.
+// Welcome screen (Screen 1), DESIGN_GUIDELINES §9: a SINGLE page — hero mark,
+// headline, one line of body copy, one primary CTA pinned to the bottom. It
+// replaced a three-page carousel with dots, a skip link and a Next/Get Started
+// CTA; the two dropped pages' copy no longer exists in either locale bundle.
 //
 // Pinned contracts:
 // - Completion: the screen takes an `onComplete` callback and fires it when
-//   skip is pressed OR the final-page CTA is pressed — nothing else. The App
-//   gate (App.spec.tsx) owns what completion means (mark seen -> leave
-//   onboarding, with Screen 2 slotting into that flow when it exists); the
-//   carousel never touches storage or navigation itself.
-// - Paging math derives the active page from the scroll event's OWN
-//   layoutMeasurement.width — never a captured window dimension. The swipe
-//   test uses a page width that differs from the Jest window default
-//   deliberately, so a Dimensions-based computation fails it.
-// - Token sizing: the CTA is buttonHeight (52) tall; skip declares the
-//   minTouchTarget minimum (48). Tokens, never ad-hoc values.
+//   the CTA is pressed — nothing else. There is no longer any second way out,
+//   so the App gate's "seen onboarding" flag is set by exactly one press. The
+//   screen still never touches storage or navigation itself (App.spec.tsx owns
+//   what completion means).
+// - Structure: no carousel, no dots, no skip. Those testIDs must be GONE, not
+//   merely unused — App.spec.tsx and the Maestro flows both reached for
+//   `onboarding-skip`, and Maestro's `optional: true` would have swallowed its
+//   disappearance silently.
+// - Visual language, shared with Screens 2 and 3: pure-black page, centred
+//   stack, and a navy gradient CTA (GradientButton, which owns the gradient
+//   itself — asserted here only via its identity and sizing).
+// - The hero is capped against window height rather than fixed, so a small
+//   phone with OS large-font settings cannot push the CTA off-screen.
 //
-// RTL: styles must use logical properties and never branch on locale
-// (.claude/skills/i18n/SKILL.md) — the he render below proves the copy path; RN flips the
-// horizontal list natively. Actual RTL swipe/paging direction on-device is
-// not JS-testable (I18nManager is inert under Jest) and goes on the manual QA
-// checklist (docs/MANUAL_QA.md) in Stage B.
+// RTL: styles use logical/symmetric properties and never branch on locale
+// (.claude/skills/i18n/SKILL.md) — the he render below proves the copy path.
+// The CTA gradient's left-to-right direction does NOT mirror under RTL (a
+// gradient is paint, not layout); that is a documented manual-QA item, not a
+// code branch.
 //
-// Determinism: no assertion depends on animations or timers — paging state is
-// asserted via dot accessibilityState, driven by synthetic press/scroll
-// events only. react-native-localize is mocked virtually as established; no
-// test reads the machine's real locale.
+// Determinism: no assertion depends on animations or timers; the window size
+// is stubbed explicitly wherever it matters. react-native-localize is mocked
+// virtually as established; no test reads the machine's real locale.
 
 interface DeviceLocaleStub {
   readonly countryCode: string;
@@ -65,9 +65,15 @@ jest.mock(
   { virtual: true },
 );
 
-const PAGE_COUNT = 3;
-// Deliberately different from the Jest window width (750) — see header note.
-const PAGE_WIDTH = 320;
+// The screen renders inside a SafeAreaView, whose hook throws outright
+// ("No safe area value available...") without a provider above it. The
+// library ships this mock for exactly that case; it must be reached through
+// `.default`, since the mock module is a default export — the idiomatic
+// one-liner without it fails with "useSafeAreaInsets is not a function".
+// It reports all insets 0, so any assertion below sees token padding only.
+jest.mock('react-native-safe-area-context', () =>
+  require('react-native-safe-area-context/jest/mock').default,
+);
 
 const renderOnboardingIn = async (
   locale: 'en' | 'he',
@@ -84,33 +90,13 @@ const renderOnboardingIn = async (
   );
 };
 
-// Simulates the momentum settle of a horizontal swipe landing on pageIndex.
-// The event carries its own layout width; implementations must page off it.
-const swipeToPage = async (pageIndex: number): Promise<void> => {
-  await fireEvent(screen.getByTestId('onboarding-carousel'), 'momentumScrollEnd', {
-    nativeEvent: {
-      contentOffset: { x: PAGE_WIDTH * pageIndex, y: 0 },
-      contentSize: { height: 600, width: PAGE_WIDTH * PAGE_COUNT },
-      layoutMeasurement: { height: 600, width: PAGE_WIDTH },
-    },
-  });
-};
-
-const pressPrimaryCta = async (): Promise<void> => {
-  await fireEvent.press(screen.getByTestId('onboarding-primary-cta'));
-};
-
-const expectActivePage = (activeIndex: number): void => {
-  [0, 1, 2].forEach((pageIndex) => {
-    const dot = screen.getByTestId(`onboarding-page-dot-${pageIndex}`);
-    expect(dot.props.accessibilityState).toMatchObject({ selected: pageIndex === activeIndex });
-  });
-};
-
 // The testID element must expose a static (flattenable) style — arrays fine,
 // Pressable function-styles go on an inner element if used.
 const flattenedStyle = (testID: string): ViewStyle =>
   StyleSheet.flatten(screen.getByTestId(testID).props.style as StyleProp<ViewStyle>);
+
+const flattenedTextStyle = (text: string): TextStyle =>
+  StyleSheet.flatten(screen.getByText(text).props.style as StyleProp<TextStyle>);
 
 // DimensionValue can be a string ('50%'); the sizing contract requires plain
 // numeric token values, so anything else is itself a failure.
@@ -127,25 +113,19 @@ describe('OnboardingScreen', () => {
     mockGetLocales.mockReturnValue([EN_US]);
   });
 
-  describe('pages and copy', () => {
-    it('renders all three pages with their en titles and bodies from the locale module', async () => {
+  describe('copy', () => {
+    it('renders the single welcome title and body from the en locale module', async () => {
       await renderOnboardingIn('en');
 
-      const pages = [
-        en.onboarding.pages.valueProposition,
-        en.onboarding.pages.howSessionsWork,
-        en.onboarding.pages.whyPermissionsMatter,
-      ];
-      pages.forEach((page) => {
-        expect(screen.getByText(page.title)).toBeOnTheScreen();
-        expect(screen.getByText(page.body)).toBeOnTheScreen();
-      });
+      expect(screen.getByText(en.onboarding.title)).toBeOnTheScreen();
+      expect(screen.getByText(en.onboarding.body)).toBeOnTheScreen();
+      expect(screen.getByText(en.onboarding.getStarted)).toBeOnTheScreen();
     });
 
-    it('renders the Hebrew copy under the he locale, proving the carousel flows through i18n', async () => {
+    it('renders the Hebrew copy under the he locale, proving the screen flows through i18n', async () => {
       // Guard: identical bundles would let a hardcoded literal pass below.
-      const enTitle = en.onboarding.pages.valueProposition.title;
-      const heTitle = he.onboarding.pages.valueProposition.title;
+      const enTitle = en.onboarding.title;
+      const heTitle = he.onboarding.title;
       expect(heTitle).not.toBe(enTitle);
 
       await renderOnboardingIn('he');
@@ -161,105 +141,101 @@ describe('OnboardingScreen', () => {
     });
   });
 
-  describe('pagination', () => {
-    it('shows three dots with the first page active on mount', async () => {
+  describe('single-page structure', () => {
+    it('has no carousel, no pagination dots, and no skip affordance', async () => {
       await renderOnboardingIn('en');
 
-      expect(screen.queryByTestId(`onboarding-page-dot-${PAGE_COUNT}`)).toBeNull();
-      expectActivePage(0);
+      expect(screen.queryByTestId('onboarding-carousel')).toBeNull();
+      expect(screen.queryByTestId('onboarding-skip')).toBeNull();
+      [0, 1, 2].forEach((pageIndex) => {
+        expect(screen.queryByTestId(`onboarding-page-dot-${pageIndex}`)).toBeNull();
+      });
     });
 
-    it('advances to the second page when Next is pressed', async () => {
+    it('renders the hero ring mark above the copy', async () => {
       await renderOnboardingIn('en');
 
-      await pressPrimaryCta();
-
-      expectActivePage(1);
-    });
-
-    it('moves the active dot when a swipe settles, paging off the event layout width', async () => {
-      await renderOnboardingIn('en');
-
-      await swipeToPage(2);
-
-      expectActivePage(2);
-    });
-  });
-
-  describe('skip affordance', () => {
-    it('shows skip with its i18n label on the first page', async () => {
-      await renderOnboardingIn('en');
-
-      expect(screen.getByText(en.onboarding.skip)).toBeOnTheScreen();
-    });
-
-    it('hides skip on the final page', async () => {
-      await renderOnboardingIn('en');
-
-      await swipeToPage(2);
-
-      expect(screen.queryByText(en.onboarding.skip)).toBeNull();
-    });
-
-    it('fires onComplete when skip is pressed', async () => {
-      const onComplete = jest.fn<void, []>();
-      await renderOnboardingIn('en', onComplete);
-
-      await fireEvent.press(screen.getByTestId('onboarding-skip'));
-
-      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(screen.getByTestId('onboarding-hero-logo')).toBeOnTheScreen();
     });
   });
 
   describe('primary CTA', () => {
-    it('labels the CTA Next on non-final pages and Get Started on the final page', async () => {
+    it('is labelled Get Started — there is no Next step left to take', async () => {
       await renderOnboardingIn('en');
-      expect(screen.getByText(en.onboarding.next)).toBeOnTheScreen();
 
-      await swipeToPage(2);
-
+      expect(screen.getByTestId('onboarding-primary-cta')).toBeOnTheScreen();
       expect(screen.getByText(en.onboarding.getStarted)).toBeOnTheScreen();
-      expect(screen.queryByText(en.onboarding.next)).toBeNull();
     });
 
-    it('does not fire onComplete from Next on non-final pages', async () => {
+    it('fires onComplete exactly once when pressed — the only way off this screen', async () => {
       const onComplete = jest.fn<void, []>();
       await renderOnboardingIn('en', onComplete);
 
-      await pressPrimaryCta();
-
-      expect(onComplete).not.toHaveBeenCalled();
-    });
-
-    it('fires onComplete when the final-page CTA is pressed, after Next-ing through', async () => {
-      const onComplete = jest.fn<void, []>();
-      await renderOnboardingIn('en', onComplete);
-
-      // Two Next presses cross-check the button path also reaches the final
-      // page (the swipe path is covered separately).
-      await pressPrimaryCta();
-      await pressPrimaryCta();
-      expect(screen.getByText(en.onboarding.getStarted)).toBeOnTheScreen();
-
-      await pressPrimaryCta();
+      await fireEvent.press(screen.getByTestId('onboarding-primary-cta'));
 
       expect(onComplete).toHaveBeenCalledTimes(1);
     });
   });
 
-  describe('token sizing (DESIGN_GUIDELINES §6)', () => {
+  describe('visual language (DESIGN_GUIDELINES §6, §12)', () => {
+    it('fills the page with the background token', async () => {
+      await renderOnboardingIn('en');
+
+      expect(flattenedStyle('onboarding-screen').backgroundColor).toBe(colors.background);
+    });
+
     it('sizes the primary CTA to the button-height token', async () => {
       await renderOnboardingIn('en');
 
       expect(flattenedStyle('onboarding-primary-cta').height).toBe(sizing.buttonHeight);
     });
 
-    it('declares the minimum touch target on the skip affordance', async () => {
+    it('sets the title and body to the display-large and muted-body tokens', async () => {
       await renderOnboardingIn('en');
 
-      const skipStyle = flattenedStyle('onboarding-skip');
-      expect(asNumber(skipStyle.minHeight)).toBeGreaterThanOrEqual(sizing.minTouchTarget);
-      expect(asNumber(skipStyle.minWidth)).toBeGreaterThanOrEqual(sizing.minTouchTarget);
+      const title = flattenedTextStyle(en.onboarding.title);
+      expect(title.fontSize).toBe(typography.displayLarge.fontSize);
+      expect(title.color).toBe(colors.textPrimary);
+      expect(title.textAlign).toBe('center');
+
+      const body = flattenedTextStyle(en.onboarding.body);
+      expect(body.fontSize).toBe(typography.body.fontSize);
+      expect(body.color).toBe(colors.textMuted);
+      expect(body.textAlign).toBe('center');
+    });
+  });
+
+  describe('small-screen resilience', () => {
+    // The reference design is a 393x852pt phone. On a 320x568pt one, a hero
+    // fixed at the 160pt token plus large OS font settings can push the
+    // bottom-pinned CTA off-screen. A ScrollView would fight the pinned CTA,
+    // so the hero is what gives.
+    const renderAtWindowHeight = async (height: number): Promise<void> => {
+      jest
+        .spyOn(require('react-native'), 'useWindowDimensions')
+        .mockReturnValue({ width: 320, height, scale: 2, fontScale: 1 });
+      await renderOnboardingIn('en');
+    };
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('caps the hero at the sizing token on a roomy screen', async () => {
+      await renderAtWindowHeight(852);
+
+      expect(flattenedStyle('onboarding-hero-logo').width).toBe(sizing.heroLogo);
+    });
+
+    it('shrinks the hero below the token on a short screen, keeping it circular', async () => {
+      await renderAtWindowHeight(568);
+
+      const hero = flattenedStyle('onboarding-hero-logo');
+      const width = asNumber(hero.width);
+      expect(width).toBeLessThan(sizing.heroLogo);
+      expect(width).toBeGreaterThan(0);
+      // A shrunk ellipse would be worse than a small circle.
+      expect(hero.height).toBe(width);
     });
   });
 });

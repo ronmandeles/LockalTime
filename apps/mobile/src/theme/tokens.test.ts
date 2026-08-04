@@ -41,6 +41,7 @@ describe('typography ramp (DESIGN_GUIDELINES §5)', () => {
     // Weights pinned as RN numeric strings: '700' Bold, '600' Semibold,
     // '400' Regular — unambiguous across both platforms.
     expect(typography).toEqual({
+      displayLarge: { fontSize: 34, fontWeight: '700', lineHeight: expect.any(Number) },
       display: { fontSize: 28, fontWeight: '700', lineHeight: expect.any(Number) },
       heading: { fontSize: 20, fontWeight: '600', lineHeight: expect.any(Number) },
       body: { fontSize: 16, fontWeight: '400', lineHeight: expect.any(Number) },
@@ -53,6 +54,7 @@ describe('typography ramp (DESIGN_GUIDELINES §5)', () => {
     // Explicit property access (not Object.entries) keeps each token fully
     // typed; the exact-shape assertion above already guards the key set.
     const ramp = [
+      typography.displayLarge,
       typography.display,
       typography.heading,
       typography.body,
@@ -79,6 +81,10 @@ describe('component sizing standards (DESIGN_GUIDELINES §6)', () => {
       iconStandard: 24,
       iconLarge: 28,
       avatarParticipant: 36,
+      // Onboarding-flow hero geometry (NAVY_THEME_PLAN §4): the Screen 1
+      // ring mark and the Screen 2 tinted icon badge.
+      heroLogo: 160,
+      iconBadge: 100,
     });
   });
 });
@@ -86,24 +92,80 @@ describe('component sizing standards (DESIGN_GUIDELINES §6)', () => {
 describe('color palette (DESIGN_GUIDELINES §12)', () => {
   it('matches the documented palette exactly', () => {
     expect(colors).toEqual({
-      background: '#FFFFFF',
-      surface: '#F5F5F5',
-      surfaceActive: '#DDDDDD',
-      border: '#E0E0E0',
-      borderStrong: '#CCCCCC',
+      background: '#000000',
+      surface: '#1C1C1E',
+      surfaceActive: '#2C2C2E',
+      border: '#2C2C2E',
+      borderStrong: '#3A3A3C',
       black: '#000000',
-      textPrimary: '#222222',
-      textSecondary: '#444444',
-      textMuted: '#666666',
-      textFaint: '#999999',
-      placeholder: '#888888',
-      primary: '#0F6B5C',
-      primaryPressed: '#0B554A',
+      textPrimary: '#FFFFFF',
+      textSecondary: '#C7C7CC',
+      textMuted: '#8D8D92',
+      textFaint: '#86868C',
+      placeholder: '#8A8A8F',
+      primary: '#3563D8',
+      primaryPressed: '#2A50BC',
+      primaryGradientStart: '#2F5BD0',
+      primaryGradientEnd: '#3B6FE0',
+      primarySubtle: '#0C1428',
       onPrimary: '#FFFFFF',
-      danger: '#B00020',
-      warning: '#B25E09',
-      success: '#1E8E3E',
-      overlay: '#44444488',
+      danger: '#FF6B7A',
+      warning: '#F0A34A',
+      success: '#4ADE80',
+      overlay: '#000000CC',
     });
+  });
+
+  // The palette is only usable if it is legible: a dark repaint that silently
+  // drops a token below WCAG AA is exactly the regression the §12 contrast
+  // table exists to prevent, so the ratios are computed here rather than
+  // trusted to a doc. Formula: WCAG 2.x relative luminance + contrast ratio.
+  const relativeLuminance = (hex: string): number => {
+    const channel = (offset: number): number => {
+      const srgb = parseInt(hex.slice(offset, offset + 2), 16) / 255;
+      return srgb <= 0.03928 ? srgb / 12.92 : ((srgb + 0.055) / 1.055) ** 2.4;
+    };
+    return 0.2126 * channel(1) + 0.7152 * channel(3) + 0.0722 * channel(5);
+  };
+
+  const contrastRatio = (foreground: string, background: string): number => {
+    const [lighter, darker] = [
+      relativeLuminance(foreground),
+      relativeLuminance(background),
+    ].sort((a, b) => b - a) as [number, number];
+    return (lighter + 0.05) / (darker + 0.05);
+  };
+
+  it('keeps every text token at WCAG AA (4.5:1) on both background and surface', () => {
+    const textTokens = [
+      colors.textPrimary,
+      colors.textSecondary,
+      colors.textMuted,
+      colors.textFaint,
+      colors.placeholder,
+      colors.danger,
+      colors.warning,
+      colors.success,
+    ];
+
+    textTokens.forEach((token) => {
+      expect(contrastRatio(token, colors.background)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(token, colors.surface)).toBeGreaterThanOrEqual(4.5);
+    });
+  });
+
+  it('keeps the CTA gradient perceivable against the page and legible under its white label', () => {
+    // WCAG 1.4.11 non-text contrast: the button's edge must be visible
+    // against the page (3:1), while its label must clear text AA (4.5:1) at
+    // BOTH gradient ends — the pair squeezes the accent from both sides.
+    const gradientEnds = [colors.primaryGradientStart, colors.primaryGradientEnd];
+
+    gradientEnds.forEach((end) => {
+      expect(contrastRatio(end, colors.background)).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(colors.onPrimary, end)).toBeGreaterThanOrEqual(4.5);
+    });
+    // `primary` is a fill/border only, never text — the 3:1 non-text rule
+    // applies. Re-check this assertion if it is ever used as a text color.
+    expect(contrastRatio(colors.primary, colors.background)).toBeGreaterThanOrEqual(3);
   });
 });

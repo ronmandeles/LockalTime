@@ -12,6 +12,15 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 // (config/monitoring-config.ts) — no behavior under test depends on it.
 jest.mock('./services/monitoring', () => ({ initMonitoring: () => undefined }));
 
+// App mounts a real SafeAreaProvider, which under Jest renders an empty
+// native host view and never delivers insets — so every screen below it
+// would be invisible to these tests. The library ships this mock for exactly
+// that case; it must be reached through `.default`, since the mock module is
+// a default export.
+jest.mock('react-native-safe-area-context', () =>
+  require('react-native-safe-area-context/jest/mock').default,
+);
+
 import App from './App';
 import { en } from './i18n/locales/en';
 import { useActiveSessionStore } from './state/active-session-store';
@@ -336,7 +345,7 @@ describe('App', () => {
     });
   });
 
-  it('renders the onboarding carousel on first launch, when no flags are persisted', async () => {
+  it('renders the onboarding welcome screen on first launch, when no flags are persisted', async () => {
     stubPersistedFlags({ onboardingSeen: false, permissionHandled: false });
 
     await render(<App />);
@@ -346,13 +355,15 @@ describe('App', () => {
     expect(screen.queryByTestId('home-screen')).toBeNull();
   });
 
-  it('skipping onboarding on first launch advances to permission priming and persists the flag', async () => {
+  it('completing onboarding on first launch advances to permission priming and persists the flag', async () => {
     stubPersistedFlags({ onboardingSeen: false, permissionHandled: false });
     await render(<App />);
     expect(await screen.findByTestId('onboarding-screen')).toBeOnTheScreen();
 
+    // The CTA is now the ONLY way off the welcome screen — the skip link
+    // went away with the three-page carousel it belonged to.
     // RNTL v14 fireEvent is awaited like render, wrapping the state update.
-    await fireEvent.press(screen.getByTestId('onboarding-skip'));
+    await fireEvent.press(screen.getByTestId('onboarding-primary-cta'));
 
     // (a) completion actually exits the gate — onto Screen 2, never straight
     // to Home (ARCHITECTURE.md §2 order: Onboarding -> Permission -> rest)...

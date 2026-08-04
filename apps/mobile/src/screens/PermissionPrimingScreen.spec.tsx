@@ -111,6 +111,15 @@ jest.mock(
   { virtual: true },
 );
 
+// The screen renders inside a SafeAreaView, whose hook throws outright
+// ("No safe area value available...") without a provider above it. Reached
+// through `.default` because the shipped mock module is a default export —
+// the idiomatic one-liner without it fails with "useSafeAreaInsets is not a
+// function". It reports all insets 0, so assertions see token padding only.
+jest.mock('react-native-safe-area-context', () =>
+  require('react-native-safe-area-context/jest/mock').default,
+);
+
 const renderPermissionPrimingIn = async (
   locale: 'en' | 'he',
   onHandled: () => void = () => undefined,
@@ -233,12 +242,85 @@ describe('PermissionPrimingScreen', () => {
       expect(screen.queryByTestId('permission-proceed-anyway')).toBeNull();
     });
 
+    it('renders the tinted icon badge above the copy', async () => {
+      await renderPermissionPrimingIn('en');
+
+      expect(screen.getByTestId('permission-icon-badge')).toBeOnTheScreen();
+    });
+
     it('requests the blocking permission through the service when Allow is pressed', async () => {
       await renderPermissionPrimingIn('en');
 
       await pressAllow();
 
       expect(mockRequest).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // THE ONE DELIBERATE BEHAVIOUR CHANGE in the theme restyle, decided by the
+  // owner with the trade-off stated: the escape hatch now appears during
+  // priming, not only after a real refusal, matching the reference design.
+  //
+  // The cost was accepted knowingly and is worth restating here, because a
+  // future reader will be tempted to "fix" it: more users will reach Home
+  // without ever attempting the screen-time permission, and blocking does not
+  // function without it — so they land in a working app whose core feature
+  // silently does nothing. The recovery path still exists (the permission is
+  // re-requestable later). Do not quietly restore the old behaviour.
+  //
+  // It is a SEPARATE affordance from the denied state's proceed-anyway: its
+  // own testID and its own locale key, because the two links live in
+  // different states and their copy should be free to diverge.
+  describe('maybe-later escape hatch (priming state)', () => {
+    it('offers maybe-later alongside Allow, with its own en copy', async () => {
+      await renderPermissionPrimingIn('en');
+
+      expect(screen.getByTestId('permission-maybe-later')).toBeOnTheScreen();
+      expect(screen.getByText(en.permissionPriming.maybeLater)).toBeOnTheScreen();
+    });
+
+    it('renders the Hebrew maybe-later copy under the he locale', async () => {
+      const enLabel = en.permissionPriming.maybeLater;
+      const heLabel = he.permissionPriming.maybeLater;
+      expect(heLabel).not.toBe(enLabel);
+
+      await renderPermissionPrimingIn('he');
+
+      expect(screen.getByText(heLabel)).toBeOnTheScreen();
+      expect(screen.queryByText(enLabel)).toBeNull();
+    });
+
+    it('fires onHandled once when pressed, without ever asking for the permission', async () => {
+      const onHandled = jest.fn<void, []>();
+      await renderPermissionPrimingIn('en', onHandled);
+
+      await fireEvent.press(screen.getByTestId('permission-maybe-later'));
+
+      expect(onHandled).toHaveBeenCalledTimes(1);
+      // Skipping is not a denial: the OS is never consulted, so no state
+      // flip and no battery-optimization ask follow.
+      expect(mockRequest).not.toHaveBeenCalled();
+      expect(mockRequestBatteryOptimizationExemption).not.toHaveBeenCalled();
+    });
+
+    it('is a distinct affordance from the denied state\'s proceed-anyway', async () => {
+      await renderPermissionPrimingIn('en');
+      expect(screen.queryByTestId('permission-proceed-anyway')).toBeNull();
+
+      await driveToDeniedFallback();
+
+      // The denied state keeps its own link, unchanged, and does not carry
+      // the priming one — one escape hatch visible per state.
+      expect(screen.getByTestId('permission-proceed-anyway')).toBeOnTheScreen();
+      expect(screen.queryByTestId('permission-maybe-later')).toBeNull();
+    });
+
+    it('declares the minimum touch target', async () => {
+      await renderPermissionPrimingIn('en');
+
+      const style = flattenedStyle('permission-maybe-later');
+      expect(asNumber(style.minHeight)).toBeGreaterThanOrEqual(sizing.minTouchTarget);
+      expect(asNumber(style.minWidth)).toBeGreaterThanOrEqual(sizing.minTouchTarget);
     });
   });
 

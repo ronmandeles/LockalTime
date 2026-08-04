@@ -7,8 +7,17 @@ import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
 import { he } from '../i18n/locales/he';
-import { sizing } from '../theme/tokens';
+import { colors, sizing } from '../theme/tokens';
 import AuthScreen from './AuthScreen';
+
+// The screen renders inside a SafeAreaView, whose hook throws outright
+// ("No safe area value available...") without a provider above it. Reached
+// through `.default` because the shipped mock module is a default export —
+// the idiomatic one-liner without it fails with "useSafeAreaInsets is not a
+// function". It reports all insets 0, so assertions see token padding only.
+jest.mock('react-native-safe-area-context', () =>
+  require('react-native-safe-area-context/jest/mock').default,
+);
 
 // Auth screen (Screen 3), backlog: "Auth error states: wrong OTP, network
 // failure, OAuth account-linking dialog" — the error states need a surface,
@@ -531,6 +540,22 @@ describe('error state (c): the OAuth account-linking dialog', () => {
 
     expect(screen.getByText(heTitle)).toBeOnTheScreen();
     expect(screen.queryByText(enTitle)).toBeNull();
+  });
+
+  it('gives the dialog a visible edge against the page behind it', async () => {
+    // The one assumption the light palette hid: a dialog filled with
+    // `background` over a scrim-dimmed `background` page reads fine while
+    // both are white, and vanishes entirely once both are black. The dialog
+    // must therefore carry its own surface fill AND a border — asserted
+    // against the tokens rather than against literal hexes, so it stays true
+    // through any future palette change.
+    await renderAuthIn('en');
+    await driveGoogleToConflict();
+
+    const dialogStyle = flattenedStyle('auth-account-linking-dialog');
+    expect(dialogStyle.backgroundColor).not.toBe(colors.background);
+    expect(asNumber(dialogStyle.borderWidth)).toBeGreaterThan(0);
+    expect(dialogStyle.borderColor).not.toBe(dialogStyle.backgroundColor);
   });
 
   it('switch-to-email closes the dialog and returns to email entry', async () => {

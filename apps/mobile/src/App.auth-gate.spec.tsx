@@ -8,6 +8,12 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 // empty anyway.
 jest.mock('./services/monitoring', () => ({ initMonitoring: () => undefined }));
 
+// See App.spec.tsx's identical mock for why: the real SafeAreaProvider
+// renders an empty native host view under Jest, hiding every screen below it.
+jest.mock('react-native-safe-area-context', () =>
+  require('react-native-safe-area-context/jest/mock').default,
+);
+
 import App from './App';
 import { useAuthStore } from './state/auth-store';
 

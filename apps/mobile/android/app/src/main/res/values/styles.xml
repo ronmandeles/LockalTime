@@ -4,6 +4,15 @@
     <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
         <!-- Customize your theme here. -->
         <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <!-- The DayNight parent inherits a WHITE window background in light
+             mode, which the OS paints for the whole cold start before React
+             Native mounts. The app is dark on every screen, so that is a
+             white flash on every launch. -->
+        <item name="android:windowBackground">@color/window_background</item>
+        <!-- false = LIGHT status-bar icons. The flag names the BAR, not the
+             icons: true would ask for dark icons on a light bar, which over
+             a black bar makes the clock and battery invisible. -->
+        <item name="android:windowLightStatusBar">false</item>
     </style>
 
 </resources>
