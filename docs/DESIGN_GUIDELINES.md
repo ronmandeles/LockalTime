@@ -175,10 +175,15 @@ inline links — **never** for plain body text.
 | `primaryGradientEnd` | `#3B6FE0` | 4.54 | 4.63 | CTA gradient, right end |
 | `primarySubtle` | `#0C1428` | 1.15 | — | Icon-badge fill (the accent at ~12% over black) |
 | `onPrimary` | `#FFFFFF` | — | — | Text/icon colour on a `primary`-filled surface |
+| `link` | `#5B8AF0` | 6.34 | — | Inline text links. The accent again, lightened until it is legible **as text** |
 
 > `primary` is used **only** as a fill or border, never as text, so WCAG's 3:1
-> non-text rule applies rather than 4.5:1. Re-check that if it ever becomes a
-> text colour.
+> non-text rule applies rather than 4.5:1. **Words get `link` instead** —
+> `primary` measures 3.93:1 on black, which is fine behind a button and below
+> the bar for text. This distinction is enforced, not merely written down:
+> `text-color-usage.test.ts` reads every screen and component source and
+> fails if a fill-only token appears as a `color:`. It exists because the
+> repaint made exactly this mistake once, and the suite stayed green.
 >
 > The gradient is squeezed from **both** sides: too dark and the button's edge
 > stops being perceivable against black (WCAG 1.4.11, 3:1); too light and the

@@ -228,10 +228,11 @@ pre-mount launch surfaces are all things a Jest assertion can pin the
   instant the icon is tapped, and that the status-bar clock/battery are
   **visible** (light icons) on every screen. iOS:
   `ios/LockalTime/LaunchScreen.storyboard` is now black with white labels;
-  verify the same. **Neither is build-verified on this machine** — no Android
-  SDK is installed here and CI does not build Android, so a broken
-  `@color/window_background` reference would not be caught until a real
-  `./gradlew assembleDebug`. Run one before trusting it.
+  verify the same. The Android side **is now compiled in CI** (the
+  `android-build` job runs `assembleDebug`), so a broken
+  `@color/window_background` reference fails the build rather than reaching a
+  device — what remains device-only is whether the launch actually *looks*
+  right, which no build can tell you.
 - [ ] **The two launch surfaces stay in sync with `colors.background`** — they
   are hardcoded black in native resource files and cannot read the JS token.
   If the palette's background ever changes, both must be changed by hand

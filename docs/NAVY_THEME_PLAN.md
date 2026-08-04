@@ -6,8 +6,8 @@
 **What shipped differently from the plan below** (all deliberate; the plan's own §6 left these open):
 - Every step landed as written, plus three additions the plan did not anticipate. **E11** (small-screen overflow) was implemented rather than left as a recommendation: the hero is capped against window height, with tests at both a roomy and a short window. **The palette's contrast ratios are now asserted in `tokens.test.ts`**, not merely documented — WCAG relative luminance is computed there, so a value nudged below AA fails the suite. **E5/E6** got on-disk contract tests in `__tests__/native-config.test.ts`, following the precedent already set for the bundle identifier.
 - One thing the plan did not predict: the ESLint test override globbed `**/*.test.ts` but **not** `**/*.test.tsx`, so the new component tests were held to the no-literal-string rule meant for production code. Fixed in `.eslintrc.js`.
-- The Android window-background change is **not build-verified**. The plan said "verify with a Gradle build"; the machine this ran on has no Android SDK and CI does not build Android. The contract test pins that the style item and the colour resource both exist and agree, which is not the same as proving the reference resolves.
-- Final counts: **58 suites / 696 tests** (from 55/667), lint and typecheck clean.
+- The Android window-background change was **not build-verified at first**, and that turned out to be a CI gap rather than a one-off: nothing in the pipeline compiled Android at all. A follow-up pass added an `android-build` job, so the resources are now compiled on every run. (A local build remains impossible in that container — the network policy denies `dl.google.com`, so the SDK cannot be installed.)
+- Final counts after the follow-up pass: **59 suites / 701 tests** (from 55/667), lint and typecheck clean, and 0 failures in 15 consecutive full-suite runs.
 
 **Audience:** an engineer (or a fresh Claude session) with **no prior context on this task**. Everything needed is below.
 
