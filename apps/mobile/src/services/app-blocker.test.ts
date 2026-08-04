@@ -46,16 +46,19 @@ describe('appBlocker with a native module registered', () => {
     mockGetStatus.mockReset();
   });
 
-  it.each(['android', 'ios'] as const)('start forwards the session config to the native module on %s', async (os) => {
-    setPlatform(os);
-    await appBlocker.start(CONFIG);
+  it.each(['android', 'ios'] as const)(
+    'start forwards the session config to the native module on %s',
+    async (os) => {
+      setPlatform(os);
+      await appBlocker.start(CONFIG);
 
-    expect(mockStart).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      endsAt: null,
-      blockedCategories: ['social'],
-    });
-  });
+      expect(mockStart).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        endsAt: null,
+        blockedCategories: ['social'],
+      });
+    },
+  );
 
   it.each(['android', 'ios'] as const)('stop calls the native module on %s', async (os) => {
     setPlatform(os);
@@ -68,7 +71,10 @@ describe('appBlocker with a native module registered', () => {
     setPlatform('android');
     mockGetStatus.mockResolvedValue({ state: 'active', sessionId: 'session-1' });
 
-    await expect(appBlocker.getStatus()).resolves.toEqual({ state: 'active', sessionId: 'session-1' });
+    await expect(appBlocker.getStatus()).resolves.toEqual({
+      state: 'active',
+      sessionId: 'session-1',
+    });
   });
 
   it('getStatus forwards a real violation status', async () => {
@@ -95,7 +101,11 @@ describe('appBlocker with a native module registered', () => {
 
   it('getStatus falls back to inactive for a violation payload with an unrecognized reason', async () => {
     setPlatform('android');
-    mockGetStatus.mockResolvedValue({ state: 'violation', sessionId: 'session-1', reason: 'made-up' });
+    mockGetStatus.mockResolvedValue({
+      state: 'violation',
+      sessionId: 'session-1',
+      reason: 'made-up',
+    });
 
     await expect(appBlocker.getStatus()).resolves.toEqual({ state: 'inactive' });
   });
@@ -143,7 +153,10 @@ describe('appBlocker with a native module registered', () => {
       const listener = jest.fn();
       appBlocker.addEventListener(listener);
 
-      DeviceEventEmitter.emit('permission_revoked', { sessionId: 'session-1', permission: 'overlay' });
+      DeviceEventEmitter.emit('permission_revoked', {
+        sessionId: 'session-1',
+        permission: 'overlay',
+      });
 
       expect(listener).toHaveBeenCalledWith({
         type: 'permission_revoked',
@@ -158,7 +171,11 @@ describe('appBlocker with a native module registered', () => {
 
       DeviceEventEmitter.emit('battery_critical', { sessionId: 'session-1', level: 4 });
 
-      expect(listener).toHaveBeenCalledWith({ type: 'battery_critical', sessionId: 'session-1', level: 4 });
+      expect(listener).toHaveBeenCalledWith({
+        type: 'battery_critical',
+        sessionId: 'session-1',
+        level: 4,
+      });
     });
 
     it('forwards a valid offline_cutoff_reached event', () => {
@@ -182,7 +199,10 @@ describe('appBlocker with a native module registered', () => {
       appBlocker.addEventListener(listener);
 
       DeviceEventEmitter.emit('shield_triggered', { sessionId: 'session-1' });
-      DeviceEventEmitter.emit('battery_critical', { sessionId: 'session-1', level: 'not-a-number' });
+      DeviceEventEmitter.emit('battery_critical', {
+        sessionId: 'session-1',
+        level: 'not-a-number',
+      });
 
       expect(listener).not.toHaveBeenCalled();
     });
@@ -238,7 +258,10 @@ describe('appBlocker with a native module registered', () => {
       const listener = jest.fn();
       appBlocker.addEventListener(listener);
 
-      DeviceEventEmitter.emit('battery_critical', { sessionId: 'session-1', level: 'not-a-number' });
+      DeviceEventEmitter.emit('battery_critical', {
+        sessionId: 'session-1',
+        level: 'not-a-number',
+      });
 
       expect(listener).not.toHaveBeenCalled();
     });
@@ -259,7 +282,7 @@ describe('appBlocker with a native module registered', () => {
   });
 });
 
-describe('appBlocker with no native module registered (today\'s real state on iOS until a build links one)', () => {
+describe("appBlocker with no native module registered (today's real state on iOS until a build links one)", () => {
   beforeEach(() => {
     delete (NativeModules as Record<string, unknown>).AppBlockerModule;
   });
@@ -276,24 +299,30 @@ describe('appBlocker with no native module registered (today\'s real state on iO
     expect(mockStop).not.toHaveBeenCalled();
   });
 
-  it.each(['android', 'ios'] as const)("getStatus resolves { state: 'inactive' } on %s", async (os) => {
-    setPlatform(os);
-    await expect(appBlocker.getStatus()).resolves.toEqual({ state: 'inactive' });
-  });
+  it.each(['android', 'ios'] as const)(
+    "getStatus resolves { state: 'inactive' } on %s",
+    async (os) => {
+      setPlatform(os);
+      await expect(appBlocker.getStatus()).resolves.toEqual({ state: 'inactive' });
+    },
+  );
 
-  it.each(['android', 'ios'] as const)('addEventListener never invokes the listener on %s', (os) => {
-    setPlatform(os);
-    const listener = jest.fn();
-    appBlocker.addEventListener(listener);
+  it.each(['android', 'ios'] as const)(
+    'addEventListener never invokes the listener on %s',
+    (os) => {
+      setPlatform(os);
+      const listener = jest.fn();
+      appBlocker.addEventListener(listener);
 
-    DeviceEventEmitter.emit('shield_triggered', {
-      sessionId: 'session-1',
-      category: 'social',
-      at: '2026-07-27T00:00:00.000Z',
-    });
+      DeviceEventEmitter.emit('shield_triggered', {
+        sessionId: 'session-1',
+        category: 'social',
+        at: '2026-07-27T00:00:00.000Z',
+      });
 
-    expect(listener).not.toHaveBeenCalled();
-  });
+      expect(listener).not.toHaveBeenCalled();
+    },
+  );
 
   it('addEventListener returns a safe-to-call unsubscribe', () => {
     setPlatform('android');

@@ -45,9 +45,14 @@ interface DeviceLocaleStub {
   readonly languageCode: string;
   readonly languageTag: string;
 }
-const EN_US: DeviceLocaleStub = { countryCode: 'US', isRTL: false, languageCode: 'en', languageTag: 'en-US' };
+const EN_US: DeviceLocaleStub = {
+  countryCode: 'US',
+  isRTL: false,
+  languageCode: 'en',
+  languageTag: 'en-US',
+};
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>(() => [EN_US]);
-jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }), { virtual: true });
+jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }));
 
 import ActiveSessionScreen from './ActiveSessionScreen';
 
@@ -86,7 +91,11 @@ const SESSION_ROW: SessionRow = {
   created_at: '2026-07-26T12:00:00.000Z',
 };
 
-const mockSession = (overrides: Partial<SessionRow> | null, status: string, openIntervals: unknown[] = []) => {
+const mockSession = (
+  overrides: Partial<SessionRow> | null,
+  status: string,
+  openIntervals: unknown[] = [],
+) => {
   mockUseSession.mockReturnValue({
     session: overrides === null ? null : { ...SESSION_ROW, ...overrides },
     openIntervals,
@@ -111,9 +120,11 @@ describe('ActiveSessionScreen', () => {
     mockUseSession.mockReset();
     mockUseAppBlocker.mockReset().mockReturnValue({ violation: null });
     mockUseHostMigrationToast.mockReset().mockReturnValue(false);
-    mockUseAuthStore.mockReset().mockImplementation((selector: (state: unknown) => unknown) =>
-      selector({ auth: { status: 'authenticated', session: { user: { id: 'host-1' } } } }),
-    );
+    mockUseAuthStore
+      .mockReset()
+      .mockImplementation((selector: (state: unknown) => unknown) =>
+        selector({ auth: { status: 'authenticated', session: { user: { id: 'host-1' } } } }),
+      );
     mockNavigate.mockReset();
     mockReset.mockReset();
     mockSetActiveSession.mockReset().mockResolvedValue(undefined);
@@ -173,7 +184,13 @@ describe('ActiveSessionScreen', () => {
     expect(screen.getByText(en.activeSession.participants.empty)).toBeOnTheScreen();
 
     mockSession({}, 'active', [
-      { id: 'i1', session_id: 'session-1', user_id: 'host-1', joined_at: '2026-07-26T12:00:00.000Z', left_at: null },
+      {
+        id: 'i1',
+        session_id: 'session-1',
+        user_id: 'host-1',
+        joined_at: '2026-07-26T12:00:00.000Z',
+        left_at: null,
+      },
     ]);
     await rerender(
       <I18nProvider i18n={await initI18n()}>
@@ -233,7 +250,9 @@ describe('ActiveSessionScreen', () => {
 
       await renderScreen();
 
-      expect(screen.getByText(en.activeSession.blockerViolation.message.service_killed)).toBeOnTheScreen();
+      expect(
+        screen.getByText(en.activeSession.blockerViolation.message.service_killed),
+      ).toBeOnTheScreen();
     });
 
     it('shows the battery_critical message', async () => {
@@ -244,7 +263,9 @@ describe('ActiveSessionScreen', () => {
 
       await renderScreen();
 
-      expect(screen.getByText(en.activeSession.blockerViolation.message.battery_critical)).toBeOnTheScreen();
+      expect(
+        screen.getByText(en.activeSession.blockerViolation.message.battery_critical),
+      ).toBeOnTheScreen();
     });
   });
 
@@ -276,7 +297,9 @@ describe('ActiveSessionScreen', () => {
 
       await renderScreen();
 
-      expect(mockUseAppBlocker).toHaveBeenCalledWith(expect.objectContaining({ isSessionActive: true }));
+      expect(mockUseAppBlocker).toHaveBeenCalledWith(
+        expect.objectContaining({ isSessionActive: true }),
+      );
     });
 
     it('is not session-active before the session has hydrated', async () => {

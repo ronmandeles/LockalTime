@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
+import { Linking, StyleSheet, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
@@ -7,8 +7,18 @@ import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
 import { he } from '../i18n/locales/he';
-import { sizing } from '../theme/tokens';
+import { colors, sizing } from '../theme/tokens';
 import AuthScreen from './AuthScreen';
+
+// The screen renders inside a SafeAreaView, whose hook throws outright
+// ("No safe area value available...") without a provider above it. Reached
+// through `.default` because the shipped mock module is a default export —
+// the idiomatic one-liner without it fails with "useSafeAreaInsets is not a
+// function". It reports all insets 0, so assertions see token padding only.
+jest.mock(
+  'react-native-safe-area-context',
+  () => require('react-native-safe-area-context/jest/mock').default,
+);
 
 // Auth screen (Screen 3), backlog: "Auth error states: wrong OTP, network
 // failure, OAuth account-linking dialog" — the error states need a surface,
@@ -75,13 +85,9 @@ const EN_US: DeviceLocaleStub = {
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>();
 
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getLocales: () => mockGetLocales(),
+}));
 
 // Local structural stubs for the service results: the spec pins the contract
 // the screen consumes, including the 'provider_email_conflict' kind that
@@ -359,6 +365,24 @@ describe('error state (a): wrong or expired OTP', () => {
     expect(screen.queryByTestId('auth-email-input')).toBeNull();
   });
 
+  it('styles the error in the danger colour, not as ordinary body text', async () => {
+    // Every other screen in the app already renders inline errors in
+    // `danger`; this one rendered them in `textPrimary`, i.e. identical to
+    // the copy around it. On a dark theme that is worse, not just
+    // inconsistent — the only remaining signal that something went wrong is
+    // the wording itself.
+    mockVerifyEmailOtp.mockResolvedValue(INVALID_CODE_FAILURE);
+    await renderAuthIn('en');
+    await driveToCodeEntry();
+
+    await fireEvent.changeText(screen.getByTestId('auth-code-input'), '000000');
+    await fireEvent.press(screen.getByTestId('auth-code-verify-cta'));
+
+    const error = await screen.findByText(en.auth.codeEntry.errors.invalidCode);
+    const style = StyleSheet.flatten(error.props.style as StyleProp<TextStyle>);
+    expect(style.color).toBe(colors.danger);
+  });
+
   it('clears the invalid-code error once a corrected code verifies', async () => {
     mockVerifyEmailOtp.mockResolvedValueOnce(INVALID_CODE_FAILURE);
     await renderAuthIn('en');
@@ -531,6 +555,22 @@ describe('error state (c): the OAuth account-linking dialog', () => {
 
     expect(screen.getByText(heTitle)).toBeOnTheScreen();
     expect(screen.queryByText(enTitle)).toBeNull();
+  });
+
+  it('gives the dialog a visible edge against the page behind it', async () => {
+    // The one assumption the light palette hid: a dialog filled with
+    // `background` over a scrim-dimmed `background` page reads fine while
+    // both are white, and vanishes entirely once both are black. The dialog
+    // must therefore carry its own surface fill AND a border — asserted
+    // against the tokens rather than against literal hexes, so it stays true
+    // through any future palette change.
+    await renderAuthIn('en');
+    await driveGoogleToConflict();
+
+    const dialogStyle = flattenedStyle('auth-account-linking-dialog');
+    expect(dialogStyle.backgroundColor).not.toBe(colors.background);
+    expect(asNumber(dialogStyle.borderWidth)).toBeGreaterThan(0);
+    expect(dialogStyle.borderColor).not.toBe(dialogStyle.backgroundColor);
   });
 
   it('switch-to-email closes the dialog and returns to email entry', async () => {

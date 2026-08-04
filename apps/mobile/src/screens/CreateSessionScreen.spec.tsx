@@ -31,10 +31,15 @@ interface DeviceLocaleStub {
   readonly languageTag: string;
 }
 
-const EN_US: DeviceLocaleStub = { countryCode: 'US', isRTL: false, languageCode: 'en', languageTag: 'en-US' };
+const EN_US: DeviceLocaleStub = {
+  countryCode: 'US',
+  isRTL: false,
+  languageCode: 'en',
+  languageTag: 'en-US',
+};
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>(() => [EN_US]);
 
-jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }), { virtual: true });
+jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }));
 
 import CreateSessionScreen from './CreateSessionScreen';
 
@@ -99,7 +104,9 @@ describe('CreateSessionScreen', () => {
         planned_duration_minutes: 30,
       }),
     );
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('ActiveSession', { sessionId: 'session-1' }));
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('ActiveSession', { sessionId: 'session-1' }),
+    );
   });
 
   it('switches to dynamic_qr and open_ended, then submits without a minutes field at all', async () => {
@@ -113,7 +120,10 @@ describe('CreateSessionScreen', () => {
     await fireEvent.press(screen.getByTestId('create-session-submit'));
 
     await waitFor(() =>
-      expect(mockCreateSession).toHaveBeenCalledWith({ type: 'dynamic_qr', duration_mode: 'open_ended' }),
+      expect(mockCreateSession).toHaveBeenCalledWith({
+        type: 'dynamic_qr',
+        duration_mode: 'open_ended',
+      }),
     );
   });
 
@@ -166,7 +176,10 @@ describe('CreateSessionScreen', () => {
 
   it('requires a venue to be selected before submitting a static_qr session', async () => {
     mockRole = 'verified_host';
-    mockListVenues.mockResolvedValue({ ok: true, value: { venues: [{ id: 'venue-1', name: 'Cafe' }] } });
+    mockListVenues.mockResolvedValue({
+      ok: true,
+      value: { venues: [{ id: 'venue-1', name: 'Cafe' }] },
+    });
     await renderScreen();
 
     await fireEvent.press(screen.getByTestId('create-session-type-static_qr'));
@@ -180,7 +193,10 @@ describe('CreateSessionScreen', () => {
 
   it('submits venue_id once a venue is picked', async () => {
     mockRole = 'verified_host';
-    mockListVenues.mockResolvedValue({ ok: true, value: { venues: [{ id: 'venue-1', name: 'Cafe' }] } });
+    mockListVenues.mockResolvedValue({
+      ok: true,
+      value: { venues: [{ id: 'venue-1', name: 'Cafe' }] },
+    });
     mockCreateSession.mockResolvedValue({
       ok: true,
       value: { id: 'session-4', qrToken: null },
@@ -203,7 +219,10 @@ describe('CreateSessionScreen', () => {
 
   it('maps venue_not_owned/venue_not_found to their own copy', async () => {
     mockRole = 'verified_host';
-    mockListVenues.mockResolvedValue({ ok: true, value: { venues: [{ id: 'venue-1', name: 'Cafe' }] } });
+    mockListVenues.mockResolvedValue({
+      ok: true,
+      value: { venues: [{ id: 'venue-1', name: 'Cafe' }] },
+    });
     mockCreateSession.mockResolvedValue({
       ok: false,
       error: { code: 'venue_not_owned', message: 'nope' },

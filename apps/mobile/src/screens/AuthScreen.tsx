@@ -2,7 +2,9 @@ import React, { useState } from 'react';
 import { Linking, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { useTranslation } from 'react-i18next';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import GradientButton from '../components/GradientButton';
 import { API_BASE_URL } from '../config/api-config';
 import {
   requestEmailOtp,
@@ -169,7 +171,7 @@ const AuthScreen = (): React.JSX.Element => {
   const errorText = inlineErrorText();
 
   return (
-    <View style={styles.container} testID="auth-screen">
+    <SafeAreaView style={styles.container} testID="auth-screen">
       <View style={styles.content}>
         <Text style={styles.title}>{t('auth.title')}</Text>
         {step === 'emailEntry' ? (
@@ -185,13 +187,12 @@ const AuthScreen = (): React.JSX.Element => {
               value={email}
             />
             {errorText !== null ? <Text style={styles.errorText}>{errorText}</Text> : null}
-            <TouchableOpacity
+            <GradientButton
+              label={t('auth.emailEntry.continue')}
               onPress={handleContinuePress}
               style={styles.primaryCta}
               testID="auth-email-continue-cta"
-            >
-              <Text style={styles.primaryCtaLabel}>{t('auth.emailEntry.continue')}</Text>
-            </TouchableOpacity>
+            />
             <TouchableOpacity
               onPress={handleGooglePress}
               style={styles.providerCta}
@@ -245,13 +246,12 @@ const AuthScreen = (): React.JSX.Element => {
               value={code}
             />
             {errorText !== null ? <Text style={styles.errorText}>{errorText}</Text> : null}
-            <TouchableOpacity
+            <GradientButton
+              label={t('auth.codeEntry.verify')}
               onPress={handleVerifyPress}
               style={styles.primaryCta}
               testID="auth-code-verify-cta"
-            >
-              <Text style={styles.primaryCtaLabel}>{t('auth.codeEntry.verify')}</Text>
-            </TouchableOpacity>
+            />
           </>
         )}
       </View>
@@ -260,25 +260,23 @@ const AuthScreen = (): React.JSX.Element => {
           <View style={styles.dialog} testID="auth-account-linking-dialog">
             <Text style={styles.stepTitle}>{t('auth.accountLinking.title')}</Text>
             <Text style={styles.body}>{t('auth.accountLinking.body')}</Text>
-            <TouchableOpacity
+            <GradientButton
+              label={t('auth.accountLinking.useEmail')}
               onPress={handleUseEmailPress}
               style={styles.primaryCta}
               testID="auth-account-linking-use-email-cta"
-            >
-              <Text style={styles.primaryCtaLabel}>{t('auth.accountLinking.useEmail')}</Text>
-            </TouchableOpacity>
+            />
           </View>
         </View>
       ) : null}
-    </View>
+    </SafeAreaView>
   );
 };
 
-// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: spacing.sm,
   },
   container: {
@@ -294,8 +292,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dialog: {
-    backgroundColor: colors.background,
+    // Surface + border, not `background`: on a dark palette a dialog filled
+    // with the page color over a scrim-dimmed page of the same color has no
+    // visible edge at all (pinned in AuthScreen.spec.tsx).
+    backgroundColor: colors.surface,
+    borderColor: colors.borderStrong,
     borderRadius: radius.xl,
+    borderWidth: 1,
     padding: spacing.lg,
   },
   dialogOverlay: {
@@ -310,22 +313,32 @@ const styles = StyleSheet.create({
   },
   errorText: {
     ...typography.caption,
-    color: colors.textPrimary,
+    // `danger`, matching every other screen's inline errors. Rendering these
+    // in `textPrimary` left the copy itself as the only signal that anything
+    // had gone wrong.
+    color: colors.danger,
     marginTop: spacing.sm,
   },
   legalDisclosure: {
     ...typography.caption,
-    color: colors.textMuted,
+    color: colors.textFaint,
     marginTop: spacing.lg,
     textAlign: 'center',
   },
   legalLink: {
     ...typography.caption,
-    color: colors.textPrimary,
+    // The accent reads as "this is tappable" where an underline alone on
+    // faint text does not — but `link`, not `primary`: the button accent is
+    // below the 4.5:1 text bar on black (see tokens.ts).
+    color: colors.link,
     textDecorationLine: 'underline',
   },
   input: {
     ...typography.body,
+    // Filled rather than outline-only: on black, a 1px border around
+    // nothing barely registers as a field. The fill is what makes the input
+    // look like somewhere to type.
+    backgroundColor: colors.surface,
     borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -335,20 +348,14 @@ const styles = StyleSheet.create({
     paddingEnd: spacing.md,
     paddingStart: spacing.md,
   },
+  // The gradient CTA owns its own height/radius/fill (GradientButton); this
+  // only places it.
   primaryCta: {
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    height: sizing.buttonHeight,
-    justifyContent: 'center',
     marginTop: spacing.md,
-  },
-  primaryCtaLabel: {
-    ...typography.bodyStrong,
-    color: colors.onPrimary,
   },
   providerCta: {
     alignItems: 'center',
+    backgroundColor: colors.surface,
     borderColor: colors.borderStrong,
     borderRadius: radius.md,
     borderWidth: 1,
@@ -366,7 +373,7 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   title: {
-    ...typography.heading,
+    ...typography.display,
     color: colors.textPrimary,
   },
 });

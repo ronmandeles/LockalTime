@@ -21,7 +21,10 @@ module.exports = {
   overrides: [
     {
       // Tests assert against literals (testIDs, fixture strings) by design.
-      files: ['**/*.test.ts', '**/*.spec.tsx', '__tests__/**'],
+      // `.test.tsx` is listed explicitly: the glob is literal, so `*.test.ts`
+      // does NOT also match `*.test.tsx`, and component tests rendering JSX
+      // fixtures live under that extension.
+      files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.tsx', '__tests__/**'],
       rules: {
         'i18next/no-literal-string': 'off',
       },

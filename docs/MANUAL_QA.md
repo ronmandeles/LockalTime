@@ -19,9 +19,13 @@ Items that cannot be verified on this development machine (no Android SDK platfo
 - [ ] **Back to English** — switch device language back to English, two cold starts: layout returns to LTR, English strings shown.
 - [ ] **Unsupported RTL locale** — set device language to Arabic (unsupported): app must fall back to English **in LTR layout** (the `allowRTL(isRtl)` guard — an unsupported-RTL device must not get a mirrored layout under English strings).
 
-## Phase 1 — Onboarding carousel (Screen 1)
+## Phase 1 — Onboarding welcome (Screen 1)
 
-- [ ] **RTL carousel behavior on-device (Hebrew)** — with device language set to עברית (two cold starts, per the `forceRTL` note above), on a fresh install (or after clearing app storage so the onboarding-seen flag is unset): the first page appears on the right and swiping **left-to-right** advances through the three pages in order; pagination dots are mirrored (active dot progresses right-to-left) and always match the visible page — including after pressing «הבא» (Next); skip sits at the visual top-left (the `end` edge). Not JS-testable: `I18nManager` is inert under Jest, and the paging math relies on native RTL scroll-offset semantics (iOS reports negative offsets; the JS side only sees `Math.abs`).
+> Screen 1 was a three-page swipeable carousel until the black+navy theme
+> pass collapsed it to a single welcome page; the RTL swipe/pagination-dot
+> checks that used to live here no longer describe anything that exists.
+
+- [ ] **RTL welcome screen on-device (Hebrew)** — with device language set to עברית (two cold starts, per the `forceRTL` note above), on a fresh install (or after clearing app storage so the onboarding-seen flag is unset): the Hebrew title and body render centred and right-to-left with no clipping, the hero ring mark stays centred, and the «מתחילים» CTA sits full-width above the home indicator. Not JS-testable: `I18nManager` is inert under Jest.
 
 ## Phase 1 — Permission priming (Screen 2)
 
@@ -209,3 +213,56 @@ inert per the items below, same posture as Play Integrity/App Attest.
   outstanding item in this checklist against their actual devices before
   any public submission — this is what actually closes this document's
   "no physical device"/"no Mac" gaps, not further JS-side work.
+
+## Black + navy theme (whole-app dark repaint, onboarding restyle)
+
+Everything below is device-only: the palette, the gradient and the two
+pre-mount launch surfaces are all things a Jest assertion can pin the
+*values* of but never actually look at.
+
+- [ ] **Cold-start launch surfaces, both platforms** — the whole point of the
+  two native changes below is a launch with **no white flash**. Android:
+  `android/app/src/main/res/values/styles.xml` now sets
+  `android:windowBackground=@color/window_background` (black) and
+  `android:windowLightStatusBar=false`; verify the window is black from the
+  instant the icon is tapped, and that the status-bar clock/battery are
+  **visible** (light icons) on every screen. iOS:
+  `ios/LockalTime/LaunchScreen.storyboard` is now black with white labels;
+  verify the same. The Android side **is now compiled in CI** (the
+  `android-build` job runs `assembleDebug`), so a broken
+  `@color/window_background` reference fails the build rather than reaching a
+  device — what remains device-only is whether the launch actually *looks*
+  right, which no build can tell you.
+- [ ] **The two launch surfaces stay in sync with `colors.background`** — they
+  are hardcoded black in native resource files and cannot read the JS token.
+  If the palette's background ever changes, both must be changed by hand
+  (`__tests__/native-config.test.ts` pins that they are black, not that they
+  match the token).
+- [ ] **CTA gradient under RTL (Hebrew)** — the onboarding CTA is a
+  left-to-right navy gradient, and it does **not** mirror under RTL: a
+  gradient is a paint instruction, not layout, so React Native will not flip
+  it, and branching a style on locale is forbidden. Look at it in Hebrew and
+  judge whether the fixed direction reads wrong. If it does, that is a
+  product decision to bring back, not a bug to patch locally.
+- [ ] **Gradient renders at all** — it uses RN's `experimental_backgroundImage`
+  (built-in CSS gradients, new architecture). Verified in JS only as "the
+  style object is declared correctly"; that the GPU actually paints a
+  gradient rather than a flat or transparent fill is device-only. Check on
+  both platforms.
+- [ ] **Small screen + large OS font** — on a ~320×568pt device with the OS
+  text size turned up, Screen 1's stack (hero, title, body, CTA) must still
+  fit with the CTA fully visible and tappable. The hero is capped against
+  window height for exactly this reason; confirm it actually shrinks rather
+  than pushing the CTA off-screen, and that it stays a circle.
+- [ ] **Every screen re-checked against a black background** — all 17 screens
+  were repainted by changing token *values* only, with no per-screen edits.
+  The one inverted assumption found by audit (the Auth account-linking
+  dialog, which was filled with `background` and became invisible over a
+  black scrimmed page) is fixed and pinned by a test, but only a real
+  look-through will find any remaining case where something was legible on
+  white by accident. Pay attention to: disabled/placeholder states, camera
+  viewfinder letterboxing, and anything drawn as a hairline border.
+- [ ] **App icon is still teal** — the launcher icon is a white ring on teal
+  `#0F6B5C`, which no longer matches the black-and-navy app behind it. The
+  owner chose to keep the logo as-is for now; raise redesigning it as a
+  follow-up.

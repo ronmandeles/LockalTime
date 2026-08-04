@@ -1,0 +1,10 @@
+<resources>
+
+    <!-- The window background the OS paints before React Native mounts.
+         Kept in sync BY HAND with `colors.background` in
+         src/theme/tokens.ts — Android resources cannot import a JS token, so
+         the only link between them is this comment and the contract test in
+         __tests__/native-config.test.ts. ARGB, alpha first. -->
+    <color name="window_background">#FF000000</color>
+
+</resources>

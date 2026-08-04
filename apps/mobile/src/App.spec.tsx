@@ -12,6 +12,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 // (config/monitoring-config.ts) — no behavior under test depends on it.
 jest.mock('./services/monitoring', () => ({ initMonitoring: () => undefined }));
 
+// App mounts a real SafeAreaProvider, which under Jest renders an empty
+// native host view and never delivers insets — so every screen below it
+// would be invisible to these tests. The library ships this mock for exactly
+// that case; it must be reached through `.default`, since the mock module is
+// a default export.
+jest.mock(
+  'react-native-safe-area-context',
+  () => require('react-native-safe-area-context/jest/mock').default,
+);
+
 import App from './App';
 import { en } from './i18n/locales/en';
 import { useActiveSessionStore } from './state/active-session-store';
@@ -22,7 +32,7 @@ import { useActiveSessionStore } from './state/active-session-store';
 // a hardcoded literal would fail the visible-text assertion) and invokes the
 // layout-direction sync. Without these, an App that never mounts I18nProvider
 // would silently pass on react-i18next's uninitialized default instance.
-// react-native-localize is mocked virtually (not installed until Stage B);
+// react-native-localize is mocked normally (the package is installed);
 // no test reads the machine's real locale. Color palette is deferred, so no
 // style/color assertions.
 //
@@ -51,7 +61,7 @@ import { useActiveSessionStore } from './state/active-session-store';
 // permission-step flag is unhandled; handling it (granted request OR the
 // denied fallback's proceed-anyway — the flag records that the step was
 // handled, never that blocking works) lands on Home and persists the flag.
-// The blocking-permissions service module is mocked virtually (Stage B), so
+// The blocking-permissions service module is mocked normally (it exists), so
 // pressing the screen's real CTAs here proves the full chain App -> screen ->
 // service -> onHandled -> permission store, both sides.
 //
@@ -79,13 +89,9 @@ const EN_US: DeviceLocaleStub = {
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>();
 
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getLocales: () => mockGetLocales(),
+}));
 
 // react-native-vision-camera's native module doesn't exist in Jest (Phase 3
 // task 3.5) — App.tsx transitively renders ScanSessionScreen via
@@ -144,18 +150,14 @@ const mockSetItem = jest.fn<Promise<void>, [string, string]>();
 // Both gates read their persisted flags straight through AsyncStorage (via
 // their stores), so App suites control first-launch vs returning user by
 // stubbing the storage read — virtual, same pattern as elsewhere.
-jest.mock(
-  '@react-native-async-storage/async-storage',
-  () => ({
-    __esModule: true,
-    default: {
-      getItem: (key: string) => mockGetItem(key),
-      removeItem: (key: string) => mockRemoveItem(key),
-      setItem: (key: string, value: string) => mockSetItem(key, value),
-    },
-  }),
-  { virtual: true },
-);
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: {
+    getItem: (key: string) => mockGetItem(key),
+    removeItem: (key: string) => mockRemoveItem(key),
+    setItem: (key: string, value: string) => mockSetItem(key, value),
+  },
+}));
 
 // Keys asserted/stubbed as literals: importing the stores' constants here
 // would fail this whole suite's load in Stage A; the same literals are pinned
@@ -243,17 +245,13 @@ const mockPermissionRequest = jest.fn<Promise<PermissionStatusStub>, []>();
 // The permission screen renders for real in this suite; mocking the service
 // module (virtually — Stage B) keeps the placeholder/native layer out while
 // letting each test choose the request outcome its path needs.
-jest.mock(
-  './services/blocking-permissions',
-  () => ({
-    blockingPermissions: {
-      getStatus: () => mockPermissionGetStatus(),
-      request: () => mockPermissionRequest(),
-    },
-    requestBatteryOptimizationExemption: () => Promise.resolve(),
-  }),
-  { virtual: true },
-);
+jest.mock('./services/blocking-permissions', () => ({
+  blockingPermissions: {
+    getStatus: () => mockPermissionGetStatus(),
+    request: () => mockPermissionRequest(),
+  },
+  requestBatteryOptimizationExemption: () => Promise.resolve(),
+}));
 
 describe('App', () => {
   let forceRTLSpy: jest.SpyInstance<void, [forceRTL: boolean]>;
@@ -336,7 +334,7 @@ describe('App', () => {
     });
   });
 
-  it('renders the onboarding carousel on first launch, when no flags are persisted', async () => {
+  it('renders the onboarding welcome screen on first launch, when no flags are persisted', async () => {
     stubPersistedFlags({ onboardingSeen: false, permissionHandled: false });
 
     await render(<App />);
@@ -346,13 +344,15 @@ describe('App', () => {
     expect(screen.queryByTestId('home-screen')).toBeNull();
   });
 
-  it('skipping onboarding on first launch advances to permission priming and persists the flag', async () => {
+  it('completing onboarding on first launch advances to permission priming and persists the flag', async () => {
     stubPersistedFlags({ onboardingSeen: false, permissionHandled: false });
     await render(<App />);
     expect(await screen.findByTestId('onboarding-screen')).toBeOnTheScreen();
 
+    // The CTA is now the ONLY way off the welcome screen — the skip link
+    // went away with the three-page carousel it belonged to.
     // RNTL v14 fireEvent is awaited like render, wrapping the state update.
-    await fireEvent.press(screen.getByTestId('onboarding-skip'));
+    await fireEvent.press(screen.getByTestId('onboarding-primary-cta'));
 
     // (a) completion actually exits the gate — onto Screen 2, never straight
     // to Home (ARCHITECTURE.md §2 order: Onboarding -> Permission -> rest)...
@@ -438,7 +438,11 @@ describe('App', () => {
 
   describe('Welcome Back gate (Phase 4 task 12, Screen 13)', () => {
     it('shows Welcome Back, not Home, when a last-active session was persisted', async () => {
-      stubPersistedFlags({ onboardingSeen: true, permissionHandled: true, lastActiveSessionId: 'session-99' });
+      stubPersistedFlags({
+        onboardingSeen: true,
+        permissionHandled: true,
+        lastActiveSessionId: 'session-99',
+      });
       mockFetchSession.mockResolvedValue({
         ok: true,
         value: { status: 'active', started_at: '2026-07-28T12:00:00.000Z' },
@@ -451,7 +455,11 @@ describe('App', () => {
     });
 
     it('rejoining from Welcome Back lands on Session Details in rejoin mode (no QR re-scan)', async () => {
-      stubPersistedFlags({ onboardingSeen: true, permissionHandled: true, lastActiveSessionId: 'session-99' });
+      stubPersistedFlags({
+        onboardingSeen: true,
+        permissionHandled: true,
+        lastActiveSessionId: 'session-99',
+      });
       mockFetchSession.mockResolvedValue({
         ok: true,
         value: { status: 'active', started_at: '2026-07-28T12:00:00.000Z' },
@@ -464,7 +472,11 @@ describe('App', () => {
     });
 
     it('routes straight to Session Completion when the session already ended while away', async () => {
-      stubPersistedFlags({ onboardingSeen: true, permissionHandled: true, lastActiveSessionId: 'session-99' });
+      stubPersistedFlags({
+        onboardingSeen: true,
+        permissionHandled: true,
+        lastActiveSessionId: 'session-99',
+      });
       mockFetchSession.mockResolvedValue({
         ok: true,
         value: { status: 'completed', started_at: '2026-07-28T12:00:00.000Z' },

@@ -1,13 +1,9 @@
 const mockInit = jest.fn();
 const mockCaptureException = jest.fn();
-jest.mock(
-  '@sentry/react-native',
-  () => ({
-    init: (...args: unknown[]) => mockInit(...args),
-    captureException: (...args: unknown[]) => mockCaptureException(...args),
-  }),
-  { virtual: true },
-);
+jest.mock('@sentry/react-native', () => ({
+  init: (...args: unknown[]) => mockInit(...args),
+  captureException: (...args: unknown[]) => mockCaptureException(...args),
+}));
 
 import { initMonitoring } from './monitoring';
 

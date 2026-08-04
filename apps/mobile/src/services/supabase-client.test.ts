@@ -7,7 +7,8 @@ import { SUPABASE_ANON_KEY, SUPABASE_URL } from '../config/supabase-config';
 // module, session persisted in AsyncStorage (React Native has no
 // localStorage), tokens auto-refreshing, and no browser URL detection.
 // @supabase/supabase-js and AsyncStorage are native/npm dependencies not yet
-// installed at test-writing time, so both are mocked virtually (same pattern
+// installed at test-writing time; both are now installed and mocked
+// normally (same pattern
 // as react-native-localize in init-i18n.test.ts) — no test touches the
 // network; determinism rule, .claude/skills/testing-standards/SKILL.md.
 
@@ -34,19 +35,14 @@ const mockAsyncStorage = {
   setItem: jest.fn<Promise<void>, [string, string]>(),
 };
 
-jest.mock(
-  '@supabase/supabase-js',
-  () => ({
-    createClient: (...args: [string, string, ClientOptionsStub?]) => mockCreateClient(...args),
-  }),
-  { virtual: true },
-);
+jest.mock('@supabase/supabase-js', () => ({
+  createClient: (...args: [string, string, ClientOptionsStub?]) => mockCreateClient(...args),
+}));
 
-jest.mock(
-  '@react-native-async-storage/async-storage',
-  () => ({ __esModule: true, default: mockAsyncStorage }),
-  { virtual: true },
-);
+jest.mock('@react-native-async-storage/async-storage', () => ({
+  __esModule: true,
+  default: mockAsyncStorage,
+}));
 
 interface SupabaseClientModule {
   readonly getSupabaseClient: () => unknown;

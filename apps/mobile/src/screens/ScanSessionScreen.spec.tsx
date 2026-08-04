@@ -31,9 +31,14 @@ interface DeviceLocaleStub {
   readonly languageCode: string;
   readonly languageTag: string;
 }
-const EN_US: DeviceLocaleStub = { countryCode: 'US', isRTL: false, languageCode: 'en', languageTag: 'en-US' };
+const EN_US: DeviceLocaleStub = {
+  countryCode: 'US',
+  isRTL: false,
+  languageCode: 'en',
+  languageTag: 'en-US',
+};
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>(() => [EN_US]);
-jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }), { virtual: true });
+jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }));
 
 import ScanSessionScreen from './ScanSessionScreen';
 
@@ -85,7 +90,10 @@ describe('ScanSessionScreen', () => {
     it('navigates to SessionDetails with the entered token', async () => {
       await renderScreen();
 
-      await fireEvent.changeText(screen.getByTestId('scan-session-token-input'), '  raw-token-value  ');
+      await fireEvent.changeText(
+        screen.getByTestId('scan-session-token-input'),
+        '  raw-token-value  ',
+      );
       await fireEvent.press(screen.getByTestId('scan-session-continue'));
 
       expect(mockNavigate).toHaveBeenCalledWith('SessionDetails', { token: 'raw-token-value' });

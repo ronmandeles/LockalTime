@@ -63,11 +63,12 @@ Two levels only — resist adding more, it's a fast way to make a "calm" UI look
 
 ## 5. Typography scale
 
-A fixed ramp, not per-screen font-size choices. **Typeface: use the OS system font** (San Francisco on iOS, Roboto on Android — RN's `System` font family gives this automatically per-platform, no custom font files needed). This is a direct Apple HIG recommendation (San Francisco is engineered specifically for on-screen legibility) and the pragmatic cross-platform default — it's a typeface decision, not a color decision, so it's not part of the deferred palette work. Color itself remains deferred.
+A fixed ramp, not per-screen font-size choices. **Typeface: use the OS system font** (San Francisco on iOS, Roboto on Android — RN's `System` font family gives this automatically per-platform, no custom font files needed). This is a direct Apple HIG recommendation (San Francisco is engineered specifically for on-screen legibility) and the pragmatic cross-platform default.
 
 | Token | Size | Weight | Usage |
 |---|---|---|---|
-| `text-display` | 28px | Bold | Big numbers: points totals, the countdown timer |
+| `text-display-large` | 34px | Bold | The onboarding welcome headline **only** — one step above `text-display`, which remains the largest size any in-app screen uses |
+| `text-display` | 28px | Bold | Big numbers: points totals, the countdown timer; the Permission and Auth screen titles |
 | `text-heading` | 20px | Semibold | Screen titles, section headers |
 | `text-body` | 16px | Regular | Default reading text |
 | `text-body-strong` | 16px | Semibold | Emphasized inline text (e.g., a bonus percentage in a receipt) |
@@ -85,6 +86,8 @@ Line height: 1.4× the font size across all tokens, no exceptions, for consisten
 | Icon size (standard) | 24px |
 | Icon size (large, e.g., tab bar) | 28px |
 | Avatar size (participant list) | 36px, `radius-full` |
+| Hero logo (onboarding welcome) | 160px, `radius-full` — a **maximum**, capped against window height on short screens so the pinned CTA can't be pushed off |
+| Icon badge (permission priming) | 100px circle, `radius-full`, filled `primarySubtle`, holding a glyph at roughly half its diameter |
 
 ## 7. Motion & micro-interaction principles
 
@@ -113,6 +116,8 @@ A fixed, deliberate mapping — not sprinkled in ad hoc. iOS exposes this native
 
 Applies to Screens 1–3. Grounded in current published UX research on first-session retention, not invented for this project:
 - **Maximum 3–5 screens** before reaching a meaningful first action (matches our existing 3: Onboarding → Permission → Auth).
+- **Screen 1 is a single welcome page**, not a carousel. It was three swipeable pages with pagination dots and a skip link; the owner's call was that a first impression should be one clear statement rather than three, and the two dropped pages' copy ("how sessions work", "why permissions matter") was removed from the locale bundles rather than left orphaned. Where that messaging should reappear is an open product/copy question.
+- **Screens 1–3 share one visual language**: pure-black page, a centred hero mark or icon badge, a bold centred title, muted centred body copy, and a full-width navy-gradient CTA pinned near the bottom (`GradientButton`).
 - **Get to a first meaningful action within ~60 seconds** of first open — for us, that's landing on Home with a clear "Create Session" / "Scan QR" choice, not a longer tour.
 - Each onboarding screen should earn its place by resolving one specific hesitation (why permissions are needed, why to sign up) — not by explaining the whole product.
 
@@ -122,60 +127,102 @@ iOS and Android share the exact same tokens above — React Native's shared styl
 
 ## 11. Open / deferred
 
-- Dark mode — not yet discussed; no theme-switching infrastructure exists (the app has one fixed light palette, §12). Revisit if/when it comes up.
+- Light mode — **the app is now dark** (§12: pure black with a navy accent), and that is its only appearance. There is still **no theme-switching infrastructure and no light variant**: the palette does not respond to the OS theme setting, and every screen renders the same values regardless of it. A light variant would mean threading a theme through every screen that currently imports tokens directly — a real piece of work, not a token swap. Revisit if/when it comes up.
 
-## 12. Color palette (Phase 7)
+## 12. Color palette
 
-Landed this phase, replacing every screen's independently-picked neutral
-literal — several near-duplicate grays (`#444444`/`#666666`/`#888888`/
-`#999999` all meaning roughly "de-emphasized text" in different files) were
-consolidated into one named scale, and one real accent color was
-introduced (previously every "primary" element — CTA buttons, progress
-fills, selected/active states — used the same flat neutral as body text,
-indistinguishable from it). All of it lives in `apps/mobile/src/theme/tokens.ts`'s
-`colors` export (`tokens.test.ts` pins the exact values) — screens import
-from there, never a raw hex literal.
+**Pure black with a navy-blue accent.** The app went dark in one pass after
+Phase 7's light teal palette shipped; only the token **values** changed, and
+every token kept its name and semantic role. That is what made a whole-app
+repaint a one-file change: no screen holds a hex literal, so all 17 of them
+followed these values into dark mode without an edit.
 
-**Surfaces**
-| Token | Value | Use |
-|---|---|---|
-| `background` | `#FFFFFF` | Page background |
-| `surface` | `#F5F5F5` | Cards, summary blocks |
-| `surfaceActive` | `#DDDDDD` | Pressed/active state of a surface element |
-| `border` | `#E0E0E0` | Dividers, subtle borders |
-| `borderStrong` | `#CCCCCC` | Input borders, more visible dividers |
-| `black` | `#000000` | Camera viewfinder letterboxing only — a technical necessity, not part of the semantic scale |
+All of it lives in `apps/mobile/src/theme/tokens.ts`'s `colors` export —
+screens import from there, never a raw hex literal. `tokens.test.ts` pins the
+exact values **and computes the contrast ratios below**, so a value nudged
+past WCAG AA fails the suite rather than merely contradicting this table.
 
-**Text** (darkest/strongest to lightest/most muted)
-| Token | Value | Use |
-|---|---|---|
-| `textPrimary` | `#222222` | Titles, primary values, strong emphasis |
-| `textSecondary` | `#444444` | Body copy |
-| `textMuted` | `#666666` | Captions, secondary labels |
-| `textFaint` | `#999999` | Lowest-emphasis text |
-| `placeholder` | `#888888` | Input placeholder text |
+**Surfaces** — neutral greys on true black. The accent carries all the colour;
+the surfaces stay deliberately colourless.
+| Token | Value | vs `background` | Use |
+|---|---|---|---|
+| `background` | `#000000` | — | Page background |
+| `surface` | `#1C1C1E` | 1.23 | Cards, summary blocks, inputs, provider buttons, dialogs |
+| `surfaceActive` | `#2C2C2E` | 1.51 | Pressed/active state of a surface element |
+| `border` | `#2C2C2E` | 1.51 | Dividers, subtle borders |
+| `borderStrong` | `#3A3A3C` | 1.85 | Input borders, dialog edges, more visible dividers |
+| `black` | `#000000` | — | Camera viewfinder letterboxing only — a technical necessity, not part of the semantic scale. It now happens to equal `background`; the two roles stay separate |
 
-**Brand accent** — a calm, grounded teal. This is a distraction-blocking/
-wellbeing app, not a game; the accent reads as focused, not stimulating.
-Used for primary CTAs, selected/active states, and progress fills —
-**never** for plain body text (that stays `textPrimary`/`textSecondary`).
-| Token | Value | Use |
-|---|---|---|
-| `primary` | `#0F6B5C` | Primary CTA fill, active/selected state, progress fill |
-| `primaryPressed` | `#0B554A` | Reserved for a pressed-state treatment if one is added later |
-| `onPrimary` | `#FFFFFF` | Text/icon color on a `primary`-filled surface |
+**Text** (strongest to most muted). Every one clears WCAG AA (4.5:1) against
+**both** `background` and `surface`.
+| Token | Value | vs `background` | vs `surface` | Use |
+|---|---|---|---|---|
+| `textPrimary` | `#FFFFFF` | 21.00 | 17.01 | Titles, primary values, strong emphasis |
+| `textSecondary` | `#C7C7CC` | 12.47 | 10.10 | Body copy |
+| `textMuted` | `#8D8D92` | 6.36 | 5.15 | Captions, secondary labels, onboarding body copy, escape-hatch links |
+| `textFaint` | `#86868C` | 5.80 | 4.70 | Lowest-emphasis text (e.g. the legal disclosure) |
+| `placeholder` | `#8A8A8F` | 6.11 | 4.95 | Input placeholder text |
 
-**Semantic** (§11's original deferred ask — "success/warning colors")
-| Token | Value | Use |
-|---|---|---|
-| `danger` | `#B00020` | Error text |
-| `warning` | `#B25E09` | Attention-worthy-but-not-fatal states (e.g. `StatusBanner`'s "prominent" weight) |
-| `success` | `#1E8E3E` | Reserved — no caller yet |
+**Brand accent** — navy blue, deliberately **brightened** from a true navy
+(`#1B2A6B` family): on black, a true navy is too low-contrast to work as a
+button fill. Used for CTA fills, selected/active states, progress fills, and
+inline links — **never** for plain body text.
+| Token | Value | vs `background` | White label | Use |
+|---|---|---|---|---|
+| `primary` | `#3563D8` | 3.93 | 5.35 | Active/selected state, progress fill, inline links |
+| `primaryPressed` | `#2A50BC` | 2.97 | — | Reserved; **no caller**. Unconstrained by design — a pressed state is only visible while a finger covers the control |
+| `primaryGradientStart` | `#2F5BD0` | 3.53 | 5.95 | CTA gradient, left end |
+| `primaryGradientEnd` | `#3B6FE0` | 4.54 | 4.63 | CTA gradient, right end |
+| `primarySubtle` | `#0C1428` | 1.15 | — | Icon-badge fill (the accent at ~12% over black) |
+| `onPrimary` | `#FFFFFF` | — | — | Text/icon colour on a `primary`-filled surface |
+| `link` | `#5B8AF0` | 6.34 | — | Inline text links. The accent again, lightened until it is legible **as text** |
+
+> `primary` is used **only** as a fill or border, never as text, so WCAG's 3:1
+> non-text rule applies rather than 4.5:1. **Words get `link` instead** —
+> `primary` measures 3.93:1 on black, which is fine behind a button and below
+> the bar for text. This distinction is enforced, not merely written down:
+> `text-color-usage.test.ts` reads every screen and component source and
+> fails if a fill-only token appears as a `color:`. It exists because the
+> repaint made exactly this mistake once, and the suite stayed green.
+>
+> The gradient is squeezed from **both** sides: too dark and the button's edge
+> stops being perceivable against black (WCAG 1.4.11, 3:1); too light and the
+> white label fails AA. Both ends clear both bars — that is the whole reason
+> this pair of values is what it is.
+
+**Semantic** — lightened for a dark surface; the previous values (`#B00020`
+etc.) are unreadable on black.
+| Token | Value | vs `background` | vs `surface` | Use |
+|---|---|---|---|---|
+| `danger` | `#FF6B7A` | 7.64 | 6.19 | Error text |
+| `warning` | `#F0A34A` | 10.04 | 8.14 | Attention-worthy-but-not-fatal states (e.g. `StatusBanner`'s "prominent" weight) |
+| `success` | `#4ADE80` | 12.05 | 9.76 | Reserved — no caller yet |
 
 **Overlay**
 | Token | Value | Use |
 |---|---|---|
-| `overlay` | `#44444488` | Semi-transparent dialog scrim |
+| `overlay` | `#000000CC` | Semi-transparent dialog scrim |
 
-No dark mode variant exists (§11) — these are the only values, used
-identically regardless of OS theme setting.
+**The CTA gradient.** The onboarding flow's primary button is a
+left-to-right gradient between `primaryGradientStart` and
+`primaryGradientEnd`, rendered by React Native's built-in CSS gradient
+support (`experimental_backgroundImage`) rather than a native gradient
+package — no Podfile or Gradle change, and no risk to the macOS iOS build
+job, for one button. It lives in exactly one component
+(`src/components/GradientButton.tsx`), so the `experimental_` prefix is a
+single-file liability if a future RN upgrade renames it. **The gradient does
+not mirror under RTL** — a gradient is a paint instruction, not layout, so
+React Native will not flip it, and branching a style on locale is forbidden
+(`.claude/skills/i18n/SKILL.md`). The direction is `to right`
+unconditionally; judging the asymmetry on a real RTL device is a manual-QA
+item.
+
+**Two surfaces the palette does NOT reach.** The OS paints both before React
+Native mounts, so neither can read a JS token: iOS's launch storyboard
+(`ios/LockalTime/LaunchScreen.storyboard`) and Android's window background
+(`android/app/src/main/res/values/{colors,styles}.xml`). Both are set to
+black by hand and pinned by `__tests__/native-config.test.ts`; keeping them
+in sync with `background` is a manual obligation.
+
+There is no light variant and no theme switching (§11) — these are the only
+values, used identically regardless of the OS theme setting.

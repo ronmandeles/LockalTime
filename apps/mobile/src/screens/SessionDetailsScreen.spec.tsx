@@ -30,9 +30,14 @@ interface DeviceLocaleStub {
   readonly languageCode: string;
   readonly languageTag: string;
 }
-const EN_US: DeviceLocaleStub = { countryCode: 'US', isRTL: false, languageCode: 'en', languageTag: 'en-US' };
+const EN_US: DeviceLocaleStub = {
+  countryCode: 'US',
+  isRTL: false,
+  languageCode: 'en',
+  languageTag: 'en-US',
+};
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>(() => [EN_US]);
-jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }), { virtual: true });
+jest.mock('react-native-localize', () => ({ getLocales: () => mockGetLocales() }));
 
 import SessionDetailsScreen from './SessionDetailsScreen';
 
@@ -193,7 +198,9 @@ describe('SessionDetailsScreen', () => {
       await fireEvent.press(screen.getByTestId('session-details-recovery-action'));
 
       await waitFor(() => expect(mockJoinSession).toHaveBeenCalledTimes(2));
-      await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('ActiveSession', { sessionId: 'session-1' }));
+      await waitFor(() =>
+        expect(mockNavigate).toHaveBeenCalledWith('ActiveSession', { sessionId: 'session-1' }),
+      );
     });
   });
 
@@ -247,7 +254,10 @@ describe('SessionDetailsScreen', () => {
     });
 
     it('calls joinVenueSession instead of joinSession when the preview reports a venue token', async () => {
-      mockPreviewSession.mockResolvedValue({ ok: true, value: { ...DEFAULT_PREVIEW, tokenKind: 'venue' } });
+      mockPreviewSession.mockResolvedValue({
+        ok: true,
+        value: { ...DEFAULT_PREVIEW, tokenKind: 'venue' },
+      });
       mockJoinVenueSession.mockResolvedValue({ ok: true, value: { sessionId: 'session-1' } });
       await renderScreen();
       await screen.findByTestId('session-details-participant-count');
@@ -306,7 +316,11 @@ describe('SessionDetailsScreen (rejoin mode — route params has sessionId, not 
   it('shows elapsed minutes from the real session row', async () => {
     mockFetchSession.mockResolvedValue({
       ok: true,
-      value: { id: 'session-1', started_at: new Date(Date.now() - 12 * 60_000).toISOString(), status: 'active' },
+      value: {
+        id: 'session-1',
+        started_at: new Date(Date.now() - 12 * 60_000).toISOString(),
+        status: 'active',
+      },
     });
 
     await renderScreen(rejoinRouteStub);
@@ -315,12 +329,12 @@ describe('SessionDetailsScreen (rejoin mode — route params has sessionId, not 
   });
 
   it.each`
-    code                        | expectedMessage
-    ${'session_not_found'}      | ${en.sessionDetails.errors.session_not_found}
-    ${'session_not_joinable'}   | ${en.sessionDetails.errors.session_not_joinable}
-    ${'session_at_capacity'}    | ${en.sessionDetails.errors.session_at_capacity}
+    code                         | expectedMessage
+    ${'session_not_found'}       | ${en.sessionDetails.errors.session_not_found}
+    ${'session_not_joinable'}    | ${en.sessionDetails.errors.session_not_joinable}
+    ${'session_at_capacity'}     | ${en.sessionDetails.errors.session_at_capacity}
     ${'not_a_prior_participant'} | ${en.sessionDetails.errors.not_a_prior_participant}
-    ${'some_unmapped_code'}     | ${en.sessionDetails.errors.unknown}
+    ${'some_unmapped_code'}      | ${en.sessionDetails.errors.unknown}
   `('renders the $code failure as its own distinct message', async ({ code, expectedMessage }) => {
     mockRejoinSession.mockResolvedValue({ ok: false, error: { code, message: 'diagnostic only' } });
     await renderScreen(rejoinRouteStub);
@@ -331,7 +345,7 @@ describe('SessionDetailsScreen (rejoin mode — route params has sessionId, not 
     expect(mockNavigate).not.toHaveBeenCalled();
   });
 
-  it("navigates to Home when a rejoin fails as not_a_prior_participant — the dead-end fix", async () => {
+  it('navigates to Home when a rejoin fails as not_a_prior_participant — the dead-end fix', async () => {
     mockRejoinSession.mockResolvedValue({
       ok: false,
       error: { code: 'not_a_prior_participant', message: 'x' },

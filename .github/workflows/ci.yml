@@ -87,6 +87,45 @@ jobs:
       - run: npm run test:integration
         working-directory: apps/mobile
 
+  android-build:
+    name: android (assembleDebug — compiles the native project)
+    # Nothing in CI compiled Android until this job existed. That left a real
+    # blind spot rather than a theoretical one: the `mobile` job runs Jest,
+    # which can assert that an Android resource FILE contains certain text but
+    # never that the project actually builds — so a bad `@color/...`
+    # reference, a malformed styles.xml, or a Kotlin error in the blocker
+    # module would reach a device untouched by CI. The black+navy theme change
+    # edited styles.xml and added colors.xml with exactly that exposure.
+    #
+    # assembleDebug, not assembleRelease: debug signs with the checked-in
+    # debug keystore, so this job needs no secrets. Release signing is covered
+    # by the runbook in docs/DEPLOYMENT.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+      # The React Native Gradle Plugin reads node_modules, so JS deps must be
+      # installed before Gradle runs even though nothing here executes JS.
+      - run: npm ci
+        working-directory: apps/mobile
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # React Native 0.86's Gradle plugin requires JDK 17+.
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      # One ABI, not the three in gradle.properties: this job exists to prove
+      # the project COMPILES and its resources link, and that answer is
+      # identical per-ABI while the build is ~3x cheaper. Multi-ABI output is
+      # a packaging concern, and packaging is the release build's job.
+      - name: assembleDebug (arm64-v8a only)
+        run: ./gradlew assembleDebug -PreactNativeArchitectures=arm64-v8a --no-daemon
+        working-directory: apps/mobile/android
+
   ios-build:
     name: ios (macOS CI — first real xcodebuild compile)
     # Phase 7 (Release Prep): the Swift blocker code

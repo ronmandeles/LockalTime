@@ -8,8 +8,12 @@ appId: com.lockaltime.app
 # into the next one via `-e OTP_CODE=...`. See e2e/README.md.
 - launchApp:
     clearState: true
+# The welcome screen is a single page whose CTA is the only way forward —
+# the old 'onboarding-skip' link no longer exists. `optional: true` means a
+# stale id here would NOT error, it would silently no-op and leave the app
+# sitting on onboarding until an unrelated assertion failed further down.
 - tapOn:
-    id: 'onboarding-skip'
+    id: 'onboarding-primary-cta'
     optional: true
 - tapOn:
     id: 'permission-allow-cta'

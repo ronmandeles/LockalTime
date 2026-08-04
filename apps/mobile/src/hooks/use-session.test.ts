@@ -45,7 +45,9 @@ const INTERVAL_ROW = {
 describe('useSession', () => {
   beforeEach(() => {
     mockFetchSession.mockReset().mockResolvedValue({ ok: true, value: SESSION_ROW });
-    mockFetchOpenPresenceIntervals.mockReset().mockResolvedValue({ ok: true, value: [INTERVAL_ROW] });
+    mockFetchOpenPresenceIntervals
+      .mockReset()
+      .mockResolvedValue({ ok: true, value: [INTERVAL_ROW] });
     mockUnsubscribe.mockClear();
     mockTrackPresence.mockClear();
     mockSubscribeToSessionChannel.mockReset().mockReturnValue({

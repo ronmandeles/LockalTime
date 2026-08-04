@@ -43,13 +43,9 @@ const EN_US: DeviceLocaleStub = {
 
 const mockGetLocales = jest.fn<DeviceLocaleStub[], []>();
 
-jest.mock(
-  'react-native-localize',
-  () => ({
-    getLocales: () => mockGetLocales(),
-  }),
-  { virtual: true },
-);
+jest.mock('react-native-localize', () => ({
+  getLocales: () => mockGetLocales(),
+}));
 
 import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
@@ -84,7 +80,9 @@ const AUTHENTICATED_STATE = {
 const UNAUTHENTICATED_STATE = { auth: { status: 'unauthenticated' as const } };
 
 const mockNavigate = jest.fn();
-const navigationStub = { navigate: mockNavigate } as unknown as Parameters<typeof HomeScreen>[0]['navigation'];
+const navigationStub = { navigate: mockNavigate } as unknown as Parameters<
+  typeof HomeScreen
+>[0]['navigation'];
 const routeStub = { key: 'Home', name: 'Home' as const, params: undefined };
 
 const renderHomeScreenIn = async (locale: 'en' | 'he'): Promise<void> => {
@@ -216,9 +214,7 @@ describe('HomeScreen', () => {
 
     await renderHomeScreenIn('en');
 
-    await waitFor(() =>
-      expect(screen.getByText(en.home.summary.streakNone)).toBeOnTheScreen(),
-    );
+    await waitFor(() => expect(screen.getByText(en.home.summary.streakNone)).toBeOnTheScreen());
   });
 
   it('shows a milestone progress bar naming the next uncrossed milestone', async () => {

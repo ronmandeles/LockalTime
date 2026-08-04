@@ -2,9 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useTranslation } from 'react-i18next';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
+import GradientButton from '../components/GradientButton';
+import IconBadge from '../components/IconBadge';
+import LogoMark from '../components/LogoMark';
 import { blockingPermissions, requestBatteryOptimizationExemption } from '../services/blocking-permissions';
-import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
+import { colors, sizing, spacing, typography } from '../theme/tokens';
 
 // Permission-priming screen (Screen 2), DESIGN_GUIDELINES §9: one screen
 // resolving the "why permissions" hesitation, one primary action per state
@@ -93,81 +97,98 @@ const PermissionPrimingScreen = ({
     return () => subscription.remove();
   }, []);
 
+  // The reference design's shield-and-lock glyph has no equivalent here (no
+  // icon library, and adding one would be this change's only native-linking
+  // risk), so the badge holds the Lockal Time ring mark instead, tinted with
+  // the accent and sized to sit inside the circle the way the reference's
+  // glyph does.
+  const badge = (
+    <IconBadge testID="permission-icon-badge">
+      <LogoMark
+        color={colors.primary}
+        size={sizing.iconBadge / 2}
+        testID="permission-icon-badge-mark"
+      />
+    </IconBadge>
+  );
+
   return (
-    <View style={styles.container} testID="permission-priming-screen">
+    <SafeAreaView style={styles.container} testID="permission-priming-screen">
       {screenState === 'priming' ? (
         <>
           <View style={styles.content}>
+            {badge}
             <Text style={styles.title}>{t('permissionPriming.title')}</Text>
             <Text style={styles.body}>{t('permissionPriming.body')}</Text>
           </View>
-          <TouchableOpacity
+          <GradientButton
+            label={t('permissionPriming.allow')}
             onPress={handleAllowPress}
-            style={styles.primaryCta}
             testID="permission-allow-cta"
+          />
+          {/* The escape hatch is offered up front, not only after a refusal
+              (docs/NAVY_THEME_PLAN.md §1). Its own testID and locale key,
+              separate from the denied state's proceed-anyway below: the two
+              live in different states and their copy may diverge. */}
+          <TouchableOpacity
+            onPress={onHandled}
+            style={styles.secondaryLink}
+            testID="permission-maybe-later"
           >
-            <Text style={styles.primaryCtaLabel}>{t('permissionPriming.allow')}</Text>
+            <Text style={styles.secondaryLinkLabel}>{t('permissionPriming.maybeLater')}</Text>
           </TouchableOpacity>
         </>
       ) : (
         <>
           <View style={styles.content}>
+            {badge}
             <Text style={styles.title}>{t('permissionPriming.denied.title')}</Text>
             <Text style={styles.body}>{t('permissionPriming.denied.body')}</Text>
           </View>
-          <TouchableOpacity
+          <GradientButton
+            label={t('permissionPriming.denied.openSettings')}
             onPress={handleOpenSettingsPress}
-            style={styles.primaryCta}
             testID="permission-open-settings-cta"
-          >
-            <Text style={styles.primaryCtaLabel}>{t('permissionPriming.denied.openSettings')}</Text>
-          </TouchableOpacity>
+          />
           <TouchableOpacity
             onPress={onHandled}
-            style={styles.proceedAnyway}
+            style={styles.secondaryLink}
             testID="permission-proceed-anyway"
           >
-            <Text style={styles.proceedAnywayLabel}>
+            <Text style={styles.secondaryLinkLabel}>
               {t('permissionPriming.denied.proceedAnyway')}
             </Text>
           </TouchableOpacity>
         </>
       )}
-    </View>
+    </SafeAreaView>
   );
 };
 
-// Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
   body: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: colors.textMuted,
     marginTop: spacing.md,
+    textAlign: 'center',
   },
   container: {
     backgroundColor: colors.background,
     flex: 1,
-    paddingBottom: spacing.xl,
+    paddingBottom: spacing['2xl'],
     paddingEnd: spacing.xl,
     paddingStart: spacing.xl,
     paddingTop: spacing.xl,
   },
   content: {
+    alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
   },
-  primaryCta: {
-    alignItems: 'center',
-    backgroundColor: colors.primary,
-    borderRadius: radius.md,
-    height: sizing.buttonHeight,
-    justifyContent: 'center',
-  },
-  primaryCtaLabel: {
-    ...typography.bodyStrong,
-    color: colors.onPrimary,
-  },
-  proceedAnyway: {
+  // Both escape hatches (priming's maybe-later, denied's proceed-anyway).
+  // Deliberately NOT the reference design's muted green for this link: that
+  // colour measures 3.14:1 on black and fails WCAG AA.
+  secondaryLink: {
     alignItems: 'center',
     alignSelf: 'center',
     justifyContent: 'center',
@@ -175,13 +196,15 @@ const styles = StyleSheet.create({
     minHeight: sizing.minTouchTarget,
     minWidth: sizing.minTouchTarget,
   },
-  proceedAnywayLabel: {
+  secondaryLinkLabel: {
     ...typography.body,
-    color: colors.textSecondary,
+    color: colors.textMuted,
   },
   title: {
-    ...typography.heading,
+    ...typography.display,
     color: colors.textPrimary,
+    marginTop: spacing.xl,
+    textAlign: 'center',
   },
 });
 
