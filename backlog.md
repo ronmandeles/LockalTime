@@ -2,6 +2,8 @@
 
 Tracked per our working contract: one atomic task at a time, test-first, this file updated (`[x]`) the moment a task closes, alongside any `.md` file whose claims changed.
 
+This file is the **authoritative per-task state**. For the phase-level narrative — what shipped, what's inert, what's still open — see [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md).
+
 ## Phase 0 — Bootstrap
 Prerequisites: none.
 
