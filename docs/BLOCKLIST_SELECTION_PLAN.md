@@ -247,11 +247,44 @@ Add "This session blocks: Social, Games, Instagram."
   categories and apps on their own device, minting their own tokens. This is the
   only moment an iOS device can acquire them.
 
-Apple's picker cannot be pre-seeded or highlighted, so the member finds the items
-themselves — the screen above it must therefore name them plainly. We also cannot
-verify they picked correctly; like every client-side blocking signal in this app,
-the server never treats it as trusted (`use-app-blocker.ts` header,
-ARCHITECTURE §5/§8).
+**This is a re-selection, not a confirmation dialog.** The member finds and taps
+each item in Apple's sheet themselves, using its search field. We cannot pre-tick
+the items for a first-time selection, because pre-ticking needs the tokens and not
+having them is the entire reason the step exists. Roughly 15–20 seconds for three
+items. Android members skip all of it.
+
+Two things reduce the friction:
+
+**Instruction text inside Apple's sheet.** `FamilyActivityPicker` accepts header
+and footer text, so "Select: Instagram, TikTok" renders inside Apple's own UI —
+the member isn't working from memory of the previous screen.
+
+**Selection cache — skip the picker on a repeat blocklist.** On completing a
+selection, persist it in the App Group *paired with the blocklist string it was
+made for*. A later session whose blocklist matches that string reuses the saved
+selection and never presents the picker. This reads no tokens; it only remembers a
+pairing we ourselves created.
+
+The cache is keyed on the **whole blocklist**, so `[social, instagram]` reuses,
+while `[social, instagram, tiktok]` is a different key and re-prompts.
+
+*Owner decision 2026-08-07: cache with no periodic re-prompt.* The accepted risk is
+token rotation (§2) — a stale cached selection can silently shield nothing, and we
+cannot detect it, which fails in the under-blocking direction. Logged here as an
+accepted limitation alongside Safe Mode and the suspended-app cutoff, not as a
+solved problem. A periodic re-prompt was offered and declined.
+
+**Not yet decided — per-app token learning by subtraction.** Tokens are opaque but
+`Hashable`, so pre-seeding the picker with a cached set and letting the user add
+one item yields that item's token by set difference. Repeated over normal use this
+builds a per-app map, after which *any* combination composes with no picker at all
+— making the cache work per-app rather than per-combination. Deliberately not
+included: it deepens exposure to the same rotation bug the decision above already
+accepts. Green-light separately if wanted.
+
+We also cannot verify the member picked correctly. Like every client-side blocking
+signal in this app, the server never treats it as trusted (`use-app-blocker.ts`
+header, ARCHITECTURE §5/§8).
 
 `markBlockerReady` gates the Group Bonus (`use-app-blocker.ts` ~line 64), so on
 iOS it fires after the picker closes, not on tap. Cancelling the picker means not
@@ -306,6 +339,9 @@ apps with a launcher intent also drops most system services.
 | Pre-existing sessions | Column default reproduces today's behaviour |
 | iOS host picks specific apps | Chosen from the catalog (shareable), then confirmed in Apple's picker for their own device (§7) |
 | iOS user cancels the picker at join | Not joined. No half-joined state, and no `markBlockerReady` |
+| iOS repeat session, same blocklist | Cached selection reused, no picker (§7) |
+| iOS repeat session, blocklist changed | Different cache key, picker re-presented |
+| Cached iOS selection gone stale via token rotation | Undetectable; accepted limitation (§7) |
 | Host picks an app absent from the catalog | Android-host only; an iOS host cannot name it (§2) |
 | RTL | App names come from the OS untranslated; rows must be RTL-safe per the i18n skill |
 
@@ -346,8 +382,8 @@ Six backlog tasks, each closable with a green suite. Tests first
    default.
 5. **Enforcement wiring** — packages through `start()`, service poll,
    `BootPersistence`, `SessionRow`/`SESSION_COLUMNS`.
-6. **Join flow** — Screen 8 blocklist display, iOS confirm-in-picker, both
-   platforms.
+6. **Join flow** — Screen 8 blocklist display, iOS re-selection in Apple's picker
+   with header text and the blocklist-keyed selection cache, both platforms.
 
 Tasks 1 and 2 are independent roots; 3 and 4 depend on 2, 5 on 1, 6 on 1 and 4.
 Task 2 before 3 deliberately: the catalog makes the whole feature demonstrable on
