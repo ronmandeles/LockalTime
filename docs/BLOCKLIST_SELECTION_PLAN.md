@@ -129,6 +129,28 @@ reproduces today's behaviour, so any path not yet updated keeps working.
 `grant select on table` is table-wide and covers later-added columns, so no grant
 change is needed — worth one pgTAP assertion to prove it rather than assume it.
 
+### Venue sessions carry an approved blocklist
+
+*Owner decision 2026-08-07.* A `static_qr` venue session seats up to 200 strangers
+and the business chooses what they block — nothing otherwise stops a café blocking
+a competitor's app. So a venue's blocklist is **approved out of band**, matching how
+Verified Host itself is granted today (a manual flag in Supabase, no in-app flow —
+ARCHITECTURE §10):
+
+```sql
+alter table public.venues
+  add column approved_blocked_categories text[] not null default '{social,games,entertainment}',
+  add column approved_blocked_packages   text[] not null default '{}';
+```
+
+A `static_qr` session's blocklist must be a **subset** of its venue's approved
+arrays; the server rejects anything else. A new venue defaults to the three
+categories, which is today's behaviour — so a business is useful immediately and
+only needs the owner's attention if it wants specific apps.
+
+This stays inside the "manual flag for now, V2 for a real application flow"
+position CLAUDE.md already records for B2B. It does not settle B2B monetization.
+
 **Future kind:** iOS also supports `webDomainTokens`. If website blocking is ever
 wanted, it's a third column, not a remodel.
 
@@ -142,8 +164,26 @@ wanted, it's a third column, not a remodel.
 | `POST /sessions/preview` | returns both, so Screen 8 can describe the session pre-join |
 
 Zod at the boundary (`.claude/skills/api-design/SKILL.md`): categories from the
-enum, packages against a package-name pattern, combined length ≥ 1, capped at 3
-categories and 50 packages to bound the payload.
+enum, packages against a package-name pattern
+(`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$`), combined length ≥ 1,
+capped at 3 categories and 50 packages to bound the payload.
+
+Plus two server-side rejections that do not depend on the client behaving:
+
+- **Safety denylist** — well-known dialer, SMS, Settings and our own package are
+  refused at the boundary, not only filtered out of the picker. Honest limit: the
+  *default* dialer is device-specific, so the server can only cover well-known
+  identifiers and the device-accurate check stays client-side (§8). Belt and
+  braces, not a complete guarantee.
+- **Venue subset check** — a `static_qr` session's blocklist must fall inside its
+  venue's approved arrays (§3).
+
+*Owner decision 2026-08-07:* pattern-match rather than catalog-only. The string is
+never executed, never a path, never interpolated into SQL — it is only ever
+compared on-device — so the injection surface is nil, and catalog-only would cap
+Android hosts at catalog apps and undo the full-enumeration choice. The real risk
+is a host blocking someone's phone app, which the denylist above addresses
+directly.
 
 **Honest framing of the non-empty rule:** it is an accident-guard, not an
 anti-abuse control. A host determined to game it can select one obscure app they
@@ -229,6 +269,20 @@ New section below session type:
 - Pre-filled from the user's last choice, editable per session (persisted
   client-side, following `active-session-store.ts`'s pattern).
 - Submit blocked with a message if nothing at all is selected.
+- **Verified host on `static_qr`:** the list is narrowed to the venue's approved
+  entries (§3), with a note explaining why rather than silently showing less.
+- **"You don't have 2 of these"** — a quiet note when the host selects apps not
+  installed on their own device (*owner decision 2026-08-07*). Detectable on
+  Android always, and on iOS only within the ~50 probed schemes, so its absence
+  proves nothing on iOS. Harmless either way: an app the host lacks is a no-op for
+  them and still blocks correctly for members who have it.
+- **List performance and a11y:** ~200 rows needs `FlatList` virtualization, not a
+  `map()` into a `ScrollView`. Each row carries `accessibilityRole="checkbox"` and
+  `accessibilityState={{ checked }}`, matching how the existing toggles on this
+  screen are already annotated.
+- **Bidi:** Latin app names sit inside Hebrew sentences on this screen. Names go in
+  their own `Text` node rather than interpolated into a sentence, so the bidi
+  algorithm can't reorder punctuation around them (i18n skill).
 
 The seam is what makes both platforms one component, and it doubles as the
 `QUERY_ALL_PACKAGES` mitigation (§10) — a refusal swaps Android onto the same
@@ -313,6 +367,27 @@ transfer) is the better long-term answer if windowing proves insufficient.
 must persist packages too, or a reboot resumes mid-session with a partial
 blocklist.
 
+**The overlay copy has to change.** It is one generic string today
+(`blocker_notification_text`) and should name what it blocked. Two consequences the
+plan previously missed: it needs a Hebrew counterpart in the Android string
+resources, and the overlay currently has **no i18n path at all** — it is a bare
+`TextView` built in Kotlin, outside i18next. Either add proper
+`values-iw/strings.xml` resources or pass the resolved copy in through `start()`.
+The second keeps one translation source of truth and is probably right.
+
+### The `shield_triggered` event needs a wider shape
+
+`BlockerEvent`'s `shield_triggered` carries `category: BlockedCategory`
+(`app-blocker.ts` ~line 47). A block triggered by a *package* has no valid value
+for that field. It becomes something like
+`{ reason: 'category', category } | { reason: 'package', packageName }`, with
+`toBlockerEvent`'s boundary validation widened to match — it currently rejects any
+payload whose `category` isn't one of the three known strings, so a
+package-triggered event would be silently dropped today.
+
+Purely a UI-hint event, never trusted for points (ARCHITECTURE §5/§8), so this is
+a typing and validation change rather than a trust-boundary one.
+
 ### iOS
 
 No token-model change. The host picks on their phone, members pick on theirs,
@@ -343,11 +418,15 @@ apps with a launcher intent also drops most system services.
 | iOS repeat session, blocklist changed | Different cache key, picker re-presented |
 | Cached iOS selection gone stale via token rotation | Undetectable; accepted limitation (§7) |
 | Host picks an app absent from the catalog | Android-host only; an iOS host cannot name it (§2) |
+| Category and explicit app overlap | Pick `social` + `instagram` and Instagram is in both. Harmless for enforcement; the verifying screen must de-duplicate so it isn't listed twice |
+| Venue with nothing specifically approved | Defaults to the three categories — today's behaviour, useful immediately (§3) |
+| Venue host selects outside the approved set | Server rejects; the picker shouldn't have offered it, so this is the boundary catching a stale client |
+| Host has none of the apps they picked | Allowed, with the note in §7. They are choosing for the group, not themselves |
 | RTL | App names come from the OS untranslated; rows must be RTL-safe per the i18n skill |
 
 ---
 
-## 10. The Play review is the schedule risk
+## 10. Store-review risks on both platforms
 
 `QUERY_ALL_PACKAGES` is a restricted permission. It needs a Play Console
 declaration, review takes weeks, and it can be refused — in which case the app
@@ -360,7 +439,18 @@ iOS needs it. A refusal points the Android side of the §7 seam at that same
 catalog — a one-line change, no UI rewrite, no lost functionality beyond niche
 apps.
 
-Belongs in `docs/DEPLOYMENT.md` and `docs/MANUAL_QA.md`.
+### iOS — `LSApplicationQueriesSchemes`
+
+Declaring ~50 URL schemes to probe installed apps (§6) is a documented API, but
+Apple has historically scrutinised large scheme lists because the same mechanism is
+a known device-fingerprinting technique. Ours is a legitimate, user-visible use —
+filtering a picker to apps you actually have — and should be described that way in
+review notes rather than left to be inferred.
+
+Lower risk than the Play declaration, and it degrades gracefully: strip the schemes
+and the iOS picker simply shows the unfiltered catalog, which still works.
+
+Both belong in `docs/DEPLOYMENT.md` and `docs/MANUAL_QA.md`.
 
 ---
 
@@ -369,11 +459,13 @@ Belongs in `docs/DEPLOYMENT.md` and `docs/MANUAL_QA.md`.
 Six backlog tasks, each closable with a green suite. Tests first
 (`.claude/skills/testing-standards/SKILL.md`).
 
-1. **Schema + server** — migration with backfill, pgTAP for the constraints and
-   grants, zod validation on create, preview fields.
+1. **Schema + server** — migration with backfill (sessions *and* venues), pgTAP for
+   the constraints and grants, zod validation on create, the safety denylist, the
+   venue subset check, preview fields.
 2. **App catalog + source seam** — the bundled JSON (§6), package/name lookup,
-   and the seam the picker reads through. Pure TS, fully testable here, and it
-   unblocks the UI without waiting on native work. Includes the iOS
+   and the seam the picker reads through, with an integrity test (unique ids,
+   valid categories, well-formed package names). Pure TS, fully testable here, and
+   it unblocks the UI without waiting on native work. Includes the iOS
    `canOpenURL` installed-check behind the same seam (mocked in tests; the
    `LSApplicationQueriesSchemes` entries and real probing are manual QA).
 3. **`InstalledAppsModule`** — Android native module behind that seam, windowed
@@ -381,7 +473,8 @@ Six backlog tasks, each closable with a green suite. Tests first
 4. **Create Session UI** — category toggles, app picker, validation, persisted
    default.
 5. **Enforcement wiring** — packages through `start()`, service poll,
-   `BootPersistence`, `SessionRow`/`SESSION_COLUMNS`.
+   `BootPersistence`, `SessionRow`/`SESSION_COLUMNS`, the widened
+   `shield_triggered` shape, and overlay copy that names the blocked app.
 6. **Join flow** — Screen 8 blocklist display, iOS re-selection in Apple's picker
    with header text and the blocklist-keyed selection cache, both platforms.
 
@@ -415,8 +508,26 @@ Per `.claude/skills/platform-constraints/SKILL.md`:
 - `apps/mobile/src/config/blocked-categories.ts` — its header comment states the
   list is "not user- or session-configurable". It becomes the picker's *default*,
   not the enforced truth.
+- `docs/ARCHITECTURE.md` §10 — venue blocklists join Verified Host as a
+  manually-approved B2B flag (§3).
 - `backlog.md` — the six tasks above.
 - `docs/MANUAL_QA.md`, `docs/DEPLOYMENT.md` — §10 and §12.
+
+---
+
+## 15. Still open
+
+Not blocking implementation, but not decided either:
+
+- **Whether a migrated host can change the blocklist.** ARCHITECTURE §6 gives the
+  host "real and ongoing" authority, yet this plan freezes the blocklist for the
+  session's lifetime (§9) so nobody can weaken it mid-session. A promoted host
+  therefore inherits a list they didn't pick and can't alter. Consistent, but never
+  explicitly chosen.
+- **Whether the Active Session screen should show what's blocked.** Currently only
+  the pre-join screen does, so a participant mid-session has no reminder.
+- **B2B monetization**, unchanged from CLAUDE.md — §3's approval flow is an
+  anti-abuse measure, not a business model.
 
 ---
 
