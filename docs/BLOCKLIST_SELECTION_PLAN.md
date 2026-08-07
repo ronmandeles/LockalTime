@@ -328,17 +328,50 @@ cannot detect it, which fails in the under-blocking direction. Logged here as an
 accepted limitation alongside Safe Mode and the suspended-app cutoff, not as a
 solved problem. A periodic re-prompt was offered and declined.
 
-**Not yet decided — per-app token learning by subtraction.** Tokens are opaque but
-`Hashable`, so pre-seeding the picker with a cached set and letting the user add
-one item yields that item's token by set difference. Repeated over normal use this
-builds a per-app map, after which *any* combination composes with no picker at all
-— making the cache work per-app rather than per-combination. Deliberately not
-included: it deepens exposure to the same rotation bug the decision above already
-accepts. Green-light separately if wanted.
+### Per-app token learning by subtraction
+
+*Owner decision 2026-08-07: build it.* `ApplicationToken` and
+`ActivityCategoryToken` are opaque but `Hashable`, so set arithmetic works on them
+even though their contents don't. That is enough to learn which token is which
+without ever asking the user to tag anything.
+
+Keep a map in the App Group: `"com.instagram.android" → ApplicationToken`,
+`"social" → ActivityCategoryToken`. Then at join:
+
+| Map covers the session's blocklist | Behaviour |
+|---|---|
+| Fully | Compose the selection from the map. **No picker at all.** |
+| All but one item | Pre-seed the picker with the known tokens, header text naming the missing one. The user adds it; `newSet − oldSet` is that item's token. **Learn it.** |
+| Missing two or more | Present the picker for the whole list, cache the result per-combination (above), learn nothing |
+
+**The one-unknown restriction is a correctness requirement, not caution.** If two
+items are unknown, the difference is a set of two tokens with no way to tell which
+is which — guessing would poison the map permanently. Falling back to
+combination-caching keeps it sound, and the map still fills naturally as people add
+one app at a time.
+
+Once an app is in the map it is never asked for again, in any combination.
+
+**Accepted risk, unchanged:** rotation (§2) corrupts map entries silently, and this
+spreads the exposure across more entries than a single cached selection would.
+Undetectable by design — `ManagedSettingsStore` doesn't report that a token no
+longer resolves. Expiring map entries after N days would bound it, but that is a
+periodic re-prompt by another name, which the owner declined above. Noted as an
+available lever if rotation turns out to bite in the field.
 
 We also cannot verify the member picked correctly. Like every client-side blocking
 signal in this app, the server never treats it as trusted (`use-app-blocker.ts`
 header, ARCHITECTURE §5/§8).
+
+### Active Session (Screen 6)
+
+*Owner decision 2026-08-07: full list, expandable.* A compact summary near the
+timer — "Blocking: Social, Games +2" — opening into the complete list on tap. The
+pre-join screen is easy to forget an hour in, and someone who hits a block wants to
+know why.
+
+Read-only. It is the same session-scoped list already hydrated by `fetchSession`
+(§5), so no new fetch. De-duplicate category/app overlap here too (§9).
 
 `markBlockerReady` gates the Group Bonus (`use-app-blocker.ts` ~line 64), so on
 iOS it fires after the picker closes, not on tap. Cancelling the picker means not
@@ -408,7 +441,7 @@ apps with a launcher intent also drops most system services.
 | Nothing selected | Server rejects; submit disabled with a message |
 | Member lacks a blocked app | Nothing happens — correct behaviour |
 | App installed mid-session | Category covers it, app list doesn't; surface in UI |
-| Blocklist edited mid-session | Entry point disabled while a session is active. The saved *default* is client-side and the running session reads from the server, so editing the default can't leak into a live session |
+| Blocklist edited mid-session | Frozen for everyone, including a promoted host (§9a). The saved *default* is client-side and the running session reads from the server, so editing the default can't leak into a live session |
 | Reboot mid-session | Covered once `BootPersistence` carries packages |
 | Host migration / rejoin | Session-scoped, survives both unchanged |
 | Pre-existing sessions | Column default reproduces today's behaviour |
@@ -422,6 +455,32 @@ apps with a launcher intent also drops most system services.
 | Venue with nothing specifically approved | Defaults to the three categories — today's behaviour, useful immediately (§3) |
 | Venue host selects outside the approved set | Server rejects; the picker shouldn't have offered it, so this is the boundary catching a stale client |
 | Host has none of the apps they picked | Allowed, with the note in §7. They are choosing for the group, not themselves |
+
+### 9a. The blocklist is frozen for the session's lifetime
+
+*Owner decision 2026-08-07.* Nobody can change a running session's blocklist —
+not the original host, not a host promoted by migration.
+
+This closes an exploit rather than merely simplifying: migration promotes whoever
+has the **most minutes present** (ARCHITECTURE §6), which a group can arrange
+deliberately. An editable blocklist would let them hand the role to a confederate
+who unblocks everything while everyone keeps earning.
+
+**Forward compatibility — premium add-only editing.** The owner intends a future
+premium tier that can *add* apps to a blocklist. Adding is safe by the same
+principle used for iOS throughout this plan: over-blocking never buys anyone points
+they didn't earn, only under-blocking does. So build the freeze as a **policy, not
+a structural assumption**:
+
+- Keep the blocklist a mutable session column, not an immutable creation-time value.
+- Leave room for a mid-session re-push path — a config change has to reach every
+  device and restart the native blocker with it, which is the real work in that
+  feature and the thing an immutable design would make expensive later.
+- Any future mutation endpoint must be **append-only**, enforced server-side.
+
+Not scoped here, and the premium tier itself is undecided — this only avoids
+painting it into a corner. Distinct from CLAUDE.md's open B2B monetization
+question; that is business-to-business, this is consumer.
 | RTL | App names come from the OS untranslated; rows must be RTL-safe per the i18n skill |
 
 ---
@@ -456,7 +515,7 @@ Both belong in `docs/DEPLOYMENT.md` and `docs/MANUAL_QA.md`.
 
 ## 11. Task breakdown
 
-Six backlog tasks, each closable with a green suite. Tests first
+Seven backlog tasks, each closable with a green suite. Tests first
 (`.claude/skills/testing-standards/SKILL.md`).
 
 1. **Schema + server** — migration with backfill (sessions *and* venues), pgTAP for
@@ -476,11 +535,15 @@ Six backlog tasks, each closable with a green suite. Tests first
    `BootPersistence`, `SessionRow`/`SESSION_COLUMNS`, the widened
    `shield_triggered` shape, and overlay copy that names the blocked app.
 6. **Join flow** — Screen 8 blocklist display, iOS re-selection in Apple's picker
-   with header text and the blocklist-keyed selection cache, both platforms.
+   with header text, the blocklist-keyed selection cache, and the token-learning
+   map (§7). Both platforms.
+7. **In-session display** — Screen 6's expandable blocklist (§7), read-only, off
+   the already-hydrated session row.
 
-Tasks 1 and 2 are independent roots; 3 and 4 depend on 2, 5 on 1, 6 on 1 and 4.
-Task 2 before 3 deliberately: the catalog makes the whole feature demonstrable on
-iOS and on any Android build, before the Play-gated enumeration exists.
+Tasks 1 and 2 are independent roots; 3 and 4 depend on 2, 5 on 1, 6 on 1 and 4,
+7 on 1. Task 2 before 3 deliberately: the catalog makes the whole feature
+demonstrable on iOS and on any Android build, before the Play-gated enumeration
+exists.
 
 ---
 
@@ -510,24 +573,23 @@ Per `.claude/skills/platform-constraints/SKILL.md`:
   not the enforced truth.
 - `docs/ARCHITECTURE.md` §10 — venue blocklists join Verified Host as a
   manually-approved B2B flag (§3).
-- `backlog.md` — the six tasks above.
+- `backlog.md` — the seven tasks above.
 - `docs/MANUAL_QA.md`, `docs/DEPLOYMENT.md` — §10 and §12.
 
 ---
 
 ## 15. Still open
 
-Not blocking implementation, but not decided either:
+Every design question this plan raised has been decided (2026-08-07). What remains
+is outside its scope:
 
-- **Whether a migrated host can change the blocklist.** ARCHITECTURE §6 gives the
-  host "real and ongoing" authority, yet this plan freezes the blocklist for the
-  session's lifetime (§9) so nobody can weaken it mid-session. A promoted host
-  therefore inherits a list they didn't pick and can't alter. Consistent, but never
-  explicitly chosen.
-- **Whether the Active Session screen should show what's blocked.** Currently only
-  the pre-join screen does, so a participant mid-session has no reminder.
-- **B2B monetization**, unchanged from CLAUDE.md — §3's approval flow is an
-  anti-abuse measure, not a business model.
+- **B2B monetization**, unchanged from CLAUDE.md. §3's venue approval is an
+  anti-abuse control, not a business model.
+- **The consumer premium tier** that §9a keeps room for. Its existence is intended;
+  its shape, pricing and whether blocklist editing is really the hook are not
+  decided, and nothing here depends on the answer.
+
+`backlog.md` has these seven tasks and per-task truth once work starts.
 
 ---
 
