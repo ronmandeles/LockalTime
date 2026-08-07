@@ -57,27 +57,32 @@ nothing to bind to on an iPhone.
 
 | Case | Result |
 |---|---|
-| Solo session, either platform | **Exact.** The host is the only participant; they pick on their own device |
-| Group session, host's own device | **Exact.** Their tokens are local |
-| Group session, Android member | **Exact.** Package names and categories resolve locally |
-| Group session, iOS member | **Exact, but manual** — they re-pick in Apple's picker at join |
+| Solo session, Android | **Exact.** Fully automatic |
+| Solo session, iOS | **Exact**, after the host confirms their own selection in Apple's picker |
+| Group session, Android member | **Exact.** Fully automatic — package names and categories resolve locally |
+| Group session, iOS member | **Exact, but manual** — they confirm in Apple's picker at join |
 
-The iOS member flow is the owner's design (2026-08-07): Session Details (Screen 8)
+The iOS flow is the owner's design (2026-08-07): Session Details (Screen 8)
 describes the session's blocklist before joining, and tapping Join presents
-Apple's picker so the member selects those apps on their own device. Their phone,
-their tokens.
+Apple's picker so the member selects those items on their own device. Their phone,
+their tokens. Every iOS participant does this, host included — see §7.
 
-### An asymmetry that constrains the UI
+### An iOS host picks from the catalog, not from Apple's picker
 
-An **iOS host cannot share a specific-app selection**. They can pick apps in
-Apple's picker and block them on their own phone, but they receive opaque tokens
-and have nothing to write into `blocked_packages` — so nothing reaches other
-members. Package names are an Android concept, and we are using them as the
-cross-device app identity.
+Apple's picker yields opaque tokens, so a host who chooses apps there has nothing
+to write into `blocked_packages` — nothing would reach other members.
 
-Consequence: **specific-app selection is offered to Android hosts only.** An iOS
-host shares categories; their own device can additionally shield whatever they
-picked personally. This must be explicit in the UI, not a silent no-op.
+So an **iOS host selects from our curated catalog** (§6) instead: a list of
+well-known apps we ship, each carrying the package name used as the cross-device
+identity. Picking "Instagram" from that list stores `com.instagram.android`, which
+travels normally.
+
+Apple's picker still runs on an iOS device, but at a different moment and for a
+different job: **confirming**, not choosing. See §7.
+
+Limitation: an iOS host can only share apps present in the catalog. A niche app
+can still be blocked on their own device via the confirm step, but cannot be
+imposed on the session.
 
 ### Known iOS limitation to document, not solve
 
@@ -149,22 +154,28 @@ endpoint.
 
 ---
 
-## 6. Only package names cross between users
+## 6. The app catalog, and why only package names cross between users
 
-It would be easy to send `{ id, label }` so members see "Instagram" rather than
-`com.instagram.android`. **Don't.** That is host-controlled text rendered on
-strangers' phones — a venue session seats up to 200 people
-(`VENUE_SESSION_MAX_PARTICIPANTS`) — and a verified host could put anything in it.
+A bundled catalog of well-known apps — package name plus display name, one JSON
+file, no permissions — does three jobs, in descending order of importance:
 
-So: package names only. Each Android device resolves its own display label
-locally, from its own `PackageManager`. iOS members see the raw package name,
-which is legible enough (`com.instagram.android`), and Apple's picker shows real
-names one tap later anyway.
+1. **It is the only way an iOS host can name an app at all** (§2). Without it,
+   specific-app selection simply does not exist for iOS hosts.
+2. **It keeps host-supplied text off other people's screens.** It would be easy
+   to send `{ id, label }` so members see "Instagram" rather than
+   `com.instagram.android`. **Don't** — that is host-controlled text rendered on
+   strangers' phones, and a venue session seats up to 200 people
+   (`VENUE_SESSION_MAX_PARTICIPANTS`). With a catalog, the receiving device
+   resolves the name from its own copy, so nothing a host types ever travels.
+3. **It is the fallback if Google refuses `QUERY_ALL_PACKAGES`** (§10).
 
-*Reviewed and cut:* an earlier draft shipped a bundled `package → display name`
-catalog for prettier iOS rendering. It was maintenance burden (apps rebrand),
-guaranteed incomplete, and bought only cosmetics on a screen whose next tap shows
-the real names. Add later if it genuinely annoys anyone.
+So the wire format stays package names only. Display names are resolved on the
+receiving device: Android from its own `PackageManager`, iOS from the catalog,
+falling back to the raw package name for anything unknown.
+
+*Corrected 2026-08-07 (owner):* an earlier draft cut this catalog, having judged
+it on job 3 alone and called it cosmetic. Job 1 makes it structural — without it
+the iOS host flow has no shareable identity to produce.
 
 ---
 
@@ -175,21 +186,35 @@ the real names. Add later if it genuinely annoys anyone.
 New section below session type:
 
 - Three category toggles, reusing the existing toggle styles on that screen.
-- **Android only:** an expandable installed-app list with checkboxes.
+- A specific-app list with checkboxes, fed by a **source seam**:
+  - **Android** — the host's actually-installed apps (`InstalledAppsModule`, §8).
+  - **iOS** — the bundled catalog (§6), since iOS cannot enumerate installed apps.
 - Pre-filled from the user's last choice, editable per session (persisted
   client-side, following `active-session-store.ts`'s pattern).
 - Submit blocked with a message if nothing at all is selected.
 
-**Make the app list source-agnostic from day one.** The picker component takes a
-list; where that list comes from is behind a seam. If Google refuses
-`QUERY_ALL_PACKAGES` (§10), falling back to a curated catalog becomes a data-source
-swap instead of a UI rewrite.
+The seam is what makes both platforms one component, and it doubles as the
+`QUERY_ALL_PACKAGES` mitigation (§10) — a refusal swaps Android onto the same
+catalog iOS already uses, with no UI change.
 
-### Session Details (Screen 8)
+An iOS host still needs the confirm step below for their *own* device, since
+choosing from the catalog produces a shareable name but no Apple token.
+
+### Session Details (Screen 8) — the confirm step
 
 Already the participant's pre-join confirmation and already fetching a preview.
-Add "This session blocks: Social, Games, com.instagram.android". On iOS, Join then
-presents Apple's picker; on Android, Join proceeds directly.
+Add "This session blocks: Social, Games, Instagram."
+
+- **Android** — Join proceeds directly; the device resolves everything itself.
+- **iOS** — Join presents Apple's picker so the member selects the listed
+  categories and apps on their own device, minting their own tokens. This is the
+  only moment an iOS device can acquire them.
+
+Apple's picker cannot be pre-seeded or highlighted, so the member finds the items
+themselves — the screen above it must therefore name them plainly. We also cannot
+verify they picked correctly; like every client-side blocking signal in this app,
+the server never treats it as trusted (`use-app-blocker.ts` header,
+ARCHITECTURE §5/§8).
 
 `markBlockerReady` gates the Group Bonus (`use-app-blocker.ts` ~line 64), so on
 iOS it fires after the picker closes, not on tap. Cancelling the picker means not
@@ -242,7 +267,9 @@ apps with a launcher intent also drops most system services.
 | Reboot mid-session | Covered once `BootPersistence` carries packages |
 | Host migration / rejoin | Session-scoped, survives both unchanged |
 | Pre-existing sessions | Column default reproduces today's behaviour |
-| iOS host picks specific apps | Applies to their own device only; UI must say so (§2) |
+| iOS host picks specific apps | Chosen from the catalog (shareable), then confirmed in Apple's picker for their own device (§7) |
+| iOS user cancels the picker at join | Not joined. No half-joined state, and no `markBlockerReady` |
+| Host picks an app absent from the catalog | Android-host only; an iOS host cannot name it (§2) |
 | RTL | App names come from the OS untranslated; rows must be RTL-safe per the i18n skill |
 
 ---
@@ -253,9 +280,12 @@ apps with a launcher intent also drops most system services.
 declaration, review takes weeks, and it can be refused — in which case the app
 cannot ship with full enumeration.
 
-The owner chose full enumeration over a curated catalog knowingly (2026-08-07).
-It does not block development, only release. The §7 source seam is the mitigation:
-a refusal degrades to a curated catalog without touching the UI.
+The owner chose full enumeration for the Android host picker knowingly
+(2026-08-07). It does not block development, only release, and the mitigation is
+already built rather than hypothetical: the catalog (§6) ships regardless, because
+iOS needs it. A refusal points the Android side of the §7 seam at that same
+catalog — a one-line change, no UI rewrite, no lost functionality beyond niche
+apps.
 
 Belongs in `docs/DEPLOYMENT.md` and `docs/MANUAL_QA.md`.
 
@@ -263,20 +293,26 @@ Belongs in `docs/DEPLOYMENT.md` and `docs/MANUAL_QA.md`.
 
 ## 11. Task breakdown
 
-Five backlog tasks, each closable with a green suite. Tests first
+Six backlog tasks, each closable with a green suite. Tests first
 (`.claude/skills/testing-standards/SKILL.md`).
 
 1. **Schema + server** — migration with backfill, pgTAP for the constraints and
    grants, zod validation on create, preview fields.
-2. **`InstalledAppsModule`** — native module, windowed icon call, JS seam with a
-   mocked-bridge contract test.
-3. **Create Session UI** — category toggles, app picker behind the source seam,
-   validation, persisted default.
-4. **Enforcement wiring** — packages through `start()`, service poll,
+2. **App catalog + source seam** — the bundled JSON (§6), package/name lookup,
+   and the seam the picker reads through. Pure TS, fully testable here, and it
+   unblocks task 3 without waiting on native work.
+3. **`InstalledAppsModule`** — Android native module behind that seam, windowed
+   icon call, JS-side contract test over a mocked bridge.
+4. **Create Session UI** — category toggles, app picker, validation, persisted
+   default.
+5. **Enforcement wiring** — packages through `start()`, service poll,
    `BootPersistence`, `SessionRow`/`SESSION_COLUMNS`.
-5. **Join flow** — Screen 8 blocklist display, iOS picker-at-join, both platforms.
+6. **Join flow** — Screen 8 blocklist display, iOS confirm-in-picker, both
+   platforms.
 
-Tasks 1 and 2 are independent roots; 3 depends on 2, 4 on 1, 5 on 1 and 3.
+Tasks 1 and 2 are independent roots; 3 and 4 depend on 2, 5 on 1, 6 on 1 and 4.
+Task 2 before 3 deliberately: the catalog makes the whole feature demonstrable on
+iOS and on any Android build, before the Play-gated enumeration exists.
 
 ---
 
@@ -301,7 +337,7 @@ Per `.claude/skills/platform-constraints/SKILL.md`:
 - `apps/mobile/src/config/blocked-categories.ts` — its header comment states the
   list is "not user- or session-configurable". It becomes the picker's *default*,
   not the enforced truth.
-- `backlog.md` — the five tasks above.
+- `backlog.md` — the six tasks above.
 - `docs/MANUAL_QA.md`, `docs/DEPLOYMENT.md` — §10 and §12.
 
 ---
