@@ -29,6 +29,38 @@ Instagram loses only Instagram.
 Both kinds are plain strings, which is the whole reason they can travel between
 phones.
 
+### The six categories
+
+*Owner decision 2026-08-07:* the existing three plus everything else Android's
+category enum can express.
+
+| Ours | Android `ApplicationInfo` | Notes |
+|---|---|---|
+| `social` | `CATEGORY_SOCIAL` | |
+| `games` | `CATEGORY_GAME` | |
+| `entertainment` | `CATEGORY_VIDEO` + `CATEGORY_AUDIO` | no native "entertainment"; existing approximation |
+| `news` | `CATEGORY_NEWS` | doomscrolling is squarely in scope |
+| `maps` | `CATEGORY_MAPS` | |
+| `productivity` | `CATEGORY_PRODUCTIVITY` | |
+
+`CATEGORY_IMAGE` is deliberately unmapped — photo apps are not a distraction class
+worth a picker row, and `CATEGORY_ACCESSIBILITY` must never be blockable.
+
+**The category list is currently declared in three places** —
+`config/blocked-categories.ts`, `app-blocker.ts`'s `BLOCKED_CATEGORY_VALUES`
+runtime-validation array (~line 93), and `CategoryMapping.kt`. Going from three to
+six is exactly the change that punishes that duplication: miss the second and
+`toBlockerEvent` silently drops every event for the new categories. Collapse the
+JS pair into one import as part of this work; Kotlin necessarily keeps its own.
+
+The picker pre-fills `social, games, entertainment` — the historical default, so
+existing habits are unchanged and the new three are opt-in. The DB column default
+and backfill stay on those same three, since that is what pre-existing sessions
+actually enforced.
+
+`maps` deserves a light UI note rather than a denylist entry: blocking navigation
+is inconvenient but not emergency-critical, unlike the dialer (§4).
+
 ### Behavioural difference worth surfacing in the UI
 
 A **category** automatically covers apps installed later. A **specific app list**
@@ -118,7 +150,7 @@ update public.sessions set blocked_categories = '{social,games,entertainment}';
 
 alter table public.sessions
   add constraint chk_blocked_categories_valid
-    check (blocked_categories <@ array['social','games','entertainment']),
+    check (blocked_categories <@ array['social','games','entertainment','news','maps','productivity']),
   add constraint chk_blocklist_non_empty
     check (cardinality(blocked_categories) + cardinality(blocked_packages) > 0);
 ```
@@ -166,7 +198,7 @@ wanted, it's a third column, not a remodel.
 Zod at the boundary (`.claude/skills/api-design/SKILL.md`): categories from the
 enum, packages against a package-name pattern
 (`^[a-zA-Z_][a-zA-Z0-9_]*(\.[a-zA-Z_][a-zA-Z0-9_]*)+$`), combined length ≥ 1,
-capped at 3 categories and 50 packages to bound the payload.
+capped at 6 categories and 50 packages to bound the payload.
 
 Plus two server-side rejections that do not depend on the client behaving:
 
@@ -203,6 +235,25 @@ endpoint.
 ---
 
 ## 6. The app catalog, and why only package names cross between users
+
+### The catalog is deliberately partial, and that is fine
+
+*Owner framing 2026-08-07.* A 50–100 entry list cannot cover every app in every
+category — most games and most streaming apps will never be in it. It doesn't need
+to be. The division of labour:
+
+- **Categories** handle the long tail. Every game on the device is covered by
+  `games` whether or not we've heard of it.
+- **The catalog** covers apps people actually *name*, which in practice is
+  overwhelmingly **social** — the category where users want Instagram blocked but
+  WhatsApp left alone, and where "block the whole category" is too blunt.
+
+So the catalog is weighted heavily toward social, with the games and entertainment
+entries limited to the handful people genuinely single out. A missing entry
+degrades to "use the category instead", which is a real answer rather than a dead
+end.
+
+### Why the catalog exists at all
 
 A bundled catalog of well-known apps — package name plus display name, one JSON
 file, no permissions — does three jobs, in descending order of importance:
@@ -515,35 +566,43 @@ Both belong in `docs/DEPLOYMENT.md` and `docs/MANUAL_QA.md`.
 
 ## 11. Task breakdown
 
-Seven backlog tasks, each closable with a green suite. Tests first
+Eight backlog tasks, each closable with a green suite. Tests first
 (`.claude/skills/testing-standards/SKILL.md`).
 
-1. **Schema + server** — migration with backfill (sessions *and* venues), pgTAP for
-   the constraints and grants, zod validation on create, the safety denylist, the
-   venue subset check, preview fields.
-2. **App catalog + source seam** — the bundled JSON (§6), package/name lookup,
-   and the seam the picker reads through, with an integrity test (unique ids,
-   valid categories, well-formed package names). Pure TS, fully testable here, and
-   it unblocks the UI without waiting on native work. Includes the iOS
-   `canOpenURL` installed-check behind the same seam (mocked in tests; the
-   `LSApplicationQueriesSchemes` entries and real probing are manual QA).
-3. **`InstalledAppsModule`** — Android native module behind that seam, windowed
+1. **Schema + server** — migration with backfill (sessions *and* venues), the six
+   categories, pgTAP for the constraints and grants, zod validation on create, the
+   safety denylist, the venue subset check, preview fields.
+2. **Catalog research** *(research task, owner-requested)* — produce the catalog
+   data itself: the most-used and currently-trending apps worth naming, weighted
+   toward social per §6, each with Android package name, category, and iOS URL
+   scheme where one exists. Also picks the ≤50 schemes to declare. Deliverable is
+   the reviewed data file, nothing else — separated so the list gets real
+   attention instead of being improvised inside a coding task, and so it can be
+   refreshed later without touching code.
+3. **Catalog module + source seam** — lookup, the seam the picker reads through,
+   and an integrity test (unique ids, valid categories, well-formed package names,
+   scheme count ≤ 50). Pure TS, fully testable here, and it unblocks the UI without
+   waiting on native work. Includes the iOS `canOpenURL` installed-check behind the
+   same seam (mocked in tests; the `Info.plist` entries and real probing are manual
+   QA).
+4. **`InstalledAppsModule`** — Android native module behind that seam, windowed
    icon call, JS-side contract test over a mocked bridge.
-4. **Create Session UI** — category toggles, app picker, validation, persisted
+5. **Create Session UI** — six category toggles, app picker, validation, persisted
    default.
-5. **Enforcement wiring** — packages through `start()`, service poll,
-   `BootPersistence`, `SessionRow`/`SESSION_COLUMNS`, the widened
-   `shield_triggered` shape, and overlay copy that names the blocked app.
-6. **Join flow** — Screen 8 blocklist display, iOS re-selection in Apple's picker
+6. **Enforcement wiring** — packages and the three new categories through
+   `start()`, service poll, `CategoryMapping`, `BootPersistence`,
+   `SessionRow`/`SESSION_COLUMNS`, the widened `shield_triggered` shape, and
+   overlay copy that names the blocked app.
+7. **Join flow** — Screen 8 blocklist display, iOS re-selection in Apple's picker
    with header text, the blocklist-keyed selection cache, and the token-learning
    map (§7). Both platforms.
-7. **In-session display** — Screen 6's expandable blocklist (§7), read-only, off
+8. **In-session display** — Screen 6's expandable blocklist (§7), read-only, off
    the already-hydrated session row.
 
-Tasks 1 and 2 are independent roots; 3 and 4 depend on 2, 5 on 1, 6 on 1 and 4,
-7 on 1. Task 2 before 3 deliberately: the catalog makes the whole feature
-demonstrable on iOS and on any Android build, before the Play-gated enumeration
-exists.
+Tasks 1 and 2 are independent roots; 3 depends on 2, 4 and 5 on 3, 6 on 1, 7 on
+1 and 5, 8 on 1. The catalog lands before any native work deliberately: it makes
+the whole feature demonstrable on iOS and on any Android build, before the
+Play-gated enumeration exists.
 
 ---
 
@@ -573,7 +632,7 @@ Per `.claude/skills/platform-constraints/SKILL.md`:
   not the enforced truth.
 - `docs/ARCHITECTURE.md` §10 — venue blocklists join Verified Host as a
   manually-approved B2B flag (§3).
-- `backlog.md` — the seven tasks above.
+- `backlog.md` — the eight tasks above, opened as **Phase 9** (owner decision 2026-08-07).
 - `docs/MANUAL_QA.md`, `docs/DEPLOYMENT.md` — §10 and §12.
 
 ---
@@ -589,7 +648,7 @@ is outside its scope:
   its shape, pricing and whether blocklist editing is really the hook are not
   decided, and nothing here depends on the answer.
 
-`backlog.md` has these seven tasks and per-task truth once work starts.
+`backlog.md` carries these eight tasks as Phase 9, and per-task truth once work starts.
 
 ---
 
