@@ -72,13 +72,21 @@ their tokens. Every iOS participant does this, host included — see §7.
 Apple's picker yields opaque tokens, so a host who chooses apps there has nothing
 to write into `blocked_packages` — nothing would reach other members.
 
+**Why we cannot read the picker even though it renders inside our app:** iOS draws
+it in a separate process and composites the result into our window. Our code gets
+the rectangle, never the contents — a programmatic screenshot of our own app
+returns that region blank. Same architecture as Apple Pay sheets and the photo
+picker. `Label(token)` will *render* the real name and icon on the host's own
+screen, but never hands us the string. Display on this device: yes. Extract as
+data: no.
+
 So an **iOS host selects from our curated catalog** (§6) instead: a list of
 well-known apps we ship, each carrying the package name used as the cross-device
-identity. Picking "Instagram" from that list stores `com.instagram.android`, which
-travels normally.
+identity. Picking "Instagram" stores `com.instagram.android`, which travels
+normally.
 
-Apple's picker still runs on an iOS device, but at a different moment and for a
-different job: **confirming**, not choosing. See §7.
+Apple's picker still runs on iOS, at a different moment and for a different job:
+**confirming**, not choosing. See §7.
 
 Limitation: an iOS host can only share apps present in the catalog. A niche app
 can still be blocked on their own device via the confirm step, but cannot be
@@ -173,6 +181,34 @@ So the wire format stays package names only. Display names are resolved on the
 receiving device: Android from its own `PackageManager`, iOS from the catalog,
 falling back to the raw package name for anything unknown.
 
+### Catalog shape
+
+```jsonc
+{
+  "id": "com.instagram.android",   // the cross-device identity, also the Android package
+  "name": "Instagram",             // display, resolved locally — never sent
+  "category": "social",
+  "iosScheme": "instagram"         // optional, for the installed-check below
+}
+```
+
+### Filtering the iOS list to apps the host actually has
+
+iOS offers no enumeration, but it does answer one narrow question per app:
+`UIApplication.canOpenURL("instagram://")` effectively reports whether Instagram is
+installed. Each scheme must be declared in `Info.plist`'s
+`LSApplicationQueriesSchemes`, and **Apple caps that list at 50 entries** — it is
+twenty questions, not a directory listing.
+
+That is enough to filter the catalog down to roughly what the host really has, so
+the iOS picker reads as "your apps" rather than "popular apps". Catalog entries
+beyond the 50 declared schemes, or apps that publish no scheme, are shown
+unfiltered — harmless, since blocking an app the host doesn't own simply has no
+effect on their device and still blocks correctly for members who do.
+
+Pick the 50 schemes by expected blocking frequency, and treat the list as a
+tunable constant, not a hardcode.
+
 *Corrected 2026-08-07 (owner):* an earlier draft cut this catalog, having judged
 it on job 3 alone and called it cosmetic. Job 1 makes it structural — without it
 the iOS host flow has no shareable identity to produce.
@@ -188,7 +224,8 @@ New section below session type:
 - Three category toggles, reusing the existing toggle styles on that screen.
 - A specific-app list with checkboxes, fed by a **source seam**:
   - **Android** — the host's actually-installed apps (`InstalledAppsModule`, §8).
-  - **iOS** — the bundled catalog (§6), since iOS cannot enumerate installed apps.
+  - **iOS** — the bundled catalog (§6), filtered by `canOpenURL` probing so it
+    reads as the host's own apps for the ~50 most common ones.
 - Pre-filled from the user's last choice, editable per session (persisted
   client-side, following `active-session-store.ts`'s pattern).
 - Submit blocked with a message if nothing at all is selected.
@@ -300,7 +337,9 @@ Six backlog tasks, each closable with a green suite. Tests first
    grants, zod validation on create, preview fields.
 2. **App catalog + source seam** — the bundled JSON (§6), package/name lookup,
    and the seam the picker reads through. Pure TS, fully testable here, and it
-   unblocks task 3 without waiting on native work.
+   unblocks the UI without waiting on native work. Includes the iOS
+   `canOpenURL` installed-check behind the same seam (mocked in tests; the
+   `LSApplicationQueriesSchemes` entries and real probing are manual QA).
 3. **`InstalledAppsModule`** — Android native module behind that seam, windowed
    icon call, JS-side contract test over a mocked bridge.
 4. **Create Session UI** — category toggles, app picker, validation, persisted
@@ -321,6 +360,9 @@ iOS and on any Android build, before the Play-gated enumeration exists.
 Per `.claude/skills/platform-constraints/SKILL.md`:
 
 - **All iOS behaviour.** No Mac; iOS compiles in cloud CI and has never run.
+- **`canOpenURL` probing** — needs a real iPhone with real apps installed. The JS
+  seam is testable here over a mocked bridge; whether each declared scheme
+  actually resolves is not.
 - **Icon performance** — emulator only, never a real device with ~200 apps.
 - **The Play declaration outcome.**
 - **Token rotation** — unobservable here; documented, not solved.
