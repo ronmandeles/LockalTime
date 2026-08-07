@@ -272,6 +272,10 @@ So the wire format stays package names only. Display names are resolved on the
 receiving device: Android from its own `PackageManager`, iOS from the catalog,
 falling back to the raw package name for anything unknown.
 
+**App names stay in English** — brands aren't localized, so "Instagram" reads as
+Instagram in the Hebrew UI. Only category names go through i18next. This is what
+makes the bidi handling in §7 necessary rather than optional.
+
 ### Catalog shape
 
 ```jsonc
@@ -387,7 +391,20 @@ even though their contents don't. That is enough to learn which token is which
 without ever asking the user to tag anything.
 
 Keep a map in the App Group: `"com.instagram.android" → ApplicationToken`,
-`"social" → ActivityCategoryToken`. Then at join:
+`"social" → ActivityCategoryToken`.
+
+**Swift stores; JS decides.** The map must live in Swift, since tokens cannot cross
+the bridge — but the *rule* below must not, because it is the subtlest logic in this
+feature and Swift is the one place this project cannot test (§12). A bug in it is
+silent, permanent, and invisible until someone earns points with nothing blocked.
+
+So the native module exposes `getKnownIds(): string[]` — the map's **keys only**,
+never its tokens. JS compares that against the session's blocklist, picks the
+strategy, and instructs Swift. The rule becomes a pure function with unit tests, and
+the Swift side stays a dumb keyed store with nothing to get wrong. Same thin-native
+posture as the rest of this repo.
+
+Then at join:
 
 | Map covers the session's blocklist | Behaviour |
 |---|---|
@@ -400,6 +417,9 @@ items are unknown, the difference is a set of two tokens with no way to tell whi
 is which — guessing would poison the map permanently. Falling back to
 combination-caching keeps it sound, and the map still fills naturally as people add
 one app at a time.
+
+That rule is exactly what the JS-side decision function above exists to make
+testable: three branches, one pure input, no native dependency.
 
 Once an app is in the map it is never asked for again, in any combination.
 
@@ -507,6 +527,21 @@ apps with a launcher intent also drops most system services.
 | Venue host selects outside the approved set | Server rejects; the picker shouldn't have offered it, so this is the boundary catching a stale client |
 | Host has none of the apps they picked | Allowed, with the note in §7. They are choosing for the group, not themselves |
 
+### Nobody is ever trapped
+
+Worth stating plainly, because it is the answer to "what if the host blocked
+something I urgently need": **emergency exit already exists and always works.** A
+participant can leave at any time, the blocker stops, and they keep base points for
+minutes actually present — forfeiting both bonuses (ARCHITECTURE §7). That cost is
+existing and intended.
+
+This is why `maps` and `productivity` can be offered at all despite occasionally
+catching a navigation or banking app: the blocklist is visible before joining, and
+the exit is unconditional. No new mechanism needed.
+
+**Not shown in session history.** The completion screen is about points and
+duration; what was blocked stops mattering once the session is over.
+
 ### 9a. The blocklist is frozen for the session's lifetime
 
 *Owner decision 2026-08-07.* Nobody can change a running session's blocklist —
@@ -595,7 +630,8 @@ Eight backlog tasks, each closable with a green suite. Tests first
    overlay copy that names the blocked app.
 7. **Join flow** — Screen 8 blocklist display, iOS re-selection in Apple's picker
    with header text, the blocklist-keyed selection cache, and the token-learning
-   map (§7). Both platforms.
+   map (§7) — with its decision rule as a unit-tested JS pure function over
+   `getKnownIds()`, not Swift. Both platforms.
 8. **In-session display** — Screen 6's expandable blocklist (§7), read-only, off
    the already-hydrated session row.
 
@@ -610,7 +646,9 @@ Play-gated enumeration exists.
 
 Per `.claude/skills/platform-constraints/SKILL.md`:
 
-- **All iOS behaviour.** No Mac; iOS compiles in cloud CI and has never run.
+- **All iOS behaviour.** No Mac; iOS compiles in cloud CI and has never run. This
+  is precisely why §7's token-learning rule lives in JS — the Swift side is reduced
+  to a keyed store with no branching logic to get wrong.
 - **`canOpenURL` probing** — needs a real iPhone with real apps installed. The JS
   seam is testable here over a mocked bridge; whether each declared scheme
   actually resolves is not.
@@ -647,6 +685,18 @@ is outside its scope:
 - **The consumer premium tier** that §9a keeps room for. Its existence is intended;
   its shape, pricing and whether blocklist editing is really the hook are not
   decided, and nothing here depends on the answer.
+
+### Deliberately not built: analytics on what people block
+
+*Owner decision 2026-08-07: no tracking for now.* Aggregate data on which
+categories and apps get chosen is the only real signal on whether the catalog (§6)
+is right — its contents are otherwise guesswork by construction. It is also
+personal: a list of what someone blocks says a lot about them, and this app carries
+no product analytics today, only Sentry for crashes.
+
+Deferred rather than rejected. Revisit once there are real users to learn from,
+since it is guesswork either way until then. Recorded here so a future session
+knows the gap is a choice, not an oversight.
 
 `backlog.md` carries these eight tasks as Phase 9, and per-task truth once work starts.
 
