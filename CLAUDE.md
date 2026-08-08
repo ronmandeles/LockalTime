@@ -36,12 +36,14 @@ Commands: `npm test`, `npm run lint`, `npm run typecheck` in each workspace; `np
 | [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | Phase-level narrative: what shipped, what's inert, what's still open |
 | [docs/MANUAL_QA.md](docs/MANUAL_QA.md) | Everything unverifiable on this machine, with steps to run it later |
 | [docs/RETENTION_STRATEGY.md](docs/RETENTION_STRATEGY.md) | The retention analysis behind gamification work |
+| [docs/BLOCKLIST_SELECTION_PLAN.md](docs/BLOCKLIST_SELECTION_PLAN.md) | Phase 9's design: the host picks what a session blocks, and why iOS constrains it |
+| [docs/APP_CATALOG.md](docs/APP_CATALOG.md) | How the bundled app catalog was chosen, what in it is unverified, and how to refresh it |
 | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Railway + staging-Supabase runbooks |
 | [docs/NAVY_THEME_PLAN.md](docs/NAVY_THEME_PLAN.md) | Historical record of *why* the black+navy palette is what it is. For what the app looks like now, read DESIGN_GUIDELINES §12 instead |
 
 ## Current state
 
-Phases 0–8 are complete; Phase 7 (Release Prep) has owner-actioned items still open. Details in [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md); per-task truth in [backlog.md](backlog.md).
+Phases 0–8 are complete; Phase 7 (Release Prep) has owner-actioned items still open. **Phase 9 (host-selected blocklist) is in progress** — see [docs/BLOCKLIST_SELECTION_PLAN.md](docs/BLOCKLIST_SELECTION_PLAN.md) for the design and [backlog.md](backlog.md) for which of its eight tasks have landed. Details in [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md); per-task truth in [backlog.md](backlog.md).
 
 The app first ran on an Android emulator on 2026-08-03. iOS compiles only in cloud macOS CI and has never been run. Push and attestation are fully wired but deliberately inert (no credentials).
 
