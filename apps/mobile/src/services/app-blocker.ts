@@ -1,6 +1,6 @@
 import { DeviceEventEmitter, NativeEventEmitter, NativeModules, Platform } from 'react-native';
 
-import type { BlockedCategory } from '../config/blocked-categories';
+import { isBlockedCategory, type BlockedCategory } from '../config/blocked-categories';
 
 // AppBlockerModule seam for the native blocker bridge (ARCHITECTURE.md §4).
 // Both platforms register a real native module under the same name,
@@ -90,7 +90,6 @@ const getNativeModule = (): NativeAppBlockerModule | undefined =>
   (NativeModules as Record<string, unknown>).AppBlockerModule as NativeAppBlockerModule | undefined;
 
 const VIOLATION_REASONS = ['permission_revoked', 'service_killed', 'battery_critical'] as const;
-const BLOCKED_CATEGORY_VALUES = ['social', 'games', 'entertainment'] as const;
 const PERMISSION_VALUES = ['usage_access', 'overlay', 'family_controls', 'battery_optimization'] as const;
 
 // Runtime-validates whatever the native bridge sends back — never trust a
@@ -132,15 +131,15 @@ const toBlockerEvent = (eventName: string, payload: unknown): BlockerEvent | nul
 
   switch (eventName) {
     case 'shield_triggered':
-      if (
-        typeof value.category === 'string' &&
-        (BLOCKED_CATEGORY_VALUES as readonly string[]).includes(value.category) &&
-        typeof value.at === 'string'
-      ) {
+      // isBlockedCategory reads the ONE JS declaration of the vocabulary
+      // (config/blocked-categories.ts). This used to be a second local
+      // copy of the list, which is exactly what would have silently
+      // dropped every event for the three categories Phase 9 added.
+      if (isBlockedCategory(value.category) && typeof value.at === 'string') {
         return {
           type: 'shield_triggered',
           sessionId,
-          category: value.category as BlockedCategory,
+          category: value.category,
           at: value.at,
         };
       }
