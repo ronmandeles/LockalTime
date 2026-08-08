@@ -2,6 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
+  APP_CATALOG,
   IOS_APPLICATION_QUERIES_SCHEMES,
   IOS_QUERY_SCHEME_LIMIT,
 } from '../src/config/app-catalog';
@@ -126,5 +127,49 @@ describe('iOS LSApplicationQueriesSchemes (Phase 9)', () => {
 
   it("stays under Apple's 50-entry cap", () => {
     expect(readDeclaredSchemes().length).toBeLessThanOrEqual(IOS_QUERY_SCHEME_LIMIT);
+  });
+});
+
+// The Android counterpart, and the reason the two platforms are now the same
+// product: each declares the SAME catalog and asks the same narrow per-app
+// question, neither through a restricted permission.
+describe('Android <queries> package visibility (Phase 9)', () => {
+  const readManifest = (): string =>
+    readNativeFile(join('android', 'app', 'src', 'main', 'AndroidManifest.xml'));
+
+  const readDeclaredPackages = (): string[] => {
+    const block = /<queries>([\s\S]*?)<\/queries>/.exec(readManifest());
+    if (block === null) {
+      throw new Error('no <queries> block declared in AndroidManifest.xml');
+    }
+    return [...(block[1] as string).matchAll(/<package android:name="([^"]+)"/g)].map(
+      (match) => match[1] as string,
+    );
+  };
+
+  // Same silent-failure shape as the iOS scheme list: an undeclared package
+  // reports "not installed" whether it is there or not, so the picker would
+  // quietly hide an app the host actually has.
+  it('declares exactly the catalog packages, in the same order', () => {
+    expect(readDeclaredPackages()).toEqual(APP_CATALOG.map((app) => app.id));
+  });
+
+  // The regression guard that matters most here. QUERY_ALL_PACKAGES is a
+  // RESTRICTED permission: re-adding it silently re-imposes a Play Console
+  // declaration, weeks of review, and the risk of an outright refusal
+  // blocking release — none of which fails a build or a normal test.
+  // Matched as a permission ELEMENT, since the manifest comment mentions the
+  // name in prose explaining why it is gone.
+  it('does not request QUERY_ALL_PACKAGES', () => {
+    expect(readManifest()).not.toMatch(
+      /<uses-permission[^>]*android\.permission\.QUERY_ALL_PACKAGES/,
+    );
+  });
+
+  it('still declares the permissions the blocker itself needs', () => {
+    const manifest = readManifest();
+
+    expect(manifest).toMatch(/android\.permission\.PACKAGE_USAGE_STATS/);
+    expect(manifest).toMatch(/android\.permission\.SYSTEM_ALERT_WINDOW/);
   });
 });

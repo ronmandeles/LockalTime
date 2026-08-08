@@ -296,41 +296,40 @@ spot check.
   only the first. Worth confirming which one a real device in the target market
   actually has before deciding whether to carry both.
 
-## Phase 9 — `InstalledAppsModule` (task 4)
+## Phase 9 — Per-app installed detection (task 4, revised for parity)
 
-Kotlin **compiles** here (`./gradlew :app:compileDebugKotlin`, verified
-2026-08-07) and the JS side has a full contract test over a mocked bridge.
-Neither says anything about what `PackageManager` actually returns.
+Kotlin **compiles** here and the merged manifest carries all 87 `<queries>`
+entries (verified 2026-08-08); the JS side has a full contract test over a
+mocked bridge. Neither says anything about what `PackageManager` returns on a
+real device.
 
-- [ ] **The list is real and recognisable.** On the emulator (and ideally a
-  physical device with a normal set of apps installed), open Create Session
-  and confirm the picker shows the apps the device genuinely has, with
-  correct labels — not package names, not a wall of system services. The
-  LAUNCHER-intent filter is what is supposed to keep the latter out.
-- [ ] **The default dialer and SMS app are absent.** `TelecomManager
-  .defaultDialerPackage` and `Telephony.Sms.getDefaultSmsPackage` are the
-  only device-accurate way to name them, and only a real device proves the
-  lookup works. Check on a device where those are *not* the Google defaults
-  if one is available — that is the case the static denylist cannot cover.
-- [ ] **Lockal Time itself is absent** from its own picker.
-- [ ] **Category coverage.** Note roughly how many apps come back with a
-  null category (Android's `ApplicationInfo.category` is developer-declared
-  and often `CATEGORY_UNDEFINED`). If it is most of them, the category
-  toggles are weaker in practice than ARCHITECTURE §4 implies and that is
-  worth knowing before launch.
-- [ ] **Icon performance with a real app count.** `getIcons` is windowed
-  deliberately — the plan corrected an earlier design that sent ~200 icons
-  inline as 1.5–3 MB of base64 in one bridge payload. Scroll the picker
-  fast on a device with ~200 apps and watch for jank. If windowing is not
-  enough, the next step is a native view that renders the `Drawable`
-  directly and transfers nothing.
-- [ ] **The `QUERY_ALL_PACKAGES` refusal path.** Do not wait for Play to
-  decide: comment the permission out of `AndroidManifest.xml`, rebuild, and
-  confirm the picker silently falls back to the bundled catalog with no
-  error and no UI difference. That fallback is the whole mitigation and it
-  has only ever been exercised in Jest.
-- [ ] **The Play Console declaration itself** — see `docs/DEPLOYMENT.md`.
+Both platforms now show the **same fixed catalog** and only differ in how
+they ask "do you have this one?" — so most of these should be run twice.
 
+- [ ] **The picker shows the same list on an Android and an iOS device.**
+  That parity is the whole point of the 2026-08-08 change; a visible
+  difference means the seam is not doing its job.
+- [ ] **Android filtering works through `<queries>`.** On a device with, say,
+  Instagram but not TikTok, the picker must mark Instagram installed and
+  TikTok not. This is the first real exercise of the `<queries>` block —
+  if a package is missing from it the OS reports the app as absent whether
+  it is there or not, which looks like nothing at all going wrong.
+- [ ] **A package outside the catalog is invisible, not crashing.** Expected
+  and correct: `getApplicationInfo` throws `NameNotFoundException` for an
+  undeclared package exactly as it does for an uninstalled one.
+- [ ] **Lockal Time and the dialer never appear.** The catalog is asserted
+  denylist-free, so this should hold by construction — worth eyeballing once
+  since the narrowed native module no longer does its own `TelecomManager`
+  check.
+- [ ] **Icon performance.** `getIcons` is windowed deliberately (an earlier
+  design sent ~200 icons inline as 1.5–3 MB of base64). Scroll the picker
+  fast and watch for jank.
+- [ ] **A build with no native module** falls back to showing the catalog
+  unfiltered, with no error — the degraded path, not a broken one.
+- [ ] **A bridge failure must read as "unknown", never "you don't have
+  these".** Hard to provoke on a device; the JS contract test covers it, and
+  it is called out here because getting it backwards would hide apps the
+  host actually has. (This was a real bug caught by that test.)
 ## Phase 9 — Create Session blocklist picker (task 5)
 
 - [ ] **Hebrew + RTL.** Switch the device to Hebrew and re-open Create

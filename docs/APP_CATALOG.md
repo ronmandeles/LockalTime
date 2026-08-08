@@ -8,9 +8,22 @@ improvised inside a coding task — and so it can be refreshed later without
 touching a line of code.
 
 Why the catalog exists at all is [`BLOCKLIST_SELECTION_PLAN.md`](BLOCKLIST_SELECTION_PLAN.md) §6.
-The short version: it is **the only way an iOS host can name a specific app**,
-because Apple's picker hands back opaque tokens that mean nothing on anyone
-else's phone.
+It began as the only way an *iOS* host could name a specific app, because
+Apple's picker hands back opaque tokens that mean nothing on anyone else's
+phone.
+
+**Since 2026-08-08 it is the only way anyone can** (owner decision: both
+platforms should be the same product). Android previously enumerated the whole
+device; it no longer does, which also retired `QUERY_ALL_PACKAGES` and its
+Play Console declaration. Both platforms now show this list and filter it to
+the apps the host actually has — iOS via `canOpenURL`, Android via the
+manifest's `<queries>` block.
+
+That raises the stakes on the contents: an app missing from here cannot be
+named by anyone, on any platform. It degrades to "use the category instead",
+which is still a real answer, but the bar for "worth naming" is lower than it
+was. The list was deliberately left at 87 entries for now (owner decision) —
+revisit once there is any signal about what people actually pick.
 
 ## What's in it
 
@@ -54,6 +67,19 @@ Two exclusions worth stating, since both look like omissions:
 Ordering inside the file is by expected blocking frequency within each category,
 not alphabetical. The picker sorts for display; the file's order is the record of
 that judgement.
+
+## The Android `<queries>` block
+
+Every `id` in this file is also declared in `AndroidManifest.xml`'s
+`<queries>` block — that is what lets Android answer "is this installed?" for
+catalog apps without the restricted `QUERY_ALL_PACKAGES` permission. There is
+no practical cap the way Apple imposes one, so the block simply mirrors the
+whole catalog.
+
+**Adding an entry here without adding its package there** makes Android report
+the app as absent whether the host has it or not, with nothing that looks like
+an error. `__tests__/native-config.test.ts` fails on that drift, and on
+`QUERY_ALL_PACKAGES` reappearing.
 
 ## `iosScheme` and the 50-entry budget
 
@@ -101,10 +127,12 @@ It is one JSON file with no code in it — edit and ship. The integrity test wil
 catch a malformed row. When adding entries:
 
 1. Confirm the package name on the app's real Play Store listing.
-2. Add an `iosScheme` only if you can point at documentation for it, and only
+2. **Add the package to `AndroidManifest.xml`'s `<queries>` block too**, or
+   Android will report it as absent for everyone.
+3. Add an `iosScheme` only if you can point at documentation for it, and only
    while the total stays ≤ 50.
-3. Prefer social. See the selection rule above.
-4. Nothing on the safety denylist.
+4. Prefer social. See the selection rule above.
+5. Nothing on the safety denylist.
 
 Whether the list is *right* is guesswork by construction until there are real
 users — aggregate data on what people actually block is the only signal that

@@ -9,6 +9,17 @@ shaped this way, and `backlog.md` for what is true today.
 Everything iOS in here is **written and compiled, never run** (no Mac). The
 checks that could not be automated are in `docs/MANUAL_QA.md`.
 
+**One decision in here was reversed after implementation (owner, 2026-08-08).**
+§6/§7/§8/§10 describe Android hosts picking from their *fully enumerated*
+installed apps while iOS hosts pick from the bundled catalog. That asymmetry is
+gone: **both platforms now offer the same fixed catalog**, and each filters it
+to the apps the host actually has — iOS via `canOpenURL`, Android via the
+manifest's `<queries>` block. `QUERY_ALL_PACKAGES` and its Play Console
+declaration were removed entirely. §10's "the owner chose full enumeration
+knowingly" and the mitigation it describes are therefore superseded: the
+mitigation became the design. Read `docs/APP_CATALOG.md` and ARCHITECTURE §4
+for the current shape.
+
 Originally agreed with the owner 2026-08-07.
 **Reverses:** `docs/ARCHITECTURE.md` §4's "fixed set of default categories… not a
 per-session or per-user app picker" and `docs/DATABASE.md`'s

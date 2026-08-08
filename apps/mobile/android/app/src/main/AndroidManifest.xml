@@ -29,21 +29,110 @@
          documented requirement as of this writing. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
-    <!-- Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md §8/§10): InstalledAppsModule
-         enumerates the host's launchable apps so the Create Session picker can
-         offer them by name. This is a RESTRICTED permission — it needs a Play
-         Console declaration, review takes weeks, and it can be REFUSED, in
-         which case the app cannot ship with full enumeration.
-         The owner chose full enumeration knowingly. It blocks release, never
-         development, and the mitigation is already built rather than planned:
-         blockable-app-source.ts falls back to the bundled catalog on an empty
-         enumeration, so a refusal costs niche apps and no UI at all.
-         tools:ignore because Play's lint flags restricted permissions on
-         sight; the declaration is the answer to it, not a manifest change. -->
-    <uses-permission
-        android:name="android.permission.QUERY_ALL_PACKAGES"
-        tools:ignore="QueryAllPackagesPermission" />
 
+    <!-- Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md): the Create Session picker
+         offers a fixed, bundled catalog of well-known apps
+         (src/config/app-catalog.json) on BOTH platforms, and filters it to the
+         ones the host actually has. This block is how Android answers "is this
+         installed?" for exactly those packages and nothing else - the
+         sanctioned narrow alternative to QUERY_ALL_PACKAGES.
+         It deliberately replaced QUERY_ALL_PACKAGES (owner decision
+         2026-08-08, superseding the full-enumeration choice of 2026-08-07):
+         parity with iOS was the goal, and losing the RESTRICTED permission
+         means no Play Console declaration, no weeks of review, and no risk of
+         a refusal blocking release.
+         Exactly mirrors iOS's LSApplicationQueriesSchemes. Generated from the
+         catalog; drift is caught by __tests__/native-config.test.ts, not by a
+         build error. -->
+    <queries>
+        <package android:name="com.instagram.android" />
+        <package android:name="com.zhiliaoapp.musically" />
+        <package android:name="com.facebook.katana" />
+        <package android:name="com.facebook.lite" />
+        <package android:name="com.facebook.orca" />
+        <package android:name="com.whatsapp" />
+        <package android:name="com.snapchat.android" />
+        <package android:name="com.twitter.android" />
+        <package android:name="com.reddit.frontpage" />
+        <package android:name="com.instagram.barcelona" />
+        <package android:name="com.pinterest" />
+        <package android:name="com.linkedin.android" />
+        <package android:name="org.telegram.messenger" />
+        <package android:name="com.discord" />
+        <package android:name="org.thoughtcrime.securesms" />
+        <package android:name="com.tumblr" />
+        <package android:name="com.tencent.mm" />
+        <package android:name="jp.naver.line.android" />
+        <package android:name="com.viber.voip" />
+        <package android:name="com.kakao.talk" />
+        <package android:name="com.tinder" />
+        <package android:name="com.bumble.app" />
+        <package android:name="xyz.blueskyweb.app" />
+        <package android:name="org.joinmastodon.android" />
+        <package android:name="com.bereal.ft" />
+        <package android:name="com.vkontakte.android" />
+        <package android:name="com.sina.weibo" />
+        <package android:name="com.xingin.xhs" />
+        <package android:name="com.quora.android" />
+        <package android:name="com.nextdoor" />
+        <package android:name="co.hinge.app" />
+        <package android:name="com.grindrapp.android" />
+        <package android:name="com.locket.Locket" />
+        <package android:name="com.google.android.youtube" />
+        <package android:name="com.netflix.mediaclient" />
+        <package android:name="com.spotify.music" />
+        <package android:name="tv.twitch.android.app" />
+        <package android:name="com.disney.disneyplus" />
+        <package android:name="com.soundcloud.android" />
+        <package android:name="com.amazon.avod.thirdpartyclient" />
+        <package android:name="com.wbd.stream" />
+        <package android:name="com.hulu.plus" />
+        <package android:name="com.cbs.app" />
+        <package android:name="com.peacocktv.peacockandroid" />
+        <package android:name="com.google.android.apps.youtube.music" />
+        <package android:name="com.apple.android.music" />
+        <package android:name="com.audible.application" />
+        <package android:name="com.pandora.android" />
+        <package android:name="deezer.android.app" />
+        <package android:name="com.crunchyroll.crunchyroid" />
+        <package android:name="com.lemon.lvoverseas" />
+        <package android:name="com.roblox.client" />
+        <package android:name="com.mojang.minecraftpe" />
+        <package android:name="com.nianticlabs.pokemongo" />
+        <package android:name="com.king.candycrushsaga" />
+        <package android:name="com.supercell.clashofclans" />
+        <package android:name="com.supercell.clashroyale" />
+        <package android:name="com.supercell.brawlstars" />
+        <package android:name="com.tencent.ig" />
+        <package android:name="com.activision.callofduty.shooter" />
+        <package android:name="com.miHoYo.GenshinImpact" />
+        <package android:name="com.dts.freefireth" />
+        <package android:name="com.kiloo.subwaysurf" />
+        <package android:name="com.dreamgames.royalmatch" />
+        <package android:name="com.scopely.monopolygo" />
+        <package android:name="com.innersloth.spacemafia" />
+        <package android:name="com.chess" />
+        <package android:name="com.google.android.apps.magazines" />
+        <package android:name="bbc.mobile.news.ww" />
+        <package android:name="com.cnn.mobile.android.phone" />
+        <package android:name="com.nytimes.android" />
+        <package android:name="com.guardian" />
+        <package android:name="flipboard.app" />
+        <package android:name="jp.gocro.smartnews.android" />
+        <package android:name="com.google.android.apps.maps" />
+        <package android:name="com.waze" />
+        <package android:name="com.ubercab" />
+        <package android:name="me.lyft.android" />
+        <package android:name="com.google.android.gm" />
+        <package android:name="com.Slack" />
+        <package android:name="com.microsoft.office.outlook" />
+        <package android:name="com.microsoft.teams" />
+        <package android:name="us.zoom.videomeetings" />
+        <package android:name="notion.id" />
+        <package android:name="com.openai.chatgpt" />
+        <package android:name="com.trello" />
+        <package android:name="com.asana.app" />
+    </queries>
     <application
       android:name=".MainApplication"
       android:label="@string/app_name"

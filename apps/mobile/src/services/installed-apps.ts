@@ -1,36 +1,26 @@
 import { NativeModules, Platform } from 'react-native';
 
-import { isBlockedCategory, type BlockedCategory } from '../config/blocked-categories';
-import { isSafetyDenied } from '../config/blocklist-safety';
-
-// Android's real installed-app list, for the Create Session picker
-// (docs/BLOCKLIST_SELECTION_PLAN.md §8). Android-only by nature, not by
-// omission: iOS offers no app enumeration at all, which is why the picker
-// reads through blockable-app-source.ts rather than calling this directly.
+// Android's answer to "is this specific app installed?"
+// (docs/BLOCKLIST_SELECTION_PLAN.md §8.)
 //
-// Needs QUERY_ALL_PACKAGES, a restricted permission requiring a Play
-// Console declaration that can take weeks and can be refused (§10). Every
-// path here degrades to an empty list rather than an error, so a refusal —
-// or simply an older build without the module — lands the picker on the
-// bundled catalog instead of breaking it.
+// **This used to enumerate the whole device.** It stopped (owner decision
+// 2026-08-08): both platforms now offer the same fixed, bundled catalog and
+// filter it to what the host actually has, so this is the exact counterpart
+// of iOS's canOpenURL probing — one narrow question per app, nothing more.
+// Losing full enumeration also lost QUERY_ALL_PACKAGES, a restricted
+// permission needing a Play Console declaration that can be refused.
 //
-// Read fresh on every call, never cached at module load: caching a
-// reference in a top-level const makes the seam unmockable in Jest, since
-// imports execute before any later test mutation of NativeModules (the
-// same lesson as blocking-permissions.ts and app-blocker.ts).
-
-export interface InstalledApp {
-  readonly packageName: string;
-  readonly label: string;
-  // Null where Android reports CATEGORY_UNDEFINED, which is common — the
-  // field is developer-declared and inconsistently populated
-  // (ARCHITECTURE.md §4). Such an app is still pickable by name; it simply
-  // isn't covered by any category toggle.
-  readonly category: BlockedCategory | null;
-}
+// Only packages named in the manifest's <queries> block are visible, and
+// that block is generated from the catalog. Anything else reports "not
+// installed" whether it is there or not — which is the privacy property the
+// block exists to provide, and the reason the seam treats a *missing* answer
+// as unknown rather than as absence.
+//
+// Read fresh on every call, never cached at module load — same lesson as
+// app-blocker.ts and blocking-permissions.ts.
 
 interface NativeInstalledAppsModule {
-  getInstalledApps(): Promise<unknown>;
+  getInstalledPackages(packageNames: readonly string[]): Promise<unknown>;
   getIcons(packageNames: readonly string[]): Promise<unknown>;
 }
 
@@ -43,75 +33,55 @@ const getNativeModule = (): NativeInstalledAppsModule | undefined => {
     | undefined;
 };
 
-// Boundary validation on native-bridge data (typescript-strictness skill):
-// nothing crossing the bridge is trusted as already-typed. A malformed row
-// is dropped rather than repaired, except for the label — an app with no
-// usable label is still a real app the host may want to block, so it falls
-// back to its package name rather than disappearing.
-const toInstalledApp = (raw: unknown): InstalledApp | null => {
-  if (typeof raw !== 'object' || raw === null) {
-    return null;
-  }
-  const value = raw as Record<string, unknown>;
-  if (typeof value.packageName !== 'string' || value.packageName.length === 0) {
-    return null;
-  }
-  if (value.label !== undefined && typeof value.label !== 'string') {
-    return null;
-  }
-  const label = typeof value.label === 'string' ? value.label.trim() : '';
-
-  return {
-    packageName: value.packageName,
-    label: label.length > 0 ? label : value.packageName,
-    category: isBlockedCategory(value.category) ? value.category : null,
-  };
-};
-
 export interface InstalledAppsService {
-  // Whether a real enumeration is possible here at all. The picker uses
-  // this to decide whether to read the device or the bundled catalog.
+  // Whether this device can answer the installed question at all. False on
+  // iOS (which uses canOpenURL instead) and on an Android build without the
+  // module — in both cases the picker shows the catalog unfiltered, which is
+  // harmless: an app the host lacks is a no-op for them and still blocks
+  // correctly for members who have it.
   isAvailable(): boolean;
-  list(): Promise<readonly InstalledApp[]>;
-  // Icons for the visible window only, never the whole list. ~200 apps x a
-  // 96px PNG is 1.5-3 MB of base64 in one synchronous bridge payload, which
-  // will jank (plan §8, corrected from an earlier draft that returned icons
-  // inline). Returns package name -> data URI; a missing entry just means
-  // no icon, never an error.
+  // The installed subset of the packages asked about, or **null when the
+  // question could not be asked at all**.
+  //
+  // That distinction is load-bearing, not defensive typing. An empty set
+  // means "the device has none of these"; null means "we learned nothing".
+  // Collapsing the two would report every app as absent on any bridge
+  // failure — hiding apps the host actually has, and telling them something
+  // false about their own phone. Never throws.
+  getInstalledPackages(packageNames: readonly string[]): Promise<ReadonlySet<string> | null>;
+  // Icons for the visible window only, never the whole list (plan §8,
+  // corrected from an earlier design that returned them inline). Returns
+  // package name -> data URI; a missing entry just means no icon.
   getIcons(packageNames: readonly string[]): Promise<Readonly<Record<string, string>>>;
 }
 
 export const installedApps: InstalledAppsService = {
   isAvailable: (): boolean => getNativeModule() !== undefined,
 
-  list: async (): Promise<readonly InstalledApp[]> => {
+  getInstalledPackages: async (packageNames): Promise<ReadonlySet<string> | null> => {
+    if (packageNames.length === 0) {
+      return new Set();
+    }
     const native = getNativeModule();
     if (native === undefined) {
-      return [];
+      return null;
     }
 
     let raw: unknown;
     try {
-      raw = await native.getInstalledApps();
+      raw = await native.getInstalledPackages([...packageNames]);
     } catch {
-      // Most likely QUERY_ALL_PACKAGES was never granted. An empty list is
-      // the honest answer and the seam's fallback trigger — never an error
-      // the picker has to render.
-      return [];
+      // null, not an empty set: we learned nothing. An empty set would mean
+      // "you have none of these", which is a claim about the host's phone
+      // that a bridge failure does not license.
+      return null;
     }
     if (!Array.isArray(raw)) {
-      return [];
+      return null;
     }
-
-    const seen = new Set<string>();
-    return raw.flatMap((entry) => {
-      const app = toInstalledApp(entry);
-      if (app === null || seen.has(app.packageName) || isSafetyDenied(app.packageName)) {
-        return [];
-      }
-      seen.add(app.packageName);
-      return [app];
-    });
+    // Boundary validation on native-bridge data (typescript-strictness):
+    // nothing crossing the bridge is trusted as already-typed.
+    return new Set(raw.filter((id): id is string => typeof id === 'string' && id.length > 0));
   },
 
   getIcons: async (packageNames): Promise<Readonly<Record<string, string>>> => {

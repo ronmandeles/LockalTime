@@ -1,12 +1,9 @@
 package com.lockaltime.blocking
 
-import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.provider.Telephony
-import android.telecom.TelecomManager
 import android.util.Base64
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
@@ -14,28 +11,37 @@ import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableArray
-import com.facebook.react.bridge.WritableArray
-import com.facebook.react.bridge.WritableMap
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Executors
 
-// The host's actually-installed apps, for the Create Session picker
-// (docs/BLOCKLIST_SELECTION_PLAN.md §8). Android-only by nature, not by
-// omission: iOS offers no enumeration at all, which is why JS reads this
-// through blockable-app-source.ts rather than calling it directly.
+// Answers one narrow question per app: **is this specific package
+// installed?** (docs/BLOCKLIST_SELECTION_PLAN.md §8.)
 //
-// Requires QUERY_ALL_PACKAGES (AndroidManifest.xml), a RESTRICTED
-// permission needing a Play Console declaration that takes weeks and can be
-// refused (§10). Nothing here throws on that: a failure resolves to an
-// empty list, which the JS seam reads as "fall back to the bundled
-// catalog" — the mitigation is already built rather than hypothetical.
+// **This used to enumerate every launchable app on the device.** It stopped
+// (owner decision 2026-08-08, superseding the full-enumeration choice of
+// 2026-08-07): Android and iOS now offer the same fixed, bundled catalog
+// (src/config/app-catalog.json), and this module only filters that catalog
+// down to what the host actually has — exactly what iOS does with
+// canOpenURL. Two consequences, both wanted:
 //
-// Both methods run off the main thread on a plain single-thread executor
-// rather than pulling in kotlinx-coroutines for two call sites (the repo
-// has no coroutines dependency; BlockerForegroundService uses a Handler for
-// the same reason). getInstalledApps touches PackageManager once per
-// installed package and getIcons decodes bitmaps — neither belongs on the
-// UI thread.
+//   * The picker is the same product on both platforms.
+//   * QUERY_ALL_PACKAGES is gone. It is a RESTRICTED permission needing a
+//     Play Console declaration that takes weeks and can be refused; the
+//     manifest's <queries> block is the sanctioned narrow alternative and
+//     needs no declaration at all. Once the catalog is the only source of
+//     app names, full enumeration bought nothing but that risk.
+//
+// Every package this can see is one the manifest's <queries> block names,
+// which is generated from the catalog. Asking about anything else simply
+// reports "not installed" — the OS filters it, not this code. That is also
+// why there is no safety-denylist filtering here any more: the queryable
+// set IS the catalog, and the catalog is asserted denylist-free by
+// app-catalog.test.ts.
+//
+// Runs off the main thread on a plain single-thread executor rather than
+// pulling in kotlinx-coroutines for two call sites (the repo has no
+// coroutines dependency; BlockerForegroundService uses a Handler for the
+// same reason).
 class InstalledAppsModule(reactContext: ReactApplicationContext) :
   ReactContextBaseJavaModule(reactContext) {
 
@@ -43,82 +49,38 @@ class InstalledAppsModule(reactContext: ReactApplicationContext) :
 
   private val executor = Executors.newSingleThreadExecutor()
 
-  // Never blockable — and this is the LAST line of defence, not the only
-  // one. The JS seam filters its own static copy (src/config/
-  // blocklist-safety.ts) and the server refuses these at the API boundary.
-  // What only this layer can add is the DEVICE-ACCURATE part: the default
-  // dialer and SMS app differ per device, so a static list is guesswork
-  // about precisely the app someone might need in an emergency.
-  private fun neverBlockable(): Set<String> {
-    val packages = mutableSetOf(reactApplicationContext.packageName)
-    runCatching {
-      reactApplicationContext.getSystemService(TelecomManager::class.java)?.defaultDialerPackage
-    }
-      .getOrNull()
-      ?.let { packages.add(it) }
-    runCatching { Telephony.Sms.getDefaultSmsPackage(reactApplicationContext) }
-      .getOrNull()
-      ?.let { packages.add(it) }
-    return packages
-  }
-
+  /// Which of the given packages are present. Returns the installed subset,
+  /// never an error — an unanswerable question resolves to "not in the
+  /// list", and the JS seam reads a missing entry as "unknown" rather than
+  /// as absence.
   @ReactMethod
-  fun getInstalledApps(promise: Promise) {
+  fun getInstalledPackages(packageNames: ReadableArray, promise: Promise) {
     executor.execute {
-      // Resolve empty rather than reject: to the JS seam an empty list and
-      // a failure mean the same thing (use the catalog), and empty is the
-      // shape it already handles.
-      val apps = runCatching { collectInstalledApps() }.getOrElse { Arguments.createArray() }
-      promise.resolve(apps)
-    }
-  }
+      val installed = Arguments.createArray()
+      val packageManager = reactApplicationContext.packageManager
 
-  private fun collectInstalledApps(): WritableArray {
-    val packageManager = reactApplicationContext.packageManager
-    val excluded = neverBlockable()
-    val result = Arguments.createArray()
-
-    // Filtering to apps with a LAUNCHER intent is doing real work here, not
-    // tidying: it drops the hundreds of system services and headless
-    // providers a raw getInstalledApplications() returns, none of which a
-    // person could open or would recognise in a picker.
-    val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
-    val launchable = packageManager.queryIntentActivities(launcherIntent, 0)
-
-    val seen = mutableSetOf<String>()
-    launchable.forEach { resolveInfo ->
-      val packageName = resolveInfo.activityInfo?.packageName ?: return@forEach
-      if (packageName in excluded || !seen.add(packageName)) {
-        return@forEach
+      for (index in 0 until packageNames.size()) {
+        val packageName = packageNames.getString(index) ?: continue
+        // Per-package, so one odd entry costs only itself. A package outside
+        // the <queries> block throws NameNotFoundException exactly as an
+        // uninstalled one does — indistinguishable by design, which is the
+        // privacy property the block exists to provide.
+        val isInstalled =
+          runCatching { packageManager.getApplicationInfo(packageName, 0) }.isSuccess
+        if (isInstalled) {
+          installed.pushString(packageName)
+        }
       }
-      val applicationInfo =
-        runCatching { packageManager.getApplicationInfo(packageName, 0) }.getOrNull()
-          ?: return@forEach
 
-      val entry: WritableMap = Arguments.createMap()
-      entry.putString("packageName", packageName)
-      entry.putString("label", packageManager.getApplicationLabel(applicationInfo).toString())
-      // Null, not a placeholder, when Android has no opinion.
-      // CATEGORY_UNDEFINED is common: the field is developer-declared and
-      // inconsistently populated (ARCHITECTURE.md §4). JS keeps such an app
-      // pickable by name; it simply isn't covered by a category toggle.
-      val jsCategory = CategoryMapping.jsCategoryFor(applicationInfo.category)
-      if (jsCategory == null) {
-        entry.putNull("category")
-      } else {
-        entry.putString("category", jsCategory)
-      }
-      result.pushMap(entry)
+      promise.resolve(installed)
     }
-
-    return result
   }
 
   // Icons for the visible window only. The plan (§8) corrected an earlier
   // design that returned them inline with the list: ~200 apps x a 96px PNG
   // is 1.5-3 MB of base64 across the bridge in one payload, which will
-  // jank. If windowing proves insufficient, the next step is a native view
-  // that renders the Drawable directly and transfers nothing at all.
+  // jank. Still windowed even though the catalog is bounded at 87 — the
+  // cost is per-icon decode work, not list length.
   @ReactMethod
   fun getIcons(packageNames: ReadableArray, promise: Promise) {
     executor.execute {
