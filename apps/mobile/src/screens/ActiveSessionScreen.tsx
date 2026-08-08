@@ -4,6 +4,7 @@ import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 
+import BlocklistSummary from '../components/BlocklistSummary';
 import StatusBanner from '../components/StatusBanner';
 import { DEFAULT_BLOCKED_CATEGORIES } from '../config/blocked-categories';
 import { useAppBlocker } from '../hooks/use-app-blocker';
@@ -192,6 +193,16 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
           </Text>
         </View>
       )}
+
+      {/* Phase 9: near the timer, per the plan — the pre-join screen is easy
+          to forget an hour in, and someone who has just hit a block wants to
+          know why. Read-only, off the session row useSession already
+          hydrated: no new fetch, and nothing here can change a running
+          session's blocklist (§9a). */}
+      <BlocklistSummary
+        categories={session.blocked_categories}
+        packages={session.blocked_packages}
+      />
 
       {route.params.qrToken !== undefined && (
         <View style={styles.qrCard}>

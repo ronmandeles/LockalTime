@@ -182,6 +182,11 @@ export const he: TranslationSchema = {
   },
   activeSession: {
     title: 'סשן פעיל',
+    blocklist: {
+      label: 'חוסם',
+      more: '+{{count}}',
+      accessibilityLabel: 'מה הסשן הזה חוסם. הקישו כדי להציג הכל.',
+    },
     status: {
       pending: 'ממתין להתחלה',
       active: 'פעיל',
