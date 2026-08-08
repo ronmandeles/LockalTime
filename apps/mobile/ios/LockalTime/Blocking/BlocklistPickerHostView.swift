@@ -11,10 +11,21 @@ import SwiftUI
 // selection, because pre-ticking needs the tokens and not having them is the
 // entire reason the step exists.
 //
-// The header and footer carry that list into Apple's own sheet, which is the
-// one thing that meaningfully reduces the friction: the member isn't working
-// from memory of the previous screen while using Apple's search field.
-// Roughly 15-20 seconds for three items. Android members skip all of it.
+// **The instruction text is drawn by us, not by Apple.** The plan called for
+// FamilyActivityPicker's own `headerText`/`footerText` parameters so the list
+// renders inside Apple's sheet — but that initializer is **iOS 16+**, and
+// this project's deployment target is 15.1 (IPHONEOS_DEPLOYMENT_TARGET in
+// project.pbxproj). Using it would not degrade at runtime; it would fail to
+// compile, and only in cloud macOS CI, since nothing here can build iOS.
+//
+// The alternative to our own chrome was `if #available(iOS 16, *)` with two
+// paths. Rejected deliberately: Swift is the one place this project cannot
+// test, so a second untested branch costs more than it buys. Our own header
+// sits outside the picker's rectangle rather than inside Apple's list, which
+// is cosmetically worse and functionally the same — the member can still read
+// what to select while using Apple's search field. Whether it stays visible
+// when the picker drills into a category is a real-device question
+// (docs/MANUAL_QA.md).
 //
 // Copy arrives already translated from JS — the whole i18n bundle lives
 // there, and duplicating it into NSLocalizedString would be a second
@@ -39,11 +50,26 @@ struct BlocklistPickerHostView: View {
 
   var body: some View {
     NavigationView {
-      FamilyActivityPicker(
-        headerText: headerText,
-        footerText: footerText,
-        selection: $selection
-      )
+      VStack(alignment: .leading, spacing: 8) {
+        if !headerText.isEmpty {
+          Text(headerText)
+            .font(.subheadline)
+            .padding(.horizontal)
+            .padding(.top, 8)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+
+        FamilyActivityPicker(selection: $selection)
+
+        if !footerText.isEmpty {
+          Text(footerText)
+            .font(.footnote)
+            .foregroundColor(.secondary)
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+      }
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {

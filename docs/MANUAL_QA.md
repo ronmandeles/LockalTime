@@ -391,10 +391,15 @@ lived there. That logic is in JS and is fully unit-tested; what follows is
 everything the split could not cover.
 
 - [ ] **A first-ever join.** Fresh install, join a session blocking
-  Social + Instagram. Apple's picker must appear with the two items named
-  in its **header text**, inside Apple's own sheet — that header is the only
-  thing standing between the member and working from memory while using
-  Apple's search field.
+  Social + Instagram. Apple's picker must appear with the two items named in
+  the instruction text above it.
+- [ ] **Does that instruction stay visible while they search?** It is **our**
+  SwiftUI chrome around the picker, not Apple's own header —
+  `FamilyActivityPicker(headerText:footerText:)` is iOS 16+ and this project
+  targets 15.1, so the native version would not compile. Ours sits outside
+  the picker's rectangle. If it scrolls away the moment the member taps into
+  Apple's search field, the instruction is gone exactly when it is needed,
+  and the fix is an availability-gated native header for iOS 16+.
 - [ ] **Cancelling.** Dismiss the picker. The member must **not** be joined:
   no session, no `markBlockerReady`, and the retry affordance must
   re-present the picker.

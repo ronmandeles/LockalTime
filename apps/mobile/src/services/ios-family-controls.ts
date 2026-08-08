@@ -32,9 +32,13 @@ export interface PresentPickerOptions {
   // Saved against the completed selection so an identical blocklist later
   // skips the picker entirely.
   readonly cacheKey: string;
-  // FamilyActivityPicker accepts header and footer text, so the list of
-  // what to select renders inside Apple's own UI — the member isn't working
-  // from memory of the previous screen.
+  // The list of what to select, rendered around Apple's picker so the
+  // member isn't working from memory of the previous screen.
+  //
+  // Drawn by our own SwiftUI chrome, NOT by Apple: FamilyActivityPicker's
+  // own headerText/footerText parameters are iOS 16+ and this project
+  // targets 15.1, where they are a compile error rather than a graceful
+  // degradation (see BlocklistPickerHostView.swift).
   readonly headerText: string;
   readonly footerText: string;
 }
