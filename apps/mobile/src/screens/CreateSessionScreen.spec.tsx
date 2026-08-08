@@ -118,17 +118,14 @@ describe('CreateSessionScreen', () => {
     mockRememberBlocklistPreference.mockReset();
     mockRememberBlocklistPreference.mockResolvedValue(undefined);
     mockListApps.mockReset();
-    mockListApps.mockResolvedValue({
-      apps: [
-        {
-          id: 'com.instagram.android',
-          name: 'Instagram',
-          category: 'social',
-          installed: 'installed',
-        },
-      ],
-      isExhaustive: true,
-    });
+    mockListApps.mockResolvedValue([
+      {
+        id: 'com.instagram.android',
+        name: 'Instagram',
+        category: 'social',
+        installed: 'installed',
+      },
+    ]);
     mockPreference = { status: 'ready', selection: DEFAULT_SELECTION };
     mockRole = null;
   });
@@ -345,17 +342,14 @@ describe('CreateSessionScreen — the blocklist (Phase 9)', () => {
     mockRememberBlocklistPreference.mockReset();
     mockRememberBlocklistPreference.mockResolvedValue(undefined);
     mockListApps.mockReset();
-    mockListApps.mockResolvedValue({
-      apps: [
-        {
-          id: 'com.instagram.android',
-          name: 'Instagram',
-          category: 'social',
-          installed: 'installed',
-        },
-      ],
-      isExhaustive: true,
-    });
+    mockListApps.mockResolvedValue([
+      {
+        id: 'com.instagram.android',
+        name: 'Instagram',
+        category: 'social',
+        installed: 'installed',
+      },
+    ]);
     mockPreference = { status: 'ready', selection: DEFAULT_SELECTION };
     mockRole = null;
   });

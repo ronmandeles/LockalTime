@@ -6,7 +6,7 @@ import { I18nProvider } from '../i18n/I18nProvider';
 import { initI18n } from '../i18n/init-i18n';
 import { en } from '../i18n/locales/en';
 import { he } from '../i18n/locales/he';
-import type { BlockableAppListing } from '../services/blockable-app-source';
+import type { BlockableApp } from '../services/blockable-app-source';
 import type { BlocklistSelection } from '../state/blocklist-preference-store';
 
 // The Create Session blocklist picker (docs/BLOCKLIST_SELECTION_PLAN.md §7).
@@ -14,7 +14,7 @@ import type { BlocklistSelection } from '../state/blocklist-preference-store';
 // catalog of 87 apps or a live device enumeration, neither of which a
 // component test should depend on.
 
-const mockListApps = jest.fn<Promise<BlockableAppListing>, []>();
+const mockListApps = jest.fn<Promise<readonly BlockableApp[]>, []>();
 jest.mock('../services/blockable-app-source', () => ({
   blockableAppSource: { listApps: () => mockListApps() },
 }));
@@ -35,14 +35,11 @@ jest.mock('react-native-localize', () => ({ getLocales: () => [EN_US] }));
 
 import BlocklistPicker from './BlocklistPicker';
 
-const LISTING: BlockableAppListing = {
-  apps: [
-    { id: 'com.instagram.android', name: 'Instagram', category: 'social', installed: 'installed' },
-    { id: 'com.zhiliaoapp.musically', name: 'TikTok', category: 'social', installed: 'installed' },
-    { id: 'com.roblox.client', name: 'Roblox', category: 'games', installed: 'not_installed' },
-  ],
-  isExhaustive: true,
-};
+const LISTING: readonly BlockableApp[] = [
+  { id: 'com.instagram.android', name: 'Instagram', category: 'social', installed: 'installed' },
+  { id: 'com.zhiliaoapp.musically', name: 'TikTok', category: 'social', installed: 'installed' },
+  { id: 'com.roblox.client', name: 'Roblox', category: 'games', installed: 'not_installed' },
+];
 
 const onChange = jest.fn();
 
@@ -197,12 +194,9 @@ describe('the "not on this device" note', () => {
   // silence proves nothing. Reporting 'unknown' as absence would tell the
   // host something false about their own phone.
   it('stays silent for an app whose presence could not be determined', async () => {
-    mockListApps.mockResolvedValue({
-      apps: [
-        { id: 'com.some.app', name: 'Some App', category: 'social', installed: 'unknown' },
-      ],
-      isExhaustive: false,
-    });
+    mockListApps.mockResolvedValue([
+      { id: 'com.some.app', name: 'Some App', category: 'social', installed: 'unknown' },
+    ]);
 
     await renderPicker({ categories: [], packages: ['com.some.app'] });
 
@@ -224,14 +218,12 @@ describe('a carried-over selection the source does not offer', () => {
     );
   });
 
-  it('counts it as absent against an exhaustive listing', async () => {
-    await renderPicker({ categories: [], packages: ['com.gone.app'] });
-
-    expect(await screen.findByTestId('blocklist-not-installed-note')).toBeOnTheScreen();
-  });
-
-  it('does NOT count it as absent against the catalog, which is partial by design', async () => {
-    mockListApps.mockResolvedValue({ apps: LISTING.apps, isExhaustive: false });
+  // Never counted as absent. The catalog is the queryable set on BOTH
+  // platforms now, so an entry outside it cannot be asked about at all — its
+  // absence here means "we have never heard of this app", which is not a
+  // statement about the host's phone.
+  it('does NOT count it as absent, since the catalog is partial by design', async () => {
+    mockListApps.mockResolvedValue(LISTING);
 
     await renderPicker({ categories: [], packages: ['com.gone.app'] });
 

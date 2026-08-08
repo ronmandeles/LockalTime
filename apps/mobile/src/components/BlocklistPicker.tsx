@@ -5,11 +5,7 @@ import { useTranslation } from 'react-i18next';
 
 import { resolveAppName } from '../config/app-catalog';
 import { BLOCKED_CATEGORY_VALUES, type BlockedCategory } from '../config/blocked-categories';
-import {
-  blockableAppSource,
-  type BlockableApp,
-  type BlockableAppListing,
-} from '../services/blockable-app-source';
+import { blockableAppSource, type BlockableApp } from '../services/blockable-app-source';
 import type { BlocklistSelection } from '../state/blocklist-preference-store';
 import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
@@ -34,9 +30,12 @@ interface BlocklistPickerProps {
 
 type ListingState =
   | { readonly status: 'loading' }
-  | { readonly status: 'loaded'; readonly listing: BlockableAppListing };
+  | { readonly status: 'loaded'; readonly apps: readonly BlockableApp[] };
 
-interface AppRow extends BlockableApp {
+interface AppRow {
+  readonly id: string;
+  readonly name: string;
+  readonly installed: BlockableApp['installed'];
   readonly isSelected: boolean;
 }
 
@@ -52,9 +51,9 @@ const BlocklistPicker = ({
     let cancelled = false;
     blockableAppSource
       .listApps()
-      .then((listing) => {
+      .then((apps) => {
         if (!cancelled) {
-          setListingState({ status: 'loaded', listing });
+          setListingState({ status: 'loaded', apps });
         }
       })
       .catch(() => {
@@ -62,7 +61,7 @@ const BlocklistPicker = ({
         // host has to dismiss — the category toggles alone still make a
         // valid session.
         if (!cancelled) {
-          setListingState({ status: 'loaded', listing: { apps: [], isExhaustive: false } });
+          setListingState({ status: 'loaded', apps: [] });
         }
       });
     return (): void => {
@@ -79,30 +78,35 @@ const BlocklistPicker = ({
     }
     const offered =
       approved === null
-        ? listingState.listing.apps
-        : listingState.listing.apps.filter((app) => approved.packages.includes(app.id));
+        ? listingState.apps
+        : listingState.apps.filter((app) => approved.packages.includes(app.id));
     const offeredIds = new Set(offered.map((app) => app.id));
 
     // A selection carried over from a previous session that the source no
     // longer offers still gets a row. An invisible selection that is
     // nonetheless submitted is the worse outcome — the host has to be able
     // to see and turn it off.
+    //
+    // Always 'unknown', never 'not_installed'. The catalog is the queryable
+    // set on both platforms now, so an entry outside it cannot be asked
+    // about at all — its absence here means "we have never heard of this
+    // app", which is not a statement about the host's phone.
     const carriedOver: readonly AppRow[] = selection.packages
       .filter((packageName) => !offeredIds.has(packageName))
       .map((packageName) => ({
         id: packageName,
         name: resolveAppName(packageName),
-        category: null,
-        // Only an exhaustive listing can call this absent. Against the
-        // catalog — partial by design — a missing entry means "we have
-        // never heard of this app", which is not a statement about the
-        // host's phone.
-        installed: listingState.listing.isExhaustive ? ('not_installed' as const) : ('unknown' as const),
+        installed: 'unknown' as const,
         isSelected: true,
       }));
 
     return [
-      ...offered.map((app) => ({ ...app, isSelected: selection.packages.includes(app.id) })),
+      ...offered.map((app) => ({
+        id: app.id,
+        name: app.name,
+        installed: app.installed,
+        isSelected: selection.packages.includes(app.id),
+      })),
       ...carriedOver,
     ];
   }, [listingState, approved, selection.packages]);
