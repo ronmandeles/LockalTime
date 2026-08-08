@@ -85,6 +85,7 @@
         <package android:name="com.disney.disneyplus" />
         <package android:name="com.soundcloud.android" />
         <package android:name="com.amazon.avod.thirdpartyclient" />
+        <package android:name="com.wbd.hbomax" />
         <package android:name="com.wbd.stream" />
         <package android:name="com.hulu.plus" />
         <package android:name="com.cbs.app" />

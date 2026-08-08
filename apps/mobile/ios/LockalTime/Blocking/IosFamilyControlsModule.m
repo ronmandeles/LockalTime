@@ -4,7 +4,7 @@
 // behind them lives in JS (see the Swift file's header for why).
 #import <React/RCTBridgeModule.h>
 
-@interface RCT_EXTERN_MODULE (IosFamilyControlsModule, NSObject)
+@interface RCT_EXTERN_MODULE(IosFamilyControlsModule, NSObject)
 
 RCT_EXTERN_METHOD(getKnownIds
                   : (RCTPromiseResolveBlock)resolve rejecter
