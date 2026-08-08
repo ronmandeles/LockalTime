@@ -225,6 +225,15 @@ export const en = {
   },
   activeSession: {
     title: 'Session in progress',
+    // Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md §7): the pre-join screen is
+    // easy to forget an hour in, and someone who has just hit a block wants
+    // to know why. Read-only — the blocklist is frozen for the session's
+    // lifetime (§9a).
+    blocklist: {
+      label: 'Blocking',
+      more: '+{{count}}',
+      accessibilityLabel: 'What this session blocks. Tap to show all.',
+    },
     status: {
       pending: 'Waiting to start',
       active: 'Active',

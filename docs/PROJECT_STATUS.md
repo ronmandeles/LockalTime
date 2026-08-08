@@ -2,7 +2,7 @@
 
 Phase-level narrative. **`backlog.md` is the authoritative per-task state** (the `[x]` checkboxes); this file is the "what happened and why it matters" layer on top of it, for a session that needs orientation without reading 245 lines of backlog.
 
-Last updated: 2026-08-07.
+Last updated: 2026-08-08.
 
 ## At a glance
 
@@ -19,7 +19,7 @@ Last updated: 2026-08-07.
 | 6.5 — Social & Comparison Surfaces | Complete |
 | 7 — Release Prep | Substantially implemented; owner-actioned items open |
 | 8 — Black + Navy Theme & Onboarding Restyle | Complete (2026-08-04) |
-| 9 — Host-selected Blocklist | **In progress** (2026-08-07) |
+| 9 — Host-selected Blocklist | Complete (2026-08-08) — iOS half unverified |
 
 Phase 7 was the last backlog phase; Phases 8 and 9 were added after it.
 
@@ -117,7 +117,7 @@ The app is now **pure black with a navy-blue accent**, replacing Phase 7's light
 
 Closed by Phase 7 planning (2026-07-28): analytics/observability (minimal Sentry-or-equivalent), ToS/privacy content (placeholder drafted for owner review), production deployment (a **PaaS, not serverless** — the in-process pollers need a long-running process), data retention (retain for account lifetime, cascade-delete on account deletion), and real FCM/APNs + Play Integrity/App Attest credentials (obtaining them was scoped in, rather than shipping v1 permanently inert).
 
-## Phase 9 — Host-selected Blocklist (in progress, from 2026-08-07)
+## Phase 9 — Host-selected Blocklist (2026-08-07/08)
 
 Plan: [BLOCKLIST_SELECTION_PLAN.md](BLOCKLIST_SELECTION_PLAN.md). Eight tasks, per-task state in `backlog.md`.
 
@@ -127,6 +127,16 @@ This reverses ARCHITECTURE §4's "fixed set of default categories… not a per-s
 
 **The constraint that shapes the whole design.** Apple's Screen Time API represents an app as an opaque `ApplicationToken` that cannot be built from a bundle id, read back into one, or moved between devices. So a string arriving from our server has nothing to bind to on an iPhone. Android is exact and fully automatic; an iOS member re-selects the session's items in Apple's own picker at join, and an iOS *host* picks from a bundled catalog rather than Apple's picker, because only the catalog yields a name that travels. Every design choice in the plan follows from that one fact.
 
-**Landed so far:**
+**What landed:**
 - **Task 1 — schema + server.** `sessions.blocked_categories` / `blocked_packages`, backfilled to exactly what pre-existing sessions enforced. `venues.approved_blocked_*` is a second manually-granted B2B flag alongside Verified Host: a `static_qr` session seats up to 200 strangers, so the business's choice needs a ceiling that isn't the business. Two server-side rejections that hold against a modified client — a safety denylist (dialer/SMS/Settings/our own package) and the venue subset check.
 - **Task 2 — the app catalog.** 87 apps, 38% social by design. See [APP_CATALOG.md](APP_CATALOG.md) for why it is deliberately partial and what in it is still unverified.
+- **Task 3 — the catalog module and the picker's source seam.** One interface, two platforms: Android's real enumeration on one side, the bundled catalog with `canOpenURL` probing on the other. The JS category vocabulary went three → six here and collapsed to a single declaration on the way — `app-blocker.ts`'s private second copy is exactly what would have silently dropped every event for the new categories.
+- **Task 4 — `InstalledAppsModule`.** Android enumeration behind that seam, LAUNCHER-intent filtered, with a windowed icon call (an earlier design sent ~200 icons inline as 1.5–3 MB of base64). `QUERY_ALL_PACKAGES` is declared and can be refused; the fallback to the catalog is covered by a test, not just described.
+- **Task 5 — the Create Session picker.** Six toggles, a virtualized app list, the non-empty guard, venue narrowing, and a persisted last choice.
+- **Task 6 — enforcement.** Packages and all six categories through `start()`, the service poll, `CategoryMapping` and `BootPersistence`. `shield_triggered` is discriminated on `reason`, and the overlay copy finally comes from i18next instead of one generic Android string with no Hebrew counterpart.
+- **Task 7 — the join flow.** Screen 8 describes the blocklist before joining; on iOS the member acquires their own tokens, with a per-blocklist selection cache and a token-learning map. The rule driving all of that is a unit-tested JS pure function over the map's keys — Swift holds the tokens and does no branching, because a bug in that rule would be silent, permanent, and untestable here.
+- **Task 8 — the in-session summary.** Screen 6's expandable, read-only blocklist, off the already-hydrated session row.
+
+**What is verified, and what is not.** The server, the schema and every JS/TS seam are fully tested here (250 pgTAP, 324 server unit, 29 server integration, 881 mobile unit) and the Kotlin compiles against a real Android SDK. **The entire iOS half has never run** — it compiles in cloud CI and nothing more. So has the catalog's *content*: nothing on this machine can check that `com.wbd.stream` is really HBO Max. `docs/MANUAL_QA.md` carries both, task by task; the learn-by-subtraction round trip and the `QUERY_ALL_PACKAGES` decision are the two that most deserve attention before release.
+
+**Deliberately not built:** analytics on what people block. It is the only real signal on whether the catalog is right, and it is also personal — a list of what someone blocks says a lot about them. Deferred rather than rejected (owner decision), revisit once there are real users to learn from.

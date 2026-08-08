@@ -422,3 +422,15 @@ everything the split could not cover.
   name, which was offered and declined.
 - [ ] **Android is untouched by all of this.** Confirm an Android join shows
   no extra step, no note, and no delay.
+
+## Phase 9 — In-session blocklist summary (task 8)
+
+- [ ] **Expand/collapse on a real device**, including with a screen reader:
+  the row reports `accessibilityState.expanded` and should announce
+  correctly in both states.
+- [ ] **Hebrew + RTL**, with Latin app names inside it — same bidi concern
+  as the Create Session picker, and the same reason each name sits in its
+  own `Text` node.
+- [ ] **A long blocklist expanded** (six categories + several apps) on a
+  small screen: confirm it wraps rather than pushing the timer or the
+  Emergency Exit CTA off-screen.

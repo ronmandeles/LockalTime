@@ -163,7 +163,7 @@ describe('sessions integration (local Supabase)', () => {
     expect(rewardRows).toEqual([{ user_id: participant.userId, bonus_type: 'base' }]);
   });
 
-// Phase 9 task 1. The unit tests all run against a fake SessionsStore, so
+  // Phase 9 task 1. The unit tests all run against a fake SessionsStore, so
   // a mistyped column name would sail straight through them and only fail
   // in production as `column sessions.blocked_category does not exist`.
   // This is the only test that proves the arrays survive the real

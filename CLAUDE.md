@@ -43,7 +43,9 @@ Commands: `npm test`, `npm run lint`, `npm run typecheck` in each workspace; `np
 
 ## Current state
 
-Phases 0–8 are complete; Phase 7 (Release Prep) has owner-actioned items still open. **Phase 9 (host-selected blocklist) is in progress** — see [docs/BLOCKLIST_SELECTION_PLAN.md](docs/BLOCKLIST_SELECTION_PLAN.md) for the design and [backlog.md](backlog.md) for which of its eight tasks have landed. Details in [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md); per-task truth in [backlog.md](backlog.md).
+Phases 0–9 are complete; Phase 7 (Release Prep) has owner-actioned items still open. Details in [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md); per-task truth in [backlog.md](backlog.md).
+
+**Phase 9 (host-selected blocklist) shipped 2026-08-08** — the host now chooses what a session blocks, per session, from six categories plus specific apps ([docs/BLOCKLIST_SELECTION_PLAN.md](docs/BLOCKLIST_SELECTION_PLAN.md)). Its **entire iOS half is written and compiled but has never run**, which is more consequential than usual here: Apple's tokens can't be built from a bundle id or moved between devices, so iOS members re-select the blocklist in Apple's own picker at join, and the token-learning that avoids re-asking is unverifiable on this machine. See `docs/MANUAL_QA.md`.
 
 The app first ran on an Android emulator on 2026-08-03. iOS compiles only in cloud macOS CI and has never been run. Push and attestation are fully wired but deliberately inert (no credentials).
 
@@ -56,7 +58,8 @@ The app first ran on an Android emulator on 2026-08-03. iOS compiles only in clo
 - Staging is a second free-tier Supabase project (`LockalTime-staging`). Migrations land there before prod. E2E and load tests target staging or local — **never production**.
 - Auth order: email built and fully tested first; Google/Apple wired against placeholder config and marked manual-QA pending until real credentials exist.
 - No Mac available — iOS is authored blind and verified by JS-side contract tests; it never blocks a phase.
-- Verified Host is granted manually by flipping a DB flag in Supabase. No in-app application flow (V2, `docs/ARCHITECTURE.md` §10).
+- Verified Host is granted manually by flipping a DB flag in Supabase. No in-app application flow (V2, `docs/ARCHITECTURE.md` §10). **A venue's approved blocklist is granted the same way** (Phase 9) — a `static_qr` session seats up to 200 strangers, so the business's choice needs a ceiling the business can't set itself.
+- The blocklist is **frozen for a session's lifetime** — not editable by the original host, nor by one promoted through host migration. That closes an exploit, not just a design question (`docs/ARCHITECTURE.md` §4). Kept as a server-side policy over a mutable column, so a future add-only editing path stays cheap.
 - Branching: feature/phase branch off `main`, merged straight back to `main`. **No `dev` branch.**
 
 ## Product direction — engagement is a goal

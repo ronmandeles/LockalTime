@@ -1,6 +1,15 @@
 # Host-selected blocklist — implementation plan
 
-**Status:** planned, not started. Agreed with the owner 2026-08-07.
+**Status: implemented 2026-08-07/08.** All eight tasks in §11 have landed; see
+`backlog.md`'s Phase 9 section for what each one actually shipped, including the
+handful of decisions this plan left implicit and the defects found on the way.
+This document remains the *design* record — read it for why the feature is
+shaped this way, and `backlog.md` for what is true today.
+
+Everything iOS in here is **written and compiled, never run** (no Mac). The
+checks that could not be automated are in `docs/MANUAL_QA.md`.
+
+Originally agreed with the owner 2026-08-07.
 **Reverses:** `docs/ARCHITECTURE.md` §4's "fixed set of default categories… not a
 per-session or per-user app picker" and `docs/DATABASE.md`'s
 `BLOCKED_APP_CATEGORIES` row. Both are wrong once this lands and must be
