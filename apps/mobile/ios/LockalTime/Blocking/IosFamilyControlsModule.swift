@@ -1,6 +1,5 @@
 import FamilyControls
 import Foundation
-import ManagedSettings
 import React
 import SwiftUI
 import UIKit

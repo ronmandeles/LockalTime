@@ -9,4 +9,18 @@ module.exports = {
   // `npm run test:integration` (jest.integration.config.js), never as part of
   // the default unit suite.
   testPathIgnorePatterns: ['/node_modules/', '/integration/'],
+  // Jest's default is 5000ms, which four screen specs blow through on a COLD
+  // babel cache: the transform of the whole RN + i18n dependency graph happens
+  // inside the first test's render, not before it, so that one test pays for
+  // the entire module tree. Warm runs finish it in ~15s and never came close.
+  //
+  // Found during Phase 9 and reproduced on unmodified main, so it predates the
+  // feature — but the important part is WHERE it bites: CI checks out fresh
+  // every run, so CI has been running with a cold cache all along and passing
+  // on margin rather than by design. `npx jest --clearCache` reproduces it
+  // locally every time.
+  //
+  // A timeout is the right lever rather than per-test waitFor tuning: nothing
+  // here is actually slow, and a real hang still fails, just 15s later.
+  testTimeout: 20000,
 };

@@ -269,7 +269,7 @@ pre-mount launch surfaces are all things a Jest assertion can pin the
 
 ## Phase 9 — The bundled app catalog (task 2)
 
-`apps/mobile/src/config/app-catalog.json` — 87 apps, each carrying an Android
+`apps/mobile/src/config/app-catalog.json` — 88 apps, each carrying an Android
 package name used as the cross-device identity, and 40 of them an iOS URL
 scheme. The integrity test can check every row's *shape* and nothing about its
 truth; see [APP_CATALOG.md](APP_CATALOG.md) for how the list was chosen.
@@ -279,10 +279,15 @@ error surfaced anywhere. That is what makes them worth a real pass rather than a
 spot check.
 
 - [ ] **Every package name against its real Play Store listing.** Open
-  `play.google.com/store/apps/details?id=<the id>` for each of the 87 and
-  confirm it resolves to the app the `name` field claims. Known ambiguity to
-  settle while doing it: **HBO Max has two live listings**, `com.wbd.stream`
-  (what we ship) and `com.wbd.hbomax`. Determine which is current.
+  `play.google.com/store/apps/details?id=<the id>` for each of the 88 and
+  confirm it resolves to the app the `name` field claims. *(The HBO Max
+  ambiguity flagged here originally is resolved: both listings are live and
+  separately maintained, so both are now in the catalog under their real
+  names, "HBO Max" and "Max". See `APP_CATALOG.md`.)*
+- [ ] **TikTok's regional package.** The catalog carries
+  `com.zhiliaoapp.musically`; some Asian markets use
+  `com.ss.android.ugc.trill` instead. Confirm which one a device in the
+  target market actually has before deciding whether that matters.
 - [ ] **Every declared `iosScheme` on a real iPhone.** With the app installed,
   `UIApplication.canOpenURL("<scheme>://")` must return true. A scheme that
   doesn't resolve is worse than none at all: the entry is then hidden from a
@@ -298,7 +303,7 @@ spot check.
 
 ## Phase 9 — Per-app installed detection (task 4, revised for parity)
 
-Kotlin **compiles** here and the merged manifest carries all 87 `<queries>`
+Kotlin **compiles** here and the merged manifest carries all 88 `<queries>`
 entries (verified 2026-08-08); the JS side has a full contract test over a
 mocked bridge. Neither says anything about what `PackageManager` returns on a
 real device.

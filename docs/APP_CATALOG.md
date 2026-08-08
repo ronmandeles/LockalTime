@@ -22,12 +22,12 @@ manifest's `<queries>` block.
 That raises the stakes on the contents: an app missing from here cannot be
 named by anyone, on any platform. It degrades to "use the category instead",
 which is still a real answer, but the bar for "worth naming" is lower than it
-was. The list was deliberately left at 87 entries for now (owner decision) —
+was. The list was deliberately left at its current size for now (owner decision) —
 revisit once there is any signal about what people actually pick.
 
 ## What's in it
 
-87 entries.
+88 entries.
 
 | Category | Entries |
 |---|---|
@@ -83,7 +83,7 @@ an error. `__tests__/native-config.test.ts` fails on that drift, and on
 
 ## `iosScheme` and the 50-entry budget
 
-40 of the 87 entries carry an `iosScheme`. Those 40 strings are exactly what goes
+40 of the 88 entries carry an `iosScheme`. Those 40 strings are exactly what goes
 into `Info.plist`'s `LSApplicationQueriesSchemes`, and **Apple caps that array at
 50** — so there are 10 spare slots, deliberately. It is twenty questions, not a
 directory listing.
@@ -117,9 +117,24 @@ Both of the following are in [`MANUAL_QA.md`](MANUAL_QA.md):
   silently — it blocks nothing, forever, with no error anywhere.
 - **Every declared scheme against a real iPhone** with that app installed.
 
-Known ambiguity already found: **HBO Max ships two live Play listings**,
-`com.wbd.stream` and `com.wbd.hbomax`. The catalog carries `com.wbd.stream`; if
-the other turns out to be the current one, this is a one-line data change.
+**Resolved 2026-08-08 — HBO Max ships two live Play listings**, and neither
+supersedes the other: `com.wbd.hbomax` ("HBO Max", updated June 2026) and
+`com.wbd.stream` ("Max", updated April 2026) are separately maintained apps
+with different names, left over from the Max rebrand and the revert. Picking
+one would have silently failed for everyone who has the other.
+
+Both are now listed, under their real Play Store names. That works precisely
+*because* the picker filters per device: a host sees only the one they
+actually have, so two entries never read as a duplicate. This is the general
+answer for a rebrand or regional split — two real names, two real packages —
+and it needs no alias machinery.
+
+**Still open, and deliberately not solved the same way: TikTok.** It ships as
+`com.zhiliaoapp.musically` in most markets and `com.ss.android.ugc.trill` in
+some Asian ones — the *same* app under the *same* name, so two rows would
+just look like a bug. The catalog carries the first, which is the one in the
+en/he markets this app targets. If that changes, an optional `aliases` field
+on a catalog entry is the shape to reach for.
 
 ## Refreshing it
 
