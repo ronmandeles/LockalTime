@@ -1,4 +1,5 @@
 import { QR_TOKEN_TTL_MINUTES } from '../../config/constants';
+import { DEFAULT_BLOCKED_CATEGORIES } from './blocklist';
 import { createSession } from './create-session';
 import { verifyQrToken } from './qr-token';
 import type {
@@ -10,6 +11,14 @@ import type {
 
 const QR_SECRET = 'qr-signing-secret-at-least-32-characters-long';
 const HOST_ID = '55555555-5555-5555-5555-555555555555';
+
+// Phase 9: every case below is about QR/host/timing behaviour, none about
+// the blocklist itself (blocklist.test.ts and sessions.router.test.ts own
+// that) — so they all pass the same already-validated default.
+const BLOCKLIST = {
+  blockedCategories: DEFAULT_BLOCKED_CATEGORIES,
+  blockedPackages: [] as readonly string[],
+};
 
 const buildFakeStore = (): SessionsStore & {
   insertedSession: NewSessionInput | null;
@@ -38,6 +47,8 @@ const buildFakeStore = (): SessionsStore & {
         qrExpiresAt: input.qrExpiresAt,
         startedAt: input.startedAt,
         createdAt: new Date().toISOString(),
+        blockedCategories: input.blockedCategories,
+        blockedPackages: input.blockedPackages,
       };
     },
     async insertHostAssignment(
@@ -132,6 +143,7 @@ describe('createSession', () => {
       durationMode: 'fixed',
       plannedDurationMinutes: 30,
       venueId: null,
+      ...BLOCKLIST,
     });
 
     expect(session.qrToken).toBeNull();
@@ -148,6 +160,7 @@ describe('createSession', () => {
       durationMode: 'fixed',
       plannedDurationMinutes: 45,
       venueId: null,
+      ...BLOCKLIST,
     });
 
     expect(session.qrToken).not.toBeNull();
@@ -167,6 +180,7 @@ describe('createSession', () => {
       durationMode: 'open_ended',
       plannedDurationMinutes: null,
       venueId: null,
+      ...BLOCKLIST,
     });
 
     expect(store.hostAssignment).toEqual({
@@ -186,6 +200,7 @@ describe('createSession', () => {
       durationMode: 'fixed',
       plannedDurationMinutes: 30,
       venueId: null,
+      ...BLOCKLIST,
     });
 
     expect(session.status).toBe('active');
@@ -206,6 +221,7 @@ describe('createSession', () => {
       durationMode: 'fixed',
       plannedDurationMinutes: 30,
       venueId: null,
+      ...BLOCKLIST,
     });
 
     expect(store.hostPresenceInterval).toEqual({
@@ -223,6 +239,7 @@ describe('createSession', () => {
       durationMode: 'open_ended' as const,
       plannedDurationMinutes: null,
       venueId: null,
+      ...BLOCKLIST,
     };
 
     const first = await createSession(store, QR_SECRET, input);

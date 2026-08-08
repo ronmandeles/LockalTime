@@ -163,6 +163,119 @@ describe('sessions integration (local Supabase)', () => {
     expect(rewardRows).toEqual([{ user_id: participant.userId, bonus_type: 'base' }]);
   });
 
+// Phase 9 task 1. The unit tests all run against a fake SessionsStore, so
+  // a mistyped column name would sail straight through them and only fail
+  // in production as `column sessions.blocked_category does not exist`.
+  // This is the only test that proves the arrays survive the real
+  // PostgREST round trip, in both directions.
+  it('round-trips a host-selected blocklist through the real sessions table', async () => {
+    const host = await createTestUserAndToken('blocklist-host');
+
+    const createResponse = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        type: 'dynamic_qr',
+        duration_mode: 'fixed',
+        planned_duration_minutes: 30,
+        blocked_categories: ['social', 'news'],
+        blocked_packages: ['com.instagram.android', 'com.zhiliaoapp.musically'],
+      });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.blockedCategories).toEqual(['social', 'news']);
+    expect(createResponse.body.blockedPackages).toEqual([
+      'com.instagram.android',
+      'com.zhiliaoapp.musically',
+    ]);
+
+    const sessionId = createResponse.body.id as string;
+    const { data: row, error } = await adminClient
+      .from('sessions')
+      .select('blocked_categories, blocked_packages')
+      .eq('id', sessionId)
+      .single();
+    expect(error).toBeNull();
+    expect(row).toEqual({
+      blocked_categories: ['social', 'news'],
+      blocked_packages: ['com.instagram.android', 'com.zhiliaoapp.musically'],
+    });
+
+    // ...and back out again through /preview, which is how a member's
+    // device learns what the session blocks before joining it.
+    const previewResponse = await request(app)
+      .post('/sessions/preview')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ token: createResponse.body.qrToken as string });
+
+    expect(previewResponse.status).toBe(200);
+    expect(previewResponse.body.blockedCategories).toEqual(['social', 'news']);
+    expect(previewResponse.body.blockedPackages).toEqual([
+      'com.instagram.android',
+      'com.zhiliaoapp.musically',
+    ]);
+  });
+
+  it('defaults a session created without a blocklist to the three historical categories', async () => {
+    const host = await createTestUserAndToken('blocklist-default-host');
+
+    const createResponse = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({ type: 'solo', duration_mode: 'fixed', planned_duration_minutes: 30 });
+
+    expect(createResponse.status).toBe(201);
+    expect(createResponse.body.blockedCategories).toEqual(['social', 'games', 'entertainment']);
+    expect(createResponse.body.blockedPackages).toEqual([]);
+  });
+
+  it('rejects a static_qr blocklist outside its venue approved set, against a real venue row', async () => {
+    const host = await createTestUserAndToken('venue-blocklist-host');
+
+    // Inserted directly rather than via POST /venues: that route needs the
+    // verified-host flag, and nothing here is testing venue creation.
+    const { data: venue, error: venueError } = await adminClient
+      .from('venues')
+      .insert({
+        owner_id: host.userId,
+        name: 'Blocklist Cafe',
+        qr_token: `blocklist-venue-${Date.now()}`,
+        approved_blocked_categories: ['social'],
+        approved_blocked_packages: [],
+      })
+      .select('id')
+      .single();
+    expect(venueError).toBeNull();
+    const venueId = (venue as { id: string }).id;
+
+    const rejected = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        type: 'static_qr',
+        duration_mode: 'open_ended',
+        venue_id: venueId,
+        blocked_categories: ['social', 'maps'],
+      });
+
+    expect(rejected.status).toBe(403);
+    expect(rejected.body.error.code).toBe('blocklist_not_venue_approved');
+    expect(rejected.body.error.message).toContain('maps');
+
+    const accepted = await request(app)
+      .post('/sessions')
+      .set('Authorization', `Bearer ${host.token}`)
+      .send({
+        type: 'static_qr',
+        duration_mode: 'open_ended',
+        venue_id: venueId,
+        blocked_categories: ['social'],
+      });
+
+    expect(accepted.status).toBe(201);
+    expect(accepted.body.blockedCategories).toEqual(['social']);
+  });
+
   it('POST /:id/blocker-ready sets blocker_ready_at once and is idempotent on a second call', async () => {
     const host = await createTestUserAndToken('blocker-ready-host');
 

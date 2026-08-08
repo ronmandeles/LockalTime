@@ -111,6 +111,15 @@ export const STREAK_RISK_NOTIFICATION_INTERVAL_SECONDS = 300;
 // infra. Consumed by friends.router.ts.
 export const MIN_FRIEND_SEARCH_QUERY_LENGTH = 2;
 
+// Phase 9 (host-selected blocklist, docs/BLOCKLIST_SELECTION_PLAN.md §4).
+// Bounds the create-session payload: a host naming 50 specific apps has
+// already gone far past what the picker is for, and the category toggles
+// cover the long tail anyway. The category count needs no constant — it is
+// the length of BLOCKED_CATEGORIES itself
+// (src/modules/sessions/blocklist.ts), since selecting all six is the
+// legitimate maximum.
+export const MAX_BLOCKED_PACKAGES = 50;
+
 // Phase 7 (Release Prep) API hardening — src/middleware/security.ts.
 // A single per-IP window applied to every route except /health (PaaS
 // liveness checks must never 429). 100 req/15 min is generous for a real

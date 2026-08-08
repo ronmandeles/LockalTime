@@ -16,6 +16,8 @@ const VENUE: VenueRecord = {
   qrToken: 'venue-token',
   qrTokenIssuedAt: '2026-07-01T00:00:00.000Z',
   createdAt: '2026-07-01T00:00:00.000Z',
+  approvedBlockedCategories: ['social', 'games', 'entertainment'],
+  approvedBlockedPackages: [],
 };
 
 const buildFakeVenuesStore = (venue: VenueRecord | null): VenuesStore => ({

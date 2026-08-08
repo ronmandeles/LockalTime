@@ -85,7 +85,25 @@ create table public.venues (
                                            -- at creation, invalidated only by
                                            -- a deliberate regenerate call
   qr_token_issued_at timestamptz not null default now(),
-  created_at      timestamptz not null default now()
+  created_at      timestamptz not null default now(),
+
+  -- Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md §3): the ceiling on what a
+  -- static_qr session at this venue may block. That session type seats up
+  -- to VENUE_SESSION_MAX_PARTICIPANTS strangers who scanned a printed code,
+  -- and nothing else stops a cafe blocking a competitor's app -- so the
+  -- business's choice is approved OUT OF BAND, the same manual-flag posture
+  -- Verified Host itself uses (ARCHITECTURE.md §10). No in-app application
+  -- flow; the owner edits these columns in Supabase.
+  --
+  -- The default is the same three categories, so a new business is useful
+  -- immediately and only needs attention if it wants to name specific apps.
+  -- The server rejects any static_qr session whose blocklist falls outside
+  -- these arrays (sessions.router.ts, `blocklist_not_venue_approved`).
+  approved_blocked_categories text[] not null default '{social,games,entertainment}',
+  approved_blocked_packages   text[] not null default '{}',
+
+  constraint chk_venue_approved_categories_valid
+    check (approved_blocked_categories <@ array['social', 'games', 'entertainment', 'news', 'maps', 'productivity']::text[])
 );
 
 -- ============================================================
@@ -121,10 +139,36 @@ create table public.sessions (
                              check (end_reason in ('host_ended', 'planned_duration_reached', 'force_terminated')),
   created_at               timestamptz not null default now(),
 
+  -- Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md §3): what THIS session
+  -- blocks, chosen by the host at creation. Two plain-string arrays, and
+  -- the "plain string" part is the whole design: a category name or a
+  -- package name means something on every member's device, where an opaque
+  -- per-device handle would not. Each device resolves the name against its
+  -- own installed apps at block time, so a member without Instagram simply
+  -- loses nothing.
+  --
+  -- Arrays rather than JSONB or a join table: always read as a unit, never
+  -- queried independently, bounded at ~56 short strings — and arrays keep
+  -- CHECK constraints and array operators, which JSONB would cost.
+  --
+  -- The default is the three categories every pre-existing session
+  -- enforced, so any code path not yet updated keeps working unchanged.
+  blocked_categories       text[] not null default '{social,games,entertainment}',
+  blocked_packages         text[] not null default '{}',
+
   constraint chk_dynamic_qr_has_token
     check (type = 'solo' or qr_token is not null),
   constraint chk_fixed_has_duration
-    check (duration_mode = 'open_ended' or planned_duration_minutes is not null)
+    check (duration_mode = 'open_ended' or planned_duration_minutes is not null),
+  constraint chk_blocked_categories_valid
+    check (blocked_categories <@ array['social', 'games', 'entertainment', 'news', 'maps', 'productivity']::text[]),
+  -- An accident-guard, not an anti-abuse control: a host set on gaming it
+  -- can pick one obscure app they don't have. It exists so nobody
+  -- *accidentally* creates a session that blocks nothing while paying
+  -- 1pt/min. Real anti-abuse would need server-verifiable enforcement,
+  -- which neither platform offers.
+  constraint chk_blocklist_non_empty
+    check (cardinality(blocked_categories) + cardinality(blocked_packages) > 0)
 );
 
 create index idx_sessions_status on public.sessions(status) where status in ('pending', 'active');
@@ -593,7 +637,8 @@ Called once per finalized `session_participants` row, after that row (and its `r
 | `OPEN_ENDED_SESSION_MAX_HOURS` | 24 | server force-closes past this |
 | `STREAK_GRACE_HOURS` | 48 | |
 | `STREAK_EXPIRY_INTERVAL_SECONDS` | 300 | streak-expiry job cadence (Phase 5) — no debounce concern, so it runs far less often than the session sweep |
-| `BLOCKED_APP_CATEGORIES` | `[Social Networking, Games, Entertainment]` | Fixed default-category blocklist, not per-session/per-user configurable; see `docs/ARCHITECTURE.md` §4 |
+| `DEFAULT_BLOCKED_CATEGORIES` | `[social, games, entertainment]` | Phase 9 — what the Create Session picker pre-fills, what `POST /sessions` falls back to when a client sends no blocklist, and the `sessions.blocked_categories` column default. **No longer the enforced truth**: the host chooses per session from six categories plus specific apps (`sessions.blocked_categories` / `blocked_packages` above, `docs/BLOCKLIST_SELECTION_PLAN.md`). This value is the *historical* three, kept as the default so existing habits and any not-yet-updated code path are unchanged. Lives in `apps/server/src/modules/sessions/blocklist.ts` |
+| `MAX_BLOCKED_PACKAGES` | 50 | Phase 9 — caps the specific-app list on `POST /sessions`, bounding the payload. No matching category cap: six *is* the maximum, since selecting all of them is legitimate |
 | `VENUE_SESSION_MAX_PARTICIPANTS` | 200 | Phase 6 — a verified host's `static_qr` venue session, higher than `SESSION_MAX_PARTICIPANTS` since a business's foot traffic is a different shape of "group" than a friend session; a config constant, not a per-venue DB column, for MVP simplicity |
 | `VENUE_METRICS_WINDOW_DAYS` | 30 | Phase 6 — the trailing window `GET /venues/:id/metrics`'s "average session duration/customer" is computed over |
 | `ATTESTATION_ENFORCEMENT_ENABLED` | `false` | Phase 6 — built-but-inert: no real Play Integrity/App Attest credentials or monitor-mode data exist yet to threshold against (every recorded verdict today reads `not_configured`). Gates `attestation/trust-tier.ts`'s `applyEnforcementPolicy()`, the one place that matters — every downstream reader (`points/group-bonus.ts`, `apply_session_stats()`) just trusts whatever tier was already written. Flipping to `true` is the only remaining step once real credentials exist. |

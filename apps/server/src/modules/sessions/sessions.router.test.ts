@@ -7,6 +7,7 @@ import { unconfiguredAttestationProvider } from '../attestation/attestation-prov
 import type { AttestationStore, RecordAttestationInput } from '../attestation/attestation-store';
 import { createTestJwks, type TestJwks } from '../../test-support/local-jwks';
 import type { VenueRecord, VenuesStore } from '../venues/venues-store';
+import { DEFAULT_BLOCKED_CATEGORIES, type BlockedCategory } from './blocklist';
 import { mintQrToken, verifyQrToken } from './qr-token';
 import { createSessionsRouter } from './sessions.router';
 import type {
@@ -62,6 +63,8 @@ const buildFakeStore = (): SessionsStore & {
         qrExpiresAt: input.qrExpiresAt,
         startedAt: input.startedAt,
         createdAt: '2026-07-26T00:00:00.000Z',
+        blockedCategories: input.blockedCategories,
+        blockedPackages: input.blockedPackages,
       };
     },
     async insertHostAssignment(
@@ -144,7 +147,17 @@ const buildFakeStore = (): SessionsStore & {
 // check has something real to consult. Empty by default — every existing
 // test in this file never sends venue_id, so getVenueById is simply never
 // called for them.
-const buildFakeVenuesStore = (venueOwners: Record<string, string> = {}): VenuesStore => ({
+//
+// Phase 9 task 1: `approved` overrides a venue's out-of-band-approved
+// blocklist; omitted, it is the same three-category default a real new
+// venue row carries.
+const buildFakeVenuesStore = (
+  venueOwners: Record<string, string> = {},
+  approved: Record<
+    string,
+    { categories: readonly BlockedCategory[]; packages: readonly string[] }
+  > = {},
+): VenuesStore => ({
   async createVenue(): Promise<never> {
     throw new Error('not used in these tests');
   },
@@ -164,6 +177,8 @@ const buildFakeVenuesStore = (venueOwners: Record<string, string> = {}): VenuesS
       qrToken: 'fixture-venue-qr-token',
       qrTokenIssuedAt: '2026-07-29T00:00:00.000Z',
       createdAt: '2026-07-29T00:00:00.000Z',
+      approvedBlockedCategories: approved[id]?.categories ?? DEFAULT_BLOCKED_CATEGORIES,
+      approvedBlockedPackages: approved[id]?.packages ?? [],
     };
     return record;
   },
@@ -448,6 +463,8 @@ describe('POST /sessions/preview (Phase 6 task 4)', () => {
         status: 'active',
         startedAt: new Date().toISOString(),
         venueId: null,
+        blockedCategories: ['social', 'games'],
+        blockedPackages: ['com.instagram.android'],
       })),
     getOpenParticipantCount: overrides.getOpenParticipantCount ?? (async () => 3),
   });
@@ -501,5 +518,277 @@ describe('POST /sessions/preview (Phase 6 task 4)', () => {
       .send({ token: 'anything' });
 
     expect(response.status).toBe(401);
+  });
+  // Phase 9 task 1: Screen 8 has to describe the session's blocklist BEFORE
+  // anyone joins — on iOS that description is the only thing the member has
+  // to work from when re-selecting the same items in Apple's own picker
+  // (plan §7), so it is load-bearing, not decoration.
+  it('returns the blocklist, so Screen 8 can describe the session before joining', async () => {
+    const token = await mintAuthToken(HOST_ID);
+    const qrToken = mintQrToken(PREVIEW_SESSION_ID, QR_SECRET);
+
+    const response = await request(buildApp(buildPreviewStore()))
+      .post('/sessions/preview')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ token: qrToken });
+
+    expect(response.status).toBe(200);
+    expect(response.body.blockedCategories).toEqual(['social', 'games']);
+    expect(response.body.blockedPackages).toEqual(['com.instagram.android']);
+  });
+});
+
+describe('POST /sessions — host-selected blocklist (Phase 9 task 1)', () => {
+  const VENUE_ID = '99999999-9999-9999-9999-999999999999';
+
+  const createBody = (blocklist: Record<string, unknown> = {}): Record<string, unknown> => ({
+    type: 'solo',
+    duration_mode: 'fixed',
+    planned_duration_minutes: 30,
+    ...blocklist,
+  });
+
+  it('falls back to the historical three categories when the body names no blocklist', async () => {
+    const token = await mintAuthToken(HOST_ID);
+    const store = buildFakeStore();
+
+    const response = await request(buildApp(store))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody());
+
+    expect(response.status).toBe(201);
+    expect(store.insertedSession?.blockedCategories).toEqual(['social', 'games', 'entertainment']);
+    expect(store.insertedSession?.blockedPackages).toEqual([]);
+  });
+
+  it('persists the categories and packages the host chose', async () => {
+    const token = await mintAuthToken(HOST_ID);
+    const store = buildFakeStore();
+
+    const response = await request(buildApp(store))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(
+        createBody({
+          blocked_categories: ['news', 'maps'],
+          blocked_packages: ['com.instagram.android', 'com.zhiliaoapp.musically'],
+        }),
+      );
+
+    expect(response.status).toBe(201);
+    expect(store.insertedSession?.blockedCategories).toEqual(['news', 'maps']);
+    expect(store.insertedSession?.blockedPackages).toEqual([
+      'com.instagram.android',
+      'com.zhiliaoapp.musically',
+    ]);
+  });
+
+  it('returns the blocklist in the response, so the host device can start its own blocker', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ blocked_categories: ['social'], blocked_packages: [] }));
+
+    expect(response.status).toBe(201);
+    expect(response.body.blockedCategories).toEqual(['social']);
+    expect(response.body.blockedPackages).toEqual([]);
+  });
+
+  it('accepts all six categories', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(
+        createBody({
+          blocked_categories: ['social', 'games', 'entertainment', 'news', 'maps', 'productivity'],
+        }),
+      );
+
+    expect(response.status).toBe(201);
+  });
+
+  it('rejects a category outside the six', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ blocked_categories: ['social', 'photography'] }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('invalid_request');
+  });
+
+  it('rejects a package name that is not shaped like a package name', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ blocked_packages: ['Instagram'] }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('invalid_request');
+  });
+
+  it('rejects a session that blocks nothing at all', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ blocked_categories: [], blocked_packages: [] }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('invalid_request');
+  });
+
+  it('accepts a blocklist of specific apps and no categories', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ blocked_categories: [], blocked_packages: ['com.instagram.android'] }));
+
+    expect(response.status).toBe(201);
+  });
+
+  it('caps the package list so one request cannot carry an unbounded payload', async () => {
+    const token = await mintAuthToken(HOST_ID);
+    const packages = Array.from({ length: 51 }, (_, index) => 'com.example.app' + String(index));
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ blocked_packages: packages }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('invalid_request');
+  });
+
+  // The picker already filters these out client-side; this is the boundary
+  // refusing them anyway, because a modified client is exactly the caller
+  // this matters for (plan §4).
+  it('refuses a denylisted package even though the picker would never offer it', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ blocked_packages: ['com.google.android.dialer'] }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('blocked_package_not_allowed');
+  });
+
+  it('names the offending package in the denylist rejection', async () => {
+    const token = await mintAuthToken(HOST_ID);
+
+    const response = await request(buildApp(buildFakeStore()))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ blocked_packages: ['com.instagram.android', 'com.android.settings'] }));
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.message).toContain('com.android.settings');
+  });
+
+  it('accepts a static_qr blocklist inside the venue approved set', async () => {
+    const token = await mintAuthToken(HOST_ID);
+    const venuesStore = buildFakeVenuesStore(
+      { [VENUE_ID]: HOST_ID },
+      { [VENUE_ID]: { categories: ['social', 'games'], packages: ['com.instagram.android'] } },
+    );
+
+    const response = await request(
+      buildApp(buildFakeStore(), buildFakeAttestationStore(), venuesStore),
+    )
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(
+        createBody({
+          type: 'static_qr',
+          venue_id: VENUE_ID,
+          blocked_categories: ['social'],
+          blocked_packages: ['com.instagram.android'],
+        }),
+      );
+
+    expect(response.status).toBe(201);
+  });
+
+  it('rejects a static_qr blocklist outside the venue approved set', async () => {
+    const token = await mintAuthToken(HOST_ID);
+    const venuesStore = buildFakeVenuesStore(
+      { [VENUE_ID]: HOST_ID },
+      { [VENUE_ID]: { categories: ['social'], packages: [] } },
+    );
+
+    const response = await request(
+      buildApp(buildFakeStore(), buildFakeAttestationStore(), venuesStore),
+    )
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(
+        createBody({
+          type: 'static_qr',
+          venue_id: VENUE_ID,
+          blocked_categories: ['social'],
+          blocked_packages: ['com.competitor.app'],
+        }),
+      );
+
+    expect(response.status).toBe(403);
+    expect(response.body.error.code).toBe('blocklist_not_venue_approved');
+    expect(response.body.error.message).toContain('com.competitor.app');
+  });
+
+  // A venue is a B2B label any session type may carry (Phase 6 task 1), but
+  // the approved set exists specifically because a static_qr session seats
+  // strangers. A host running their own dynamic_qr session at their own
+  // venue is choosing for people who chose to join THEM.
+  it('does not apply the venue approved set to a dynamic_qr session at that venue', async () => {
+    const token = await mintAuthToken(HOST_ID);
+    const venuesStore = buildFakeVenuesStore(
+      { [VENUE_ID]: HOST_ID },
+      { [VENUE_ID]: { categories: ['social'], packages: [] } },
+    );
+
+    const response = await request(
+      buildApp(buildFakeStore(), buildFakeAttestationStore(), venuesStore),
+    )
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(
+        createBody({
+          type: 'dynamic_qr',
+          venue_id: VENUE_ID,
+          blocked_categories: ['news'],
+        }),
+      );
+
+    expect(response.status).toBe(201);
+  });
+
+  it('rejects an unapproved static_qr blocklist before the session row is ever inserted', async () => {
+    const token = await mintAuthToken(HOST_ID);
+    const store = buildFakeStore();
+    const venuesStore = buildFakeVenuesStore(
+      { [VENUE_ID]: HOST_ID },
+      { [VENUE_ID]: { categories: ['social'], packages: [] } },
+    );
+
+    await request(buildApp(store, buildFakeAttestationStore(), venuesStore))
+      .post('/sessions')
+      .set('Authorization', `Bearer ${token}`)
+      .send(createBody({ type: 'static_qr', venue_id: VENUE_ID, blocked_categories: ['maps'] }));
+
+    expect(store.insertedSession).toBeNull();
   });
 });

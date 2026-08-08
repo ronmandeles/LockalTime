@@ -18,6 +18,8 @@ const buildFakeStore = (): VenuesStore & { insertedVenue: NewVenueInput | null }
         qrToken: input.qrToken,
         qrTokenIssuedAt: new Date().toISOString(),
         createdAt: new Date().toISOString(),
+        approvedBlockedCategories: ['social', 'games', 'entertainment'],
+        approvedBlockedPackages: [],
       };
     },
     async listVenuesForOwner(): Promise<never> {

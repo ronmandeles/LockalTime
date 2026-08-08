@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 
 import { QR_TOKEN_TTL_MINUTES } from '../../config/constants';
+import type { BlockedCategory } from './blocklist';
 import { mintQrToken } from './qr-token';
 import type { DurationMode, SessionRecord, SessionsStore, SessionType } from './sessions-store';
 
@@ -10,6 +11,11 @@ export interface CreateSessionInput {
   readonly durationMode: DurationMode;
   readonly plannedDurationMinutes: number | null;
   readonly venueId: string | null;
+  // Phase 9: already validated, denylist-checked and (for static_qr)
+  // venue-approved by the router before it gets here — this service writes
+  // the blocklist, it does not decide it.
+  readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
 }
 
 // Money-equivalent logic (ARCHITECTURE.md §3/§7, .claude/skills/code-style/SKILL.md):
@@ -49,6 +55,8 @@ export const createSession = async (
     qrExpiresAt,
     status: 'active',
     startedAt,
+    blockedCategories: input.blockedCategories,
+    blockedPackages: input.blockedPackages,
   });
 
   await store.insertHostAssignment(session.id, input.hostId, 'initial_host');

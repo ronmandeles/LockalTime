@@ -5,13 +5,21 @@ import { z } from 'zod';
 import {
   ATTESTATION_ENFORCEMENT_ENABLED,
   FIXED_SESSION_MAX_DURATION_MINUTES,
+  MAX_BLOCKED_PACKAGES,
 } from '../../config/constants';
 import { ApiError } from '../../middleware/api-error';
 import type { AttestationProvider } from '../attestation/attestation-provider';
 import type { AttestationStore } from '../attestation/attestation-store';
 import { recordDeviceAttestation } from '../attestation/record-attestation';
 import { applyEnforcementPolicy, verdictToTrustTier } from '../attestation/trust-tier';
-import type { VenuesStore } from '../venues/venues-store';
+import type { VenueRecord, VenuesStore } from '../venues/venues-store';
+import {
+  BLOCKED_CATEGORIES,
+  DEFAULT_BLOCKED_CATEGORIES,
+  PACKAGE_NAME_PATTERN,
+  findDeniedPackages,
+  findUnapprovedEntries,
+} from './blocklist';
 import { createSession } from './create-session';
 import { endSession } from './end-session';
 import { finalizeEmergencyExit } from './finalize-emergency-exit';
@@ -70,10 +78,30 @@ const createSessionBodySchema = z
       .optional(),
     venue_id: z.string().uuid().optional(),
     attestation: attestationSchema.optional(),
+    // Phase 9 (plan §4). Both default rather than being required, so a
+    // client built before this feature keeps creating sessions that block
+    // exactly what they always did — the same value the DB column default
+    // carries, expressed here too because the API, not the column, is
+    // where the decision now belongs.
+    blocked_categories: z
+      .array(z.enum(BLOCKED_CATEGORIES))
+      .max(BLOCKED_CATEGORIES.length)
+      .default([...DEFAULT_BLOCKED_CATEGORIES]),
+    blocked_packages: z
+      .array(z.string().regex(PACKAGE_NAME_PATTERN, 'must be a package name like com.example.app'))
+      .max(MAX_BLOCKED_PACKAGES)
+      .default([]),
   })
   .refine((body) => body.duration_mode !== 'fixed' || body.planned_duration_minutes !== undefined, {
     message: 'planned_duration_minutes is required when duration_mode is "fixed"',
     path: ['planned_duration_minutes'],
+  })
+  // Mirrors chk_blocklist_non_empty. An accident-guard, not an anti-abuse
+  // control (plan §4): it exists so nobody accidentally creates a session
+  // that blocks nothing while paying 1pt/min.
+  .refine((body) => body.blocked_categories.length + body.blocked_packages.length > 0, {
+    message: 'a session must block at least one category or app',
+    path: ['blocked_categories'],
   });
 
 const joinSessionBodySchema = z.object({
@@ -195,14 +223,30 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
     const hostId = req.auth?.userId as string;
     const body = parsed.data;
 
+    // Phase 9 (plan §4): the picker already hides these, but the picker is
+    // client code. Refused here so a modified client cannot cut anyone off
+    // from their dialer. Checked before the venue round trip — nothing
+    // about a venue could make this acceptable.
+    const deniedPackages = findDeniedPackages(body.blocked_packages);
+    if (deniedPackages.length > 0) {
+      next(
+        new ApiError(
+          400,
+          'blocked_package_not_allowed',
+          `These apps can never be blocked: ${deniedPackages.join(', ')}`,
+        ),
+      );
+      return;
+    }
+
     // Ownership check runs before createSession — a venue_id the caller
     // doesn't own must reject the whole request, not just get silently
     // dropped. Applies to every session type (not just static_qr): venues
     // stay a strictly B2B construct, never a free-form location label a
     // non-owner can attach to their own session.
-    const venueCheck: Promise<void> =
+    const resolveVenue: Promise<VenueRecord | null> =
       body.venue_id === undefined
-        ? Promise.resolve()
+        ? Promise.resolve(null)
         : deps.venuesStore.getVenueById(body.venue_id).then((venue) => {
             if (venue === null) {
               throw new ApiError(404, 'venue_not_found', 'Venue not found');
@@ -210,19 +254,45 @@ export const createSessionsRouter = (deps: SessionsRouterDeps): Router => {
             if (venue.ownerId !== hostId) {
               throw new ApiError(403, 'venue_not_owned', 'You do not own this venue');
             }
+            return venue;
           });
 
-    venueCheck
-      .then(() =>
-        createSession(deps.store, deps.qrSigningSecret, {
+    resolveVenue
+      .then((venue) => {
+        // Phase 9 (plan §3): static_qr only. That session type seats up to
+        // VENUE_SESSION_MAX_PARTICIPANTS strangers who scanned a printed
+        // code, which is exactly why the business's choice needs a ceiling
+        // approved out of band. A host running their own dynamic_qr session
+        // at their own venue is choosing for people who chose to join them,
+        // so the ceiling does not apply there.
+        if (venue !== null && body.type === 'static_qr') {
+          const unapproved = findUnapprovedEntries(
+            { categories: body.blocked_categories, packages: body.blocked_packages },
+            {
+              categories: venue.approvedBlockedCategories,
+              packages: venue.approvedBlockedPackages,
+            },
+          );
+          if (unapproved.length > 0) {
+            throw new ApiError(
+              403,
+              'blocklist_not_venue_approved',
+              `This venue is not approved to block: ${unapproved.join(', ')}`,
+            );
+          }
+        }
+
+        return createSession(deps.store, deps.qrSigningSecret, {
           hostId,
           type: body.type,
           durationMode: body.duration_mode,
           plannedDurationMinutes:
             body.duration_mode === 'fixed' ? body.planned_duration_minutes ?? null : null,
           venueId: body.venue_id ?? null,
-        }),
-      )
+          blockedCategories: body.blocked_categories,
+          blockedPackages: body.blocked_packages,
+        });
+      })
       .then(async (session) => {
         // Monitor-mode only — recordDeviceAttestation never throws, so
         // this can never turn a successful create into a failed response.

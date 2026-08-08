@@ -56,6 +56,8 @@ const VENUE: VenueRecord = {
   qrToken: 'venue-token',
   qrTokenIssuedAt: '2026-07-01T00:00:00.000Z',
   createdAt: '2026-07-01T00:00:00.000Z',
+  approvedBlockedCategories: ['social', 'games', 'entertainment'],
+  approvedBlockedPackages: [],
 };
 
 describe('previewSession', () => {
@@ -79,6 +81,8 @@ describe('previewSession', () => {
         status: 'active',
         startedAt,
         venueId: null,
+        blockedCategories: ['social', 'games', 'entertainment'],
+        blockedPackages: [],
       },
       participantCount: 4,
     });
@@ -101,6 +105,8 @@ describe('previewSession', () => {
         participantCount: 4,
         venueName: null,
         completionBonusAvailable: false,
+        blockedCategories: ['social', 'games', 'entertainment'],
+        blockedPackages: [],
       },
     });
   });
@@ -118,6 +124,8 @@ describe('previewSession', () => {
         status: 'active',
         startedAt,
         venueId: null,
+        blockedCategories: ['social', 'games', 'entertainment'],
+        blockedPackages: [],
       },
       participantCount: 1,
     });
@@ -145,6 +153,8 @@ describe('previewSession', () => {
         status: 'pending',
         startedAt: null,
         venueId: null,
+        blockedCategories: ['social', 'games', 'entertainment'],
+        blockedPackages: [],
       },
       participantCount: 0,
     });
@@ -188,6 +198,8 @@ describe('previewSession', () => {
         status: 'active',
         startedAt: NOW.toISOString(),
         venueId: VENUE_ID,
+        blockedCategories: ['social', 'games', 'entertainment'],
+        blockedPackages: [],
       },
       participantCount: 12,
     });
@@ -212,6 +224,8 @@ describe('previewSession', () => {
           status: 'active',
           startedAt: NOW.toISOString(),
           venueId: VENUE_ID,
+          blockedCategories: ['social', 'games', 'entertainment'],
+          blockedPackages: [],
         },
         participantCount: 3,
       });

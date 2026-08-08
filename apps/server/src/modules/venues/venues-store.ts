@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { ApiError } from '../../middleware/api-error';
+import type { BlockedCategory } from '../sessions/blocklist';
 
 export interface VenueRecord {
   readonly id: string;
@@ -16,6 +17,14 @@ export interface VenueRecord {
   readonly qrToken: string;
   readonly qrTokenIssuedAt: string;
   readonly createdAt: string;
+  // Phase 9 (plan §3): the ceiling on what a static_qr session at this
+  // venue may block. Granted out of band by the owner flipping the column
+  // in Supabase — the same manual-flag posture Verified Host itself uses
+  // (ARCHITECTURE.md §10), and for the same reason: a venue session seats
+  // up to 200 strangers, so "the business chooses" needs a check that isn't
+  // the business.
+  readonly approvedBlockedCategories: readonly BlockedCategory[];
+  readonly approvedBlockedPackages: readonly string[];
 }
 
 export interface NewVenueInput {
@@ -37,6 +46,8 @@ interface VenueRow {
   qr_token: string;
   qr_token_issued_at: string;
   created_at: string;
+  approved_blocked_categories: BlockedCategory[];
+  approved_blocked_packages: string[];
 }
 
 const toVenueRecord = (row: VenueRow): VenueRecord => ({
@@ -47,9 +58,12 @@ const toVenueRecord = (row: VenueRow): VenueRecord => ({
   qrToken: row.qr_token,
   qrTokenIssuedAt: row.qr_token_issued_at,
   createdAt: row.created_at,
+  approvedBlockedCategories: row.approved_blocked_categories,
+  approvedBlockedPackages: row.approved_blocked_packages,
 });
 
-const VENUE_COLUMNS = 'id, owner_id, name, address_label, qr_token, qr_token_issued_at, created_at';
+const VENUE_COLUMNS =
+  'id, owner_id, name, address_label, qr_token, qr_token_issued_at, created_at, approved_blocked_categories, approved_blocked_packages';
 
 // Thin persistence seam over public.venues, same shape as SessionsStore.
 // getVenueById is the one method the sessions module depends on directly
