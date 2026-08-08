@@ -104,14 +104,17 @@ class IosFamilyControlsModule: NSObject {
         ) { completed in
           presenter.dismiss(animated: true)
 
-          guard let completed else {
+          // Explicit optional binding rather than Swift 5.7's shorthand:
+          // nothing here pins the Xcode/Swift version CI runs, and this
+          // file is only ever compiled there.
+          guard let completed = completed else {
             // Dismissed. JS turns this into "not joined" — there is no
             // half-joined state (plan §9).
             resolve(false)
             return
           }
 
-          if let learnId {
+          if let learnId = learnId {
             BlocklistTokenStore.learn(id: learnId, before: seed, after: completed)
           }
           BlocklistTokenStore.cache(selection: completed, for: cacheKey)
