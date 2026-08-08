@@ -1,6 +1,6 @@
 const mockCanOpenURL = jest.fn();
 
-import { Linking, Platform } from 'react-native';
+import { Linking, NativeModules, Platform } from 'react-native';
 
 import { APP_CATALOG, IOS_APPLICATION_QUERIES_SCHEMES } from '../config/app-catalog';
 import { SAFETY_DENYLIST } from '../config/blocklist-safety';
@@ -134,13 +134,68 @@ describe('the seam, on both platforms', () => {
     expect(apps.every((app) => app.category !== null)).toBe(true);
   });
 
-  // Task 4 will point Android at InstalledAppsModule. Until it does — and
-  // permanently if the Play declaration is refused — both platforms resolve
-  // to the same catalog source, which is exactly the mitigation the seam
-  // exists to make cheap (plan §10).
-  it.each(['android', 'ios'] as const)('resolves to the catalog source today on %s', (os) => {
-    setPlatform(os);
+});
 
-    expect(blockableAppSource).toBe(catalogAppSource);
+describe('the seam choosing a source', () => {
+  beforeEach(() => {
+    mockCanOpenURL.mockResolvedValue(false);
+  });
+
+  it('reads the device on Android when InstalledAppsModule is there', async () => {
+    setPlatform('android');
+    (NativeModules as Record<string, unknown>).InstalledAppsModule = {
+      getInstalledApps: async () => [
+        { packageName: 'com.some.niche.app', label: 'Niche App', category: 'games' },
+      ],
+      getIcons: async () => ({}),
+    };
+
+    const apps = await blockableAppSource.listApps();
+
+    // A package that is deliberately NOT in the catalog: proof this came
+    // from the device rather than the bundled list.
+    expect(apps).toEqual([
+      { id: 'com.some.niche.app', name: 'Niche App', category: 'games', installed: 'installed' },
+    ]);
+  });
+
+  // The QUERY_ALL_PACKAGES mitigation (plan §10), which is the reason the
+  // picker reads through an interface at all. Empty is never a truthful
+  // enumeration — a device running this app has at least this app — so it
+  // can only mean the enumeration failed, and the catalog takes over with
+  // no UI change.
+  it('falls back to the catalog when Android enumerates nothing', async () => {
+    setPlatform('android');
+    (NativeModules as Record<string, unknown>).InstalledAppsModule = {
+      getInstalledApps: async () => [],
+      getIcons: async () => ({}),
+    };
+
+    const apps = await blockableAppSource.listApps();
+
+    expect(apps.length).toBeGreaterThan(50);
+    expect(apps.every((app) => app.installed === 'unknown')).toBe(true);
+  });
+
+  it('falls back to the catalog when the native module is not registered at all', async () => {
+    setPlatform('android');
+    delete (NativeModules as Record<string, unknown>).InstalledAppsModule;
+
+    const apps = await blockableAppSource.listApps();
+
+    expect(apps.length).toBeGreaterThan(50);
+  });
+
+  it('never reads the device on iOS, which cannot enumerate apps at all', async () => {
+    setPlatform('ios');
+    const getInstalledApps = jest.fn();
+    (NativeModules as Record<string, unknown>).InstalledAppsModule = {
+      getInstalledApps,
+      getIcons: async () => ({}),
+    };
+
+    await blockableAppSource.listApps();
+
+    expect(getInstalledApps).not.toHaveBeenCalled();
   });
 });

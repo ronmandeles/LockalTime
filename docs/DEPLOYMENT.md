@@ -155,3 +155,51 @@ concurrent-connection limit that actually supports the expected launch-day
 scale (`loadtest/README.md` has the full finding and how to re-run this
 against staging once it exists), and upgrade the plan or revise the target
 down if not — see `backlog.md`'s Phase 7 quality-gates entry.
+
+## Store-review declarations for the app picker (Phase 9)
+
+Both platforms need something *declared* before the Create Session app
+picker can ship at full function. Neither blocks development; both block
+release, in different ways.
+
+### Android — `QUERY_ALL_PACKAGES` (owner-actioned, weeks of lead time)
+
+`InstalledAppsModule` enumerates the host's launchable apps so the picker
+can offer them by name. That needs `QUERY_ALL_PACKAGES`, a **restricted**
+permission: Play requires a declaration in the Console, review takes weeks,
+and **it can be refused**.
+
+The owner chose full enumeration knowingly (2026-08-07). What to do:
+
+1. Play Console → App content → **App access / Sensitive app permissions**
+   → declare `QUERY_ALL_PACKAGES`.
+2. Justification to give: the app's core function is blocking distracting
+   apps during a focus session, and the *user themselves* chooses which of
+   their own installed apps to block. The permission is used only to
+   populate that picker — never transmitted (only the user's own selections
+   are, as package-name strings), never used for analytics or advertising.
+3. Record the outcome here.
+
+**If it is refused, nothing needs rebuilding.** `blockable-app-source.ts`
+falls back to the bundled catalog (`docs/APP_CATALOG.md`) whenever
+enumeration returns nothing, so the picker keeps working with the ~87
+well-known apps and loses only niche ones. Removing the permission from
+`AndroidManifest.xml` is then a one-line change and no UI change at all.
+That fallback exists because iOS needs the catalog regardless — the
+mitigation was never speculative.
+
+### iOS — `LSApplicationQueriesSchemes` (lower risk, mention in review notes)
+
+`Info.plist` declares 40 URL schemes so `canOpenURL` can filter the picker
+down to apps the host actually has. This is a documented API and well
+within Apple's 50-entry cap, but **the same mechanism is a known
+device-fingerprinting technique**, and Apple has historically scrutinised
+long scheme lists.
+
+Say so explicitly in the App Review notes rather than leaving it to be
+inferred: the schemes are queried only to filter a user-facing picker to
+apps the user already has, the result never leaves the device, and no
+scheme is ever opened without the user's action.
+
+It degrades gracefully if challenged — strip the schemes and the picker
+shows the unfiltered catalog, which still works.
