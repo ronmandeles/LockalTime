@@ -117,6 +117,12 @@ export const he: TranslationSchema = {
       blockedPackageNotAllowed: 'לא ניתן לחסום את האפליקציה הזו לעולם.',
     },
   },
+  blocker: {
+    overlay: {
+      blockedApp: '%s חסומה במהלך הסשן הזה.',
+      blockedGeneric: 'האפליקציה הזו חסומה במהלך הסשן הזה.',
+    },
+  },
   scanSession: {
     title: 'הצטרפות לסשן',
     body: 'הזינו את הקוד מה-QR של המארח כדי להצטרף לסשן שלו.',

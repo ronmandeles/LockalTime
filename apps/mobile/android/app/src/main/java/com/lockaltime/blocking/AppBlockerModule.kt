@@ -64,18 +64,40 @@ class AppBlockerModule(private val reactContext: ReactApplicationContext) :
       return
     }
     val endsAt = if (config.hasKey("endsAt") && !config.isNull("endsAt")) config.getString("endsAt") else null
-    val categoriesArray: ReadableArray? = if (config.hasKey("blockedCategories")) config.getArray("blockedCategories") else null
-    val categories = mutableListOf<String>()
-    if (categoriesArray != null) {
-      for (index in 0 until categoriesArray.size()) {
-        categoriesArray.getString(index)?.let { categories.add(it) }
-      }
-    }
+    val categories = config.readStringList("blockedCategories")
+    val packages = config.readStringList("blockedPackages")
+    // Phase 9 (plan §8): already-translated overlay copy, resolved by JS and
+    // handed down here. The overlay is a bare TextView with no i18next of
+    // its own, and duplicating the strings into Android resources would mean
+    // a second translation source to keep in sync.
+    val overlayBlockedApp = config.readOptionalString("overlayBlockedApp")
+    val overlayBlockedGeneric = config.readOptionalString("overlayBlockedGeneric")
 
-    val intent = BlockerForegroundService.buildStartIntent(reactContext, sessionId, endsAt, categories)
+    val intent =
+      BlockerForegroundService.buildStartIntent(
+        reactContext,
+        sessionId,
+        endsAt,
+        categories,
+        packages,
+        overlayBlockedApp,
+        overlayBlockedGeneric,
+      )
     ContextCompat.startForegroundService(reactContext, intent)
     promise.resolve(null)
   }
+
+  private fun ReadableMap.readStringList(key: String): List<String> {
+    val array: ReadableArray = (if (hasKey(key)) getArray(key) else null) ?: return emptyList()
+    val values = mutableListOf<String>()
+    for (index in 0 until array.size()) {
+      array.getString(index)?.let { values.add(it) }
+    }
+    return values
+  }
+
+  private fun ReadableMap.readOptionalString(key: String): String? =
+    if (hasKey(key) && !isNull(key)) getString(key) else null
 
   @ReactMethod
   fun stop(promise: Promise) {

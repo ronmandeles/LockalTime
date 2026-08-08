@@ -25,6 +25,7 @@ import android.view.WindowManager
 import android.widget.TextView
 import androidx.core.app.NotificationCompat
 import com.facebook.react.bridge.Arguments
+import com.facebook.react.bridge.WritableMap
 import com.lockaltime.R
 import java.time.Instant
 import java.time.format.DateTimeParseException
@@ -63,6 +64,9 @@ class BlockerForegroundService : Service() {
     private const val EXTRA_SESSION_ID = "sessionId"
     private const val EXTRA_ENDS_AT = "endsAt"
     private const val EXTRA_BLOCKED_CATEGORIES = "blockedCategories"
+    private const val EXTRA_BLOCKED_PACKAGES = "blockedPackages"
+    private const val EXTRA_OVERLAY_BLOCKED_APP = "overlayBlockedApp"
+    private const val EXTRA_OVERLAY_BLOCKED_GENERIC = "overlayBlockedGeneric"
 
     // Read by AppBlockerModule.getStatus() — this service is the only thing
     // that knows whether it's actually alive; the module never assumes.
@@ -85,11 +89,17 @@ class BlockerForegroundService : Service() {
       sessionId: String,
       endsAt: String?,
       blockedCategories: List<String>,
+      blockedPackages: List<String>,
+      overlayBlockedApp: String?,
+      overlayBlockedGeneric: String?,
     ): Intent =
       Intent(context, BlockerForegroundService::class.java).apply {
         putExtra(EXTRA_SESSION_ID, sessionId)
         putExtra(EXTRA_ENDS_AT, endsAt)
         putExtra(EXTRA_BLOCKED_CATEGORIES, blockedCategories.toTypedArray())
+        putExtra(EXTRA_BLOCKED_PACKAGES, blockedPackages.toTypedArray())
+        putExtra(EXTRA_OVERLAY_BLOCKED_APP, overlayBlockedApp)
+        putExtra(EXTRA_OVERLAY_BLOCKED_GENERIC, overlayBlockedGeneric)
       }
 
     fun markDeliberateStop() {
@@ -101,6 +111,15 @@ class BlockerForegroundService : Service() {
   private var sessionId: String = ""
   private var endsAtMillis: Long? = null
   private var blockedAndroidCategories: Set<Int> = emptySet()
+  // Phase 9: specific apps by package name, alongside the categories. The
+  // poll blocks a foreground app if EITHER matches.
+  private var blockedPackages: Set<String> = emptySet()
+  // Already-translated copy handed down from JS at start() (plan §8) — the
+  // overlay is a bare TextView with no i18next of its own. Null only on the
+  // boot-restart path if nothing was persisted, where the Android string
+  // resource is the last-resort fallback.
+  private var overlayBlockedAppTemplate: String? = null
+  private var overlayBlockedGeneric: String? = null
   private var overlayView: View? = null
   private var batteryReceiver: BroadcastReceiver? = null
 
@@ -128,19 +147,35 @@ class BlockerForegroundService : Service() {
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
     var rawCategories: List<String> = emptyList()
+    var rawPackages: List<String> = emptyList()
     if (intent != null) {
       sessionId = intent.getStringExtra(EXTRA_SESSION_ID) ?: ""
       currentSessionId = sessionId
       endsAtMillis = parseEndsAt(intent.getStringExtra(EXTRA_ENDS_AT))
       rawCategories = intent.getStringArrayExtra(EXTRA_BLOCKED_CATEGORIES)?.toList() ?: emptyList()
       blockedAndroidCategories = rawCategories.flatMap { CategoryMapping.androidCategoriesFor(it) }.toSet()
+      rawPackages = intent.getStringArrayExtra(EXTRA_BLOCKED_PACKAGES)?.toList() ?: emptyList()
+      blockedPackages = rawPackages.toSet()
+      overlayBlockedAppTemplate = intent.getStringExtra(EXTRA_OVERLAY_BLOCKED_APP)
+      overlayBlockedGeneric = intent.getStringExtra(EXTRA_OVERLAY_BLOCKED_GENERIC)
     }
 
     // Boot persistence (task 3.4): every real start (not a boot-restart
     // replaying the same config) re-saves the snapshot, so a reboot
-    // mid-session always has the latest config to resume from.
+    // mid-session always has the latest config to resume from. Phase 9:
+    // the packages and the overlay copy go in too — a reboot restarts this
+    // service without JS ever running, so anything absent here resumes as
+    // a partial blocklist or an empty overlay.
     if (intent != null && sessionId.isNotEmpty()) {
-      BootPersistence.save(applicationContext, sessionId, intent.getStringExtra(EXTRA_ENDS_AT), rawCategories)
+      BootPersistence.save(
+        applicationContext,
+        sessionId,
+        intent.getStringExtra(EXTRA_ENDS_AT),
+        rawCategories,
+        rawPackages,
+        overlayBlockedAppTemplate,
+        overlayBlockedGeneric,
+      )
     }
 
     startForeground(NOTIFICATION_ID, buildNotification())
@@ -226,21 +261,44 @@ class BlockerForegroundService : Service() {
     }
 
     val foregroundPackage = currentForegroundPackageName()
-    val category = foregroundPackage?.let { pkg -> categoryOf(pkg) }
-
-    if (category != null && category in blockedAndroidCategories && foregroundPackage != packageName) {
-      showOverlay()
-      AppBlockerModule.emitEvent(
-        "shield_triggered",
-        Arguments.createMap().apply {
-          putString("sessionId", sessionId)
-          putString("category", CategoryMapping.jsCategoryFor(category))
-          putString("at", Instant.now().toString())
-        },
-      )
-    } else {
+    if (foregroundPackage == null || foregroundPackage == packageName) {
       removeOverlay()
+      return
     }
+
+    // Phase 9: a specific app wins over its category. Not just an order of
+    // checks — it decides what the event says, and "Instagram is blocked"
+    // is a better answer than "social is blocked" whenever we actually know
+    // the host named that app.
+    val category = categoryOf(foregroundPackage)
+    val trigger: WritableMap? =
+      when {
+        foregroundPackage in blockedPackages ->
+          Arguments.createMap().apply {
+            putString("reason", "package")
+            putString("packageName", foregroundPackage)
+          }
+        category != null && category in blockedAndroidCategories ->
+          Arguments.createMap().apply {
+            putString("reason", "category")
+            putString("category", CategoryMapping.jsCategoryFor(category))
+          }
+        else -> null
+      }
+
+    if (trigger == null) {
+      removeOverlay()
+      return
+    }
+
+    showOverlay(foregroundPackage)
+    AppBlockerModule.emitEvent(
+      "shield_triggered",
+      trigger.apply {
+        putString("sessionId", sessionId)
+        putString("at", Instant.now().toString())
+      },
+    )
   }
 
   private fun isCurrentlyConnected(): Boolean {
@@ -299,7 +357,32 @@ class BlockerForegroundService : Service() {
     return lastForegroundPackage
   }
 
-  private fun showOverlay() {
+  // The copy is resolved in JS and handed down at start() (plan §8), so the
+  // overlay finally names what it blocked instead of showing one generic
+  // sentence — and does it in the user's own language, which a Kotlin-built
+  // TextView had no path to before.
+  //
+  // The label comes from PackageManager, which is the only place it exists:
+  // the wire format carries package names only, precisely so nothing a host
+  // types ever renders on a stranger's phone.
+  private fun overlayTextFor(blockedPackage: String): String {
+    val template = overlayBlockedAppTemplate
+    val label =
+      runCatching {
+        packageManager.getApplicationLabel(packageManager.getApplicationInfo(blockedPackage, 0)).toString()
+      }
+        .getOrNull()
+        ?.takeIf { it.isNotBlank() }
+
+    if (template != null && label != null) {
+      return template.replace("%s", label)
+    }
+    // Falls back to the generic line, then to the Android string resource —
+    // the latter only reachable if a boot-restart found nothing persisted.
+    return overlayBlockedGeneric ?: getString(R.string.blocker_notification_text)
+  }
+
+  private fun showOverlay(blockedPackage: String) {
     if (overlayView != null) return
 
     val windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
@@ -327,7 +410,7 @@ class BlockerForegroundService : Service() {
     // richer/branded overlay is a later pass, once a palette exists.
     val overlay =
       TextView(this).apply {
-        text = getString(R.string.blocker_notification_text)
+        text = overlayTextFor(blockedPackage)
         setBackgroundColor(0xFF111111.toInt())
         setTextColor(0xFFFFFFFF.toInt())
         textSize = 18f

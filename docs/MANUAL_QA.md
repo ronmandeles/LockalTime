@@ -353,3 +353,31 @@ Neither says anything about what `PackageManager` actually returns.
   note, and that the server still refuses an out-of-set blocklist if the
   client is stale (temporarily narrow the venue's approval *after* the
   screen has loaded, then submit).
+
+## Phase 9 — Enforcement wiring (task 6)
+
+Kotlin compiles (`./gradlew :app:compileDebugKotlin`, verified 2026-08-07)
+and the JS bridge contract is fully covered. What no test here can reach is
+the poll loop actually blocking something.
+
+- [ ] **A named app is blocked, and the overlay says its name.** Create a
+  session blocking Instagram specifically (no categories), open Instagram,
+  and confirm the overlay names *Instagram* rather than showing the old
+  generic line. This is the first time the overlay has had any i18n path at
+  all, so also check it in Hebrew — the copy is resolved in JS and handed
+  down at `start()`, and only a device proves the substitution lands.
+- [ ] **An app wins over its category.** With both `social` and Instagram
+  selected, opening Instagram should report `reason: 'package'`, not
+  `reason: 'category'`. Observable in the JS event log.
+- [ ] **The three new categories actually block.** `news`, `maps` and
+  `productivity` map to `CATEGORY_NEWS`/`MAPS`/`PRODUCTIVITY`. Confirm with
+  a real app in each — and note how many installed apps declare those
+  categories at all, since a mostly-`CATEGORY_UNDEFINED` device makes the
+  new toggles weaker in practice than they look.
+- [ ] **Reboot mid-session with named apps.** Start a session blocking a
+  specific app, reboot, unlock, and confirm the service resumes blocking
+  *that app* — not just its category. The packages and the overlay copy are
+  persisted for exactly this path, and it is the one path where JS never
+  runs, so nothing else can supply them.
+- [ ] **An app the OS will not label.** Confirm the overlay falls back to
+  the generic line rather than rendering an empty screen.

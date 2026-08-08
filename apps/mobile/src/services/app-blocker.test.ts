@@ -36,7 +36,13 @@ const setPlatform = (os: 'android' | 'ios'): void => {
   (Platform as unknown as { OS: string }).OS = os;
 };
 
-const CONFIG = { sessionId: 'session-1', endsAt: null, blockedCategories: ['social'] as const };
+const CONFIG = {
+  sessionId: 'session-1',
+  endsAt: null,
+  blockedCategories: ['social'] as const,
+  blockedPackages: ['com.instagram.android'],
+  overlayCopy: { blockedApp: '%s is blocked.', blockedGeneric: 'This app is blocked.' },
+};
 
 describe('appBlocker with a native module registered', () => {
   beforeEach(() => {
@@ -52,10 +58,16 @@ describe('appBlocker with a native module registered', () => {
       setPlatform(os);
       await appBlocker.start(CONFIG);
 
+      // The overlay copy crosses as two flat strings rather than a nested
+      // map — the bridge sees a plain object either way, and flattening
+      // keeps the native read (AppBlockerModule.kt) a straight getString.
       expect(mockStart).toHaveBeenCalledWith({
         sessionId: 'session-1',
         endsAt: null,
         blockedCategories: ['social'],
+        blockedPackages: ['com.instagram.android'],
+        overlayBlockedApp: '%s is blocked.',
+        overlayBlockedGeneric: 'This app is blocked.',
       });
     },
   );
@@ -115,12 +127,13 @@ describe('appBlocker with a native module registered', () => {
       setPlatform('android');
     });
 
-    it('forwards a valid shield_triggered event', () => {
+    it('forwards a category-triggered shield event', () => {
       const listener = jest.fn();
       appBlocker.addEventListener(listener);
 
       DeviceEventEmitter.emit('shield_triggered', {
         sessionId: 'session-1',
+        reason: 'category',
         category: 'social',
         at: '2026-07-27T00:00:00.000Z',
       });
@@ -128,9 +141,75 @@ describe('appBlocker with a native module registered', () => {
       expect(listener).toHaveBeenCalledWith({
         type: 'shield_triggered',
         sessionId: 'session-1',
+        reason: 'category',
         category: 'social',
         at: '2026-07-27T00:00:00.000Z',
       });
+    });
+
+    // Phase 9: a block triggered by a specific PACKAGE has no valid value
+    // for the old `category` field. Before the shape was widened, this
+    // payload was dropped outright by the boundary validation — silently,
+    // since a dropped event looks exactly like no event at all.
+    it('forwards a package-triggered shield event', () => {
+      const listener = jest.fn();
+      appBlocker.addEventListener(listener);
+
+      DeviceEventEmitter.emit('shield_triggered', {
+        sessionId: 'session-1',
+        reason: 'package',
+        packageName: 'com.instagram.android',
+        at: '2026-07-27T00:00:00.000Z',
+      });
+
+      expect(listener).toHaveBeenCalledWith({
+        type: 'shield_triggered',
+        sessionId: 'session-1',
+        reason: 'package',
+        packageName: 'com.instagram.android',
+        at: '2026-07-27T00:00:00.000Z',
+      });
+    });
+
+    // The exact regression the plan warned about: three categories became
+    // six, and the second private copy of the list that used to live in
+    // app-blocker.ts would have dropped every event for the new three.
+    it.each(['news', 'maps', 'productivity'] as const)(
+      'forwards a shield event for the %s category added in Phase 9',
+      (category) => {
+        const listener = jest.fn();
+        appBlocker.addEventListener(listener);
+
+        DeviceEventEmitter.emit('shield_triggered', {
+          sessionId: 'session-1',
+          reason: 'category',
+          category,
+          at: '2026-07-27T00:00:00.000Z',
+        });
+
+        expect(listener).toHaveBeenCalledWith(
+          expect.objectContaining({ reason: 'category', category }),
+        );
+      },
+    );
+
+    it.each<[Record<string, unknown>, string]>([
+      [{ reason: 'category', category: 'photography' }, 'a category outside the six'],
+      [{ reason: 'package' }, 'a package trigger with no package name'],
+      [{ reason: 'package', packageName: '' }, 'an empty package name'],
+      [{ category: 'social' }, 'no reason at all'],
+      [{ reason: 'telepathy', category: 'social' }, 'an unrecognized reason'],
+    ])('drops a shield payload with %s', (payload) => {
+      const listener = jest.fn();
+      appBlocker.addEventListener(listener);
+
+      DeviceEventEmitter.emit('shield_triggered', {
+        sessionId: 'session-1',
+        at: '2026-07-27T00:00:00.000Z',
+        ...payload,
+      });
+
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('forwards a valid service_killed event', () => {
@@ -214,6 +293,7 @@ describe('appBlocker with a native module registered', () => {
       unsubscribe();
       DeviceEventEmitter.emit('shield_triggered', {
         sessionId: 'session-1',
+        reason: 'category',
         category: 'social',
         at: '2026-07-27T00:00:00.000Z',
       });
@@ -236,12 +316,13 @@ describe('appBlocker with a native module registered', () => {
       setPlatform('ios');
     });
 
-    it('forwards a valid shield_triggered event', () => {
+    it('forwards a category-triggered shield event', () => {
       const listener = jest.fn();
       appBlocker.addEventListener(listener);
 
       DeviceEventEmitter.emit('shield_triggered', {
         sessionId: 'session-1',
+        reason: 'category',
         category: 'social',
         at: '2026-07-27T00:00:00.000Z',
       });
@@ -249,9 +330,75 @@ describe('appBlocker with a native module registered', () => {
       expect(listener).toHaveBeenCalledWith({
         type: 'shield_triggered',
         sessionId: 'session-1',
+        reason: 'category',
         category: 'social',
         at: '2026-07-27T00:00:00.000Z',
       });
+    });
+
+    // Phase 9: a block triggered by a specific PACKAGE has no valid value
+    // for the old `category` field. Before the shape was widened, this
+    // payload was dropped outright by the boundary validation — silently,
+    // since a dropped event looks exactly like no event at all.
+    it('forwards a package-triggered shield event', () => {
+      const listener = jest.fn();
+      appBlocker.addEventListener(listener);
+
+      DeviceEventEmitter.emit('shield_triggered', {
+        sessionId: 'session-1',
+        reason: 'package',
+        packageName: 'com.instagram.android',
+        at: '2026-07-27T00:00:00.000Z',
+      });
+
+      expect(listener).toHaveBeenCalledWith({
+        type: 'shield_triggered',
+        sessionId: 'session-1',
+        reason: 'package',
+        packageName: 'com.instagram.android',
+        at: '2026-07-27T00:00:00.000Z',
+      });
+    });
+
+    // The exact regression the plan warned about: three categories became
+    // six, and the second private copy of the list that used to live in
+    // app-blocker.ts would have dropped every event for the new three.
+    it.each(['news', 'maps', 'productivity'] as const)(
+      'forwards a shield event for the %s category added in Phase 9',
+      (category) => {
+        const listener = jest.fn();
+        appBlocker.addEventListener(listener);
+
+        DeviceEventEmitter.emit('shield_triggered', {
+          sessionId: 'session-1',
+          reason: 'category',
+          category,
+          at: '2026-07-27T00:00:00.000Z',
+        });
+
+        expect(listener).toHaveBeenCalledWith(
+          expect.objectContaining({ reason: 'category', category }),
+        );
+      },
+    );
+
+    it.each<[Record<string, unknown>, string]>([
+      [{ reason: 'category', category: 'photography' }, 'a category outside the six'],
+      [{ reason: 'package' }, 'a package trigger with no package name'],
+      [{ reason: 'package', packageName: '' }, 'an empty package name'],
+      [{ category: 'social' }, 'no reason at all'],
+      [{ reason: 'telepathy', category: 'social' }, 'an unrecognized reason'],
+    ])('drops a shield payload with %s', (payload) => {
+      const listener = jest.fn();
+      appBlocker.addEventListener(listener);
+
+      DeviceEventEmitter.emit('shield_triggered', {
+        sessionId: 'session-1',
+        at: '2026-07-27T00:00:00.000Z',
+        ...payload,
+      });
+
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('drops a malformed payload instead of forwarding garbage — boundary validation', () => {
@@ -273,6 +420,7 @@ describe('appBlocker with a native module registered', () => {
       unsubscribe();
       DeviceEventEmitter.emit('shield_triggered', {
         sessionId: 'session-1',
+        reason: 'category',
         category: 'social',
         at: '2026-07-27T00:00:00.000Z',
       });
@@ -316,6 +464,7 @@ describe("appBlocker with no native module registered (today's real state on iOS
 
       DeviceEventEmitter.emit('shield_triggered', {
         sessionId: 'session-1',
+        reason: 'category',
         category: 'social',
         at: '2026-07-27T00:00:00.000Z',
       });

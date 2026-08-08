@@ -121,11 +121,12 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
     sessionId: session?.id ?? null,
     isSessionActive: session !== null && BLOCKING_STATUSES.has(status),
     endsAt,
-    // Phase 9 task 6 replaces this with the session row's own
-    // blocked_categories/blocked_packages. Until the enforcement wiring
-    // lands, the default keeps behaviour byte-identical to what shipped
-    // before the host could choose at all.
-    blockedCategories: DEFAULT_BLOCKED_CATEGORIES,
+    // The session row's own blocklist, chosen by the host at creation and
+    // frozen for the session's lifetime (plan §9a). Falls back to the
+    // historical default only while the row is still hydrating — the hook
+    // isn't started until isSessionActive anyway.
+    blockedCategories: session?.blocked_categories ?? DEFAULT_BLOCKED_CATEGORIES,
+    blockedPackages: session?.blocked_packages ?? [],
     onOfflineTimeout: reportOfflineTimeout,
   });
 

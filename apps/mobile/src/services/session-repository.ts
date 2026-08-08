@@ -1,3 +1,4 @@
+import type { BlockedCategory } from '../config/blocked-categories';
 import { getSupabaseClient } from './supabase-client';
 
 // Direct, RLS-protected Supabase reads for session hydration — not the
@@ -23,6 +24,12 @@ export interface SessionRow {
   readonly started_at: string | null;
   readonly ended_at: string | null;
   readonly created_at: string;
+  // Phase 9: what THIS session blocks, chosen by the host at creation. Read
+  // here rather than re-derived, and frozen for the session's lifetime
+  // (docs/BLOCKLIST_SELECTION_PLAN.md §9a) — an already-joined client picks
+  // it up on hydrate and on relaunch, so no new endpoint is needed.
+  readonly blocked_categories: readonly BlockedCategory[];
+  readonly blocked_packages: readonly string[];
 }
 
 export interface PresenceIntervalRow {
@@ -67,7 +74,7 @@ export type RepositoryResult<T> =
   | { readonly ok: false; readonly error: RepositoryFailure };
 
 const SESSION_COLUMNS =
-  'id, host_id, venue_id, type, status, duration_mode, planned_duration_minutes, started_at, ended_at, created_at';
+  'id, host_id, venue_id, type, status, duration_mode, planned_duration_minutes, started_at, ended_at, created_at, blocked_categories, blocked_packages';
 
 export const fetchSession = async (sessionId: string): Promise<RepositoryResult<SessionRow>> => {
   const { data, error } = await getSupabaseClient()

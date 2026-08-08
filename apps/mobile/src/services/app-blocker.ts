@@ -30,6 +30,27 @@ export interface SessionBlockerConfig {
   // (ARCHITECTURE.md §8 item 5).
   readonly endsAt: string | null;
   readonly blockedCategories: readonly BlockedCategory[];
+  // Phase 9: specific apps, by package name, alongside the categories. The
+  // native poll blocks a foreground app if EITHER matches.
+  readonly blockedPackages: readonly string[];
+  // Phase 9 (plan §8): the overlay is a bare native TextView built in
+  // Kotlin, entirely outside i18next — so before this it had no i18n path
+  // at all and only one generic string. Rather than duplicating the copy
+  // into Android string resources (and needing a values-iw counterpart),
+  // the ALREADY-TRANSLATED text is handed across the bridge at start().
+  // One translation source of truth, and the overlay can finally name what
+  // it blocked.
+  readonly overlayCopy: OverlayCopy;
+}
+
+export interface OverlayCopy {
+  // Contains a single '%s' placeholder for the blocked app's own name,
+  // which only the native side knows (it resolves the label from
+  // PackageManager at block time).
+  readonly blockedApp: string;
+  // Used when the label can't be resolved — an app the OS won't name is
+  // still an app worth blocking.
+  readonly blockedGeneric: string;
 }
 
 export type BlockerStatus =
@@ -44,13 +65,23 @@ export type BlockerStatus =
 // Mirrors ARCHITECTURE.md §4's bridge pattern event set. Broadcast-style,
 // UI-hint only — never trusted for anything that affects points (that stays
 // server-observed presence, per ARCHITECTURE.md §5/§8).
+// Phase 9: a block can now be triggered by a specific PACKAGE, which has no
+// valid value for the old `category` field. Discriminated on `reason` rather
+// than making category nullable, so a consumer that wants to say "Instagram
+// is blocked" cannot accidentally read a null category as a missing one.
+//
+// Still purely a UI hint, never trusted for points (ARCHITECTURE.md §5/§8) —
+// this is a typing and validation change, not a trust-boundary one.
+export type ShieldTrigger =
+  | { readonly reason: 'category'; readonly category: BlockedCategory }
+  | { readonly reason: 'package'; readonly packageName: string };
+
 export type BlockerEvent =
-  | {
+  | ({
       readonly type: 'shield_triggered';
       readonly sessionId: string;
-      readonly category: BlockedCategory;
       readonly at: string;
-    }
+    } & ShieldTrigger)
   | { readonly type: 'service_killed'; readonly sessionId: string; readonly lastSeenAt: string }
   | {
       readonly type: 'permission_revoked';
@@ -77,6 +108,9 @@ interface NativeAppBlockerStartConfig {
   readonly sessionId: string;
   readonly endsAt: string | null;
   readonly blockedCategories: string[];
+  readonly blockedPackages: string[];
+  readonly overlayBlockedApp: string;
+  readonly overlayBlockedGeneric: string;
 }
 
 interface NativeAppBlockerModule {
@@ -130,20 +164,38 @@ const toBlockerEvent = (eventName: string, payload: unknown): BlockerEvent | nul
   }
 
   switch (eventName) {
-    case 'shield_triggered':
+    case 'shield_triggered': {
+      if (typeof value.at !== 'string') {
+        return null;
+      }
       // isBlockedCategory reads the ONE JS declaration of the vocabulary
       // (config/blocked-categories.ts). This used to be a second local
       // copy of the list, which is exactly what would have silently
       // dropped every event for the three categories Phase 9 added.
-      if (isBlockedCategory(value.category) && typeof value.at === 'string') {
+      if (value.reason === 'category' && isBlockedCategory(value.category)) {
         return {
           type: 'shield_triggered',
           sessionId,
+          reason: 'category',
           category: value.category,
           at: value.at,
         };
       }
+      if (
+        value.reason === 'package' &&
+        typeof value.packageName === 'string' &&
+        value.packageName.length > 0
+      ) {
+        return {
+          type: 'shield_triggered',
+          sessionId,
+          reason: 'package',
+          packageName: value.packageName,
+          at: value.at,
+        };
+      }
       return null;
+    }
     case 'service_killed':
       return typeof value.lastSeenAt === 'string'
         ? { type: 'service_killed', sessionId, lastSeenAt: value.lastSeenAt }
@@ -188,6 +240,9 @@ export const appBlocker: AppBlockerModule = {
       sessionId: config.sessionId,
       endsAt: config.endsAt,
       blockedCategories: [...config.blockedCategories],
+      blockedPackages: [...config.blockedPackages],
+      overlayBlockedApp: config.overlayCopy.blockedApp,
+      overlayBlockedGeneric: config.overlayCopy.blockedGeneric,
     });
   },
 
