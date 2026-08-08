@@ -1,6 +1,11 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  IOS_APPLICATION_QUERIES_SCHEMES,
+  IOS_QUERY_SCHEME_LIMIT,
+} from '../src/config/app-catalog';
+
 // Contract tests for the native project config produced by `react-native init`
 // (bare workflow). The app identifier com.lockaltime.app is a locked decision
 // (CLAUDE.md); with no Mac available, this on-disk check is the only iOS
@@ -92,5 +97,34 @@ describe('dark launch surfaces', () => {
 
       expect(styles).toMatch(/<item name="android:windowLightStatusBar">false<\/item>/);
     });
+  });
+});
+
+// Phase 9 task 3. The catalog's iosScheme fields and Info.plist's
+// LSApplicationQueriesSchemes are two copies of one list, connected by
+// nothing at build time — and drift fails silently in the worst direction:
+// an undeclared scheme makes canOpenURL return false, so the picker hides
+// an app the host genuinely has. Nothing about that looks like an error.
+// This test is the only thing between an edit to the JSON and that outcome.
+describe('iOS LSApplicationQueriesSchemes (Phase 9)', () => {
+  const readDeclaredSchemes = (): string[] => {
+    const plist = readNativeFile(join('ios', 'LockalTime', 'Info.plist'));
+    const block = /<key>LSApplicationQueriesSchemes<\/key>\s*<array>([\s\S]*?)<\/array>/.exec(
+      plist,
+    );
+    if (block === null) {
+      throw new Error('LSApplicationQueriesSchemes is not declared in Info.plist');
+    }
+    return [...(block[1] as string).matchAll(/<string>([^<]*)<\/string>/g)].map(
+      (match) => match[1] as string,
+    );
+  };
+
+  it('declares exactly the schemes the catalog carries, in the same order', () => {
+    expect(readDeclaredSchemes()).toEqual([...IOS_APPLICATION_QUERIES_SCHEMES]);
+  });
+
+  it("stays under Apple's 50-entry cap", () => {
+    expect(readDeclaredSchemes().length).toBeLessThanOrEqual(IOS_QUERY_SCHEME_LIMIT);
   });
 });

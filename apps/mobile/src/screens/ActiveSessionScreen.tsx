@@ -5,7 +5,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 
 import StatusBanner from '../components/StatusBanner';
-import { BLOCKED_CATEGORIES } from '../config/blocked-categories';
+import { DEFAULT_BLOCKED_CATEGORIES } from '../config/blocked-categories';
 import { useAppBlocker } from '../hooks/use-app-blocker';
 import { useHostMigrationToast } from '../hooks/use-host-migration-toast';
 import { useSession } from '../hooks/use-session';
@@ -121,7 +121,11 @@ const ActiveSessionScreen = ({ route, navigation }: ActiveSessionScreenProps): R
     sessionId: session?.id ?? null,
     isSessionActive: session !== null && BLOCKING_STATUSES.has(status),
     endsAt,
-    blockedCategories: BLOCKED_CATEGORIES,
+    // Phase 9 task 6 replaces this with the session row's own
+    // blocked_categories/blocked_packages. Until the enforcement wiring
+    // lands, the default keeps behaviour byte-identical to what shipped
+    // before the host could choose at all.
+    blockedCategories: DEFAULT_BLOCKED_CATEGORIES,
     onOfflineTimeout: reportOfflineTimeout,
   });
 

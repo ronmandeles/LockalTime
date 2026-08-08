@@ -29,6 +29,58 @@
 		<string>en</string>
 		<string>he</string>
 	</array>
+	<!-- Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md 6): the ONLY way an iOS host
+	     can filter the app picker down to apps they actually have. iOS offers no
+	     enumeration, but canOpenURL answers one narrow question per declared
+	     scheme. Apple CAPS this array at 50 -- exceeding it does not degrade, the
+	     whole array stops working.
+	     Generated from apps/mobile/src/config/app-catalog.json; drift between the
+	     two is caught by __tests__/native-config.test.ts, not by a build error.
+	     Describe this in review notes as picker filtering: the same mechanism is
+	     a known device-fingerprinting technique and Apple scrutinises long lists. -->
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>instagram</string>
+		<string>snssdk1233</string>
+		<string>fb</string>
+		<string>fb-messenger</string>
+		<string>whatsapp</string>
+		<string>snapchat</string>
+		<string>twitter</string>
+		<string>reddit</string>
+		<string>barcelona</string>
+		<string>pinterest</string>
+		<string>linkedin</string>
+		<string>tg</string>
+		<string>discord</string>
+		<string>sgnl</string>
+		<string>tumblr</string>
+		<string>weixin</string>
+		<string>line</string>
+		<string>viber</string>
+		<string>kakaotalk</string>
+		<string>tinder</string>
+		<string>bumble</string>
+		<string>youtube</string>
+		<string>nflx</string>
+		<string>spotify</string>
+		<string>twitch</string>
+		<string>disneyplus</string>
+		<string>soundcloud</string>
+		<string>roblox</string>
+		<string>minecraft</string>
+		<string>pokemongo</string>
+		<string>comgooglemaps</string>
+		<string>waze</string>
+		<string>uber</string>
+		<string>lyft</string>
+		<string>googlegmail</string>
+		<string>slack</string>
+		<string>ms-outlook</string>
+		<string>msteams</string>
+		<string>zoomus</string>
+		<string>notion</string>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
