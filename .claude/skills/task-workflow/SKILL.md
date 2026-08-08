@@ -8,14 +8,13 @@ One atomic task at a time, in `backlog.md` order. A task is not "done" until eve
 ## Task loop
 
 1. Pick the next unchecked `backlog.md` task, in order.
-2. Plan → get agreement. No code before that.
+2. Plan → get agreement. A real checkpoint: stop and wait. No code before that, and not because the plan "seems obviously right".
 3. Write the failing test first.
 4. Implement.
 5. Run the full verification gate (below).
-6. Close out docs (below).
-7. Teach the implementation, then move on.
+6. Close out docs (below), then move on.
 
-Never bundle two tasks past a checkpoint.
+Never bundle two tasks past a checkpoint. A self-paced run through `backlog.md` still pauses at every plan checkpoint — only an explicitly requested unattended/background run waives it.
 
 ## Verification gate
 

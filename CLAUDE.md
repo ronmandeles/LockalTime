@@ -5,10 +5,9 @@ Social, location/time/group-based distraction-blocking app. Native iOS + Android
 ## Non-negotiables
 
 1. **Money-equivalent logic is server-only.** Points, bonuses, QR tokens — anything affecting a user's earned rewards — are computed and minted **only** in the Node API. Never trusted from a client claim, never computed client-side even for display; always fetched from the server's authoritative value. Why: `docs/ARCHITECTURE.md` §3 and §8.
-2. **Teaching-first, and it outranks autonomy.** Every task runs **plan → teach → implement → teach**, with explicit agreement before code.
-3. **TDD.** Every code task starts with the test file, agreed as correct, before any implementation.
-4. **One task at a time, closed fully.** `backlog.md` order; suite green + docs updated before the next starts.
-5. **Stop and ask** on any product/design decision not derivable from `docs/` or existing tests — always, without exception, for anything in *Open decisions* below.
+2. **TDD.** Every code task starts with the test file, agreed as correct, before any implementation.
+3. **One task at a time, closed fully.** `backlog.md` order; suite green + docs updated before the next starts.
+4. **Stop and ask** on any product/design decision not derivable from `docs/` or existing tests — always, without exception, for anything in *Open decisions* below.
 
 `.claude/skills/` holds this repo's binding conventions. They apply to subagents too, and a convention that doesn't exist yet gets written as a new skill in the same turn as the code that needed it.
 
@@ -67,7 +66,7 @@ The app first ran on an Android emulator on 2026-08-03. iOS compiles only in clo
 
 The owner wants Lockal Time to be deliberately **engaging / high-retention** ("addictive"), on the theory that hooking users on *this* app reduces their overall phone use — so retention serves the mission and is a selling point.
 
-This **reverses** the restrained anti-engagement philosophy still written in `docs/ARCHITECTURE.md` §1 and §9 (both flagged "under revision"). When building anything gamification-, notification-, or engagement-related: design *for* retention, don't invoke the old "avoid variable rewards / no comparison" rules as binding, and surface where a known addictive pattern could fit — folding it into the plan/teach step. **But no specific mechanic is decided**, so still stop and ask before committing to one.
+This **reverses** the restrained anti-engagement philosophy still written in `docs/ARCHITECTURE.md` §1 and §9 (both flagged "under revision"). When building anything gamification-, notification-, or engagement-related: design *for* retention, don't invoke the old "avoid variable rewards / no comparison" rules as binding, and surface where a known addictive pattern could fit — folding it into the plan step. **But no specific mechanic is decided**, so still stop and ask before committing to one.
 
 ## Open decisions — never invent an answer here
 
