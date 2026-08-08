@@ -34,12 +34,20 @@ class BootCompletedReceiver : BroadcastReceiver() {
       return
     }
 
+    // Phase 9: the packages and the overlay copy resume from the same
+    // snapshot. JS never runs on this path, so anything not persisted is
+    // simply gone — omitting the packages would resume mid-session with a
+    // partial blocklist, silently under-blocking exactly the apps the host
+    // singled out by name.
     val startIntent =
       BlockerForegroundService.buildStartIntent(
         context,
         persisted.sessionId,
         persisted.endsAt,
         persisted.blockedCategories,
+        persisted.blockedPackages,
+        persisted.overlayBlockedApp,
+        persisted.overlayBlockedGeneric,
       )
     ContextCompat.startForegroundService(context, startIntent)
   }

@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+
+import { useTranslation } from 'react-i18next';
 
 import type { BlockedCategory } from '../config/blocked-categories';
 import { markBlockerReady } from '../services/api-client';
@@ -21,10 +23,14 @@ export interface UseAppBlockerParams {
   // Absolute server timestamp, or null for open-ended — forwarded to
   // AppBlockerModule.start() as-is (app-blocker.ts's SessionBlockerConfig).
   readonly endsAt: string | null;
-  // Pass a stable reference (e.g. the BLOCKED_CATEGORIES module constant) —
-  // it's an effect dependency, so a freshly-allocated array every render
-  // would restart the blocker every render.
+  // Phase 9: these now come off the hydrated session row, which is a fresh
+  // object on every realtime update — so a caller CANNOT hand over a stable
+  // reference even if it wants to. The hook therefore stabilizes them
+  // itself, by content, below. Before this the contract was "pass a stable
+  // reference or the blocker restarts every render", which was a trap with
+  // no compiler behind it.
   readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
   // native-enforced 30-min offline cutoff surfaced as an event
   // (app-blocker.ts's offline_cutoff_reached) — this hook only forwards it;
   // the caller wires it to useSession's reportOfflineTimeout.
@@ -42,8 +48,38 @@ export interface UseAppBlockerResult {
 }
 
 export const useAppBlocker = (params: UseAppBlockerParams): UseAppBlockerResult => {
-  const { sessionId, isSessionActive, endsAt, blockedCategories, module = appBlocker } = params;
+  const { sessionId, isSessionActive, endsAt, module = appBlocker } = params;
+  const { t } = useTranslation();
   const [violation, setViolation] = useState<BlockerViolation | null>(null);
+
+  // Stabilized by CONTENT, not identity. The session row is re-created on
+  // every realtime update, so depending on the array reference would tear
+  // the blocker down and restart it — lifting the shield for a moment —
+  // every time anything about the session changed.
+  const categoriesKey = params.blockedCategories.join(',');
+  const packagesKey = params.blockedPackages.join(',');
+  const blockedCategories = useMemo(
+    () => params.blockedCategories,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [categoriesKey],
+  );
+  const blockedPackages = useMemo(
+    () => params.blockedPackages,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [packagesKey],
+  );
+
+  // The overlay is a bare native TextView with no i18next of its own
+  // (plan §8), so the resolved copy is handed to it at start() and it
+  // formats in the app's name. One translation source of truth rather than
+  // a parallel set of Android string resources needing their own values-iw.
+  const overlayCopy = useMemo(
+    () => ({
+      blockedApp: t('blocker.overlay.blockedApp'),
+      blockedGeneric: t('blocker.overlay.blockedGeneric'),
+    }),
+    [t],
+  );
 
   // Stable ref so the effect below doesn't need onOfflineTimeout as a
   // dependency — callers (e.g. a screen composing useSession + this hook)
@@ -62,7 +98,13 @@ export const useAppBlocker = (params: UseAppBlockerParams): UseAppBlockerResult 
     // §7's Sybil-resistance gate is advisory: a failure here only costs this
     // participant the Group Bonus threshold, never their place in the session).
     module
-      .start({ sessionId: activeSessionId, endsAt, blockedCategories })
+      .start({
+        sessionId: activeSessionId,
+        endsAt,
+        blockedCategories,
+        blockedPackages,
+        overlayCopy,
+      })
       .then(() => {
         markBlockerReady(activeSessionId).catch(() => undefined);
       })
@@ -87,7 +129,7 @@ export const useAppBlocker = (params: UseAppBlockerParams): UseAppBlockerResult 
       unsubscribe();
       module.stop().catch(() => undefined);
     };
-  }, [sessionId, isSessionActive, endsAt, blockedCategories, module]);
+  }, [sessionId, isSessionActive, endsAt, blockedCategories, blockedPackages, overlayCopy, module]);
 
   return { violation };
 };

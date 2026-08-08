@@ -141,6 +141,18 @@ export const en = {
       blockedPackageNotAllowed: 'That app can never be blocked.',
     },
   },
+  // Phase 9 (plan §8): the Android blocker overlay is a bare native
+  // TextView built in Kotlin, with no i18next of its own. Rather than a
+  // parallel set of Android string resources needing their own values-iw,
+  // the resolved copy is handed across the bridge at start() — one
+  // translation source of truth. '%s' is substituted natively with the
+  // blocked app's own name, which only PackageManager knows.
+  blocker: {
+    overlay: {
+      blockedApp: '%s is blocked during this session.',
+      blockedGeneric: 'This app is blocked during this session.',
+    },
+  },
   scanSession: {
     title: 'Join a session',
     body: "Enter the code from the host's QR to join their session.",

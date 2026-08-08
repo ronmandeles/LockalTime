@@ -89,6 +89,8 @@ const SESSION_ROW: SessionRow = {
   started_at: '2026-07-26T12:00:00.000Z',
   ended_at: null,
   created_at: '2026-07-26T12:00:00.000Z',
+  blocked_categories: ['social', 'games', 'entertainment'],
+  blocked_packages: [],
 };
 
 const mockSession = (
