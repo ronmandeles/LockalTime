@@ -266,3 +266,32 @@ pre-mount launch surfaces are all things a Jest assertion can pin the
   `#0F6B5C`, which no longer matches the black-and-navy app behind it. The
   owner chose to keep the logo as-is for now; raise redesigning it as a
   follow-up.
+
+## Phase 9 — The bundled app catalog (task 2)
+
+`apps/mobile/src/config/app-catalog.json` — 87 apps, each carrying an Android
+package name used as the cross-device identity, and 40 of them an iOS URL
+scheme. The integrity test can check every row's *shape* and nothing about its
+truth; see [APP_CATALOG.md](APP_CATALOG.md) for how the list was chosen.
+
+Both of these fail **silently** — a wrong value blocks nothing, forever, with no
+error surfaced anywhere. That is what makes them worth a real pass rather than a
+spot check.
+
+- [ ] **Every package name against its real Play Store listing.** Open
+  `play.google.com/store/apps/details?id=<the id>` for each of the 87 and
+  confirm it resolves to the app the `name` field claims. Known ambiguity to
+  settle while doing it: **HBO Max has two live listings**, `com.wbd.stream`
+  (what we ship) and `com.wbd.hbomax`. Determine which is current.
+- [ ] **Every declared `iosScheme` on a real iPhone.** With the app installed,
+  `UIApplication.canOpenURL("<scheme>://")` must return true. A scheme that
+  doesn't resolve is worse than none at all: the entry is then hidden from a
+  host who genuinely has the app. Schemes were only included where
+  well-documented, and 47 entries deliberately carry none — those show
+  unfiltered, which is correct.
+- [ ] **The `Info.plist` array matches the catalog.** All 40 schemes present
+  under `LSApplicationQueriesSchemes`, and the array still ≤ 50 (Apple's cap).
+- [ ] **Regional package variants.** TikTok ships as `com.zhiliaoapp.musically`
+  in most markets but `com.ss.android.ugc.trill` in some; the catalog carries
+  only the first. Worth confirming which one a real device in the target market
+  actually has before deciding whether to carry both.
