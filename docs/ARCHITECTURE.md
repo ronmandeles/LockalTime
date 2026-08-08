@@ -54,11 +54,28 @@ Known edge-case screens still needed but not yet designed (tracked in backlog): 
 ## 4. Native Blocking Modules
 
 ### Blocking policy scope
-A session blocks a **fixed set of default categories** (e.g., Social Networking, Games, Entertainment) — not a per-session or per-user app picker. Neither platform requires us to maintain our own app-to-category database:
-- **iOS:** `FamilyControls`/`ManagedSettings` can restrict at the category level via `ActivityCategoryToken`, based on each app's own App Store category — we never need to know which specific apps a user has installed.
+
+**Revised in Phase 9 (2026-08-07).** This section previously said a session blocks a *fixed set of default categories* — "not a per-session or per-user app picker", with "no new `sessions` schema needed". Both are now false. The full design and its reasoning live in [docs/BLOCKLIST_SELECTION_PLAN.md](BLOCKLIST_SELECTION_PLAN.md); the short version:
+
+The **host chooses per session**, on the Create Session screen, and the choice is stored on the session row (`sessions.blocked_categories` / `blocked_packages`). They name two kinds of thing, both plain strings so they can travel between phones:
+
+| Kind | Example | Meaning |
+|---|---|---|
+| Category | `social` | every app on *that* device declaring itself social |
+| App | `com.instagram.android` | that specific app, on devices that have it |
+
+Each member's device resolves those names against its **own** installed apps. Host picks "Social" and a member with Instagram and WhatsApp loses both, while a member with neither loses nothing.
+
+Six categories, up from three: `social`, `games`, `entertainment`, `news`, `maps`, `productivity`. The picker pre-fills the historical three, so the new ones are opt-in.
+
+A **category** automatically covers apps installed later; a **specific app list** does not. Neither is wrong — the UI says so, so the host chooses deliberately.
+
+Neither platform requires us to maintain our own app-to-category database:
+- **iOS:** `FamilyControls`/`ManagedSettings` restricts at the category level via `ActivityCategoryToken`, based on each app's own App Store category.
 - **Android:** apps declare a category via `ApplicationInfo.category` (`CATEGORY_SOCIAL`, `CATEGORY_GAME`, etc.), queryable via `PackageManager` at runtime; we filter installed apps by category at block-time.
 - **Known limitation:** Android's category field is inconsistently populated by developers (some apps are `CATEGORY_UNDEFINED`), so category-based blocking may miss a small number of mislabeled apps. Accepted limitation, not solved for MVP.
-- No new `sessions` schema needed for this — it's a fixed Node/native config constant (the blocked-category list), not user- or session-configurable data.
+- **Known limitation (iOS, Phase 9):** an `ApplicationToken` cannot be constructed from a bundle id, read back into one, or transferred between devices, so a string arriving from our server has nothing to bind to on an iPhone. iOS members therefore re-select the session's items in Apple's own picker at join. iOS also reissues those tokens unpredictably — any design storing a token↔identity map goes stale silently, and there is no API that reports it. We accept that exposure rather than solve it (it fails in the under-blocking direction, which never buys anyone points they didn't earn); noted here alongside the Safe Mode gap below.
+- **The blocklist is frozen for a session's lifetime** — not editable by the original host, and not by a host promoted through migration. That closes an exploit rather than merely simplifying: migration promotes whoever has the most minutes present (§6), which a group could arrange deliberately to hand the role to a confederate who then unblocks everything while everyone keeps earning. Kept as a *server-side policy* over a still-mutable column, deliberately, so a future add-only editing path stays cheap.
 
 ### Android
 - **Mechanism: `UsageStatsManager` polling + `SYSTEM_ALERT_WINDOW` overlay + Foreground Service.** Deliberately **not** using `AccessibilityService`: Google Play tightened AccessibilityService policy with enforcement from Jan 28, 2026 — non-accessibility uses require a Play Console declaration, mandatory in-app disclosure + affirmative consent, and a stricter review process, with no exemption available to us (`isAccessibilityTool=true` is reserved for genuine disability-accessibility tools). UsageStats + Overlay avoids that review gate entirely, at the cost of ~1-2s polling lag instead of instant event detection — acceptable for this use case.
@@ -168,6 +185,8 @@ Resolved by `docs/RETENTION_STRATEGY.md` (Phase 5 task 1) — see that doc for t
 **Implemented Phase 6:** the manual approval flow is exactly `docs/RUNBOOK_VERIFIED_HOST.md`'s SQL runbook — `public.users.role` has no write path outside direct SQL as the table owner (Node's grant is `select`-only, `20260729000000_grant_users_select_service_role.sql`), so there was never a decision to build an admin screen against; `apps/server/src/middleware/require-role.ts` is the only new machinery, a per-request DB read (not a JWT claim, so a manual flip takes effect immediately on the caller's next request, no re-login needed).
 
 Static QR resolved to a **venue-scoped, non-expiring token** (owner decision) rather than a per-session token: `venues.qr_token` is minted once at venue creation and stays valid — printed once, never reprinted — until a deliberate `POST /venues/:id/qr/regenerate`. Scanning it resolves to whichever `static_qr` session is currently active at that venue (`public.join_venue_session()`, `supabase/migrations/20260729000300_static_qr_venue_token.sql`) — a genuine find-or-create-shaped read, not a fixed session id. A verified host's session capacity uses a separate, higher `VENUE_SESSION_MAX_PARTICIPANTS` constant (200 vs. the default 50) — a business's foot traffic is a different shape of "group" than a friend session.
+
+**Phase 9 adds a second manually-granted venue flag, for the same reason and by the same mechanism.** A `static_qr` session's blocklist must be a subset of `venues.approved_blocked_categories` / `approved_blocked_packages`; the server rejects anything else with `blocklist_not_venue_approved`. Without it, nothing stops a cafe seating 200 strangers and blocking a competitor's app. Approval is out of band — the owner edits the columns in Supabase, exactly as `users.role` is flipped for Verified Host, and for the same reason: there is no write path for a business to grant itself more. A new venue defaults to the three historical categories, so it is useful immediately and only needs attention if it wants to name specific apps. This stays inside the "manual flag for now, V2 for a real application flow" position; it does not settle B2B monetization.
 
 The MVP dashboard is `GET /venues/:id/metrics` (`apps/server/src/modules/venues/get-venue-metrics.ts`) + `VenueDashboardScreen.tsx`: `concurrentActiveCustomers` (live open-interval count on the venue's active sessions), `avgMinutesPerCustomer` and `sessionsInWindow` over a trailing `VENUE_METRICS_WINDOW_DAYS=30` — aggregates only, never an individual customer's identity. Gated by role **and** ownership (checked inside the service function itself, not just the route's role middleware — role alone would let any verified host read any venue's numbers).
 

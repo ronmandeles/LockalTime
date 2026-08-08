@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { ApiError } from '../../middleware/api-error';
+import type { BlockedCategory } from './blocklist';
 
 export type SessionType = 'solo' | 'dynamic_qr' | 'static_qr';
 export type SessionStatus = 'pending' | 'active' | 'completed' | 'cancelled';
@@ -75,6 +76,13 @@ export interface SessionRecord {
   // path, but typed nullable to match the DB column's real shape.
   readonly startedAt: string | null;
   readonly createdAt: string;
+  // Phase 9: what this session blocks, chosen by the host at creation.
+  // Returned to the host's own device so it can start its native blocker
+  // from the server's copy rather than from what it just sent — the same
+  // "always read the authoritative value back" posture the rest of the
+  // create response follows.
+  readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
 }
 
 // Narrower than SessionRecord — only what end-session.ts needs to validate
@@ -110,6 +118,12 @@ export interface SessionPreviewRow {
   readonly status: SessionStatus;
   readonly startedAt: string | null;
   readonly venueId: string | null;
+  // Phase 9: Screen 8 describes the blocklist before anyone joins. On iOS
+  // that description is what the member works from while re-selecting the
+  // same items in Apple's picker (plan §7), so it is part of the join
+  // flow, not decoration.
+  readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
 }
 
 // Phase 6 task 5: the raw shape get_venue_metrics() returns — aggregates
@@ -168,6 +182,8 @@ export interface NewSessionInput {
   readonly qrExpiresAt: string | null;
   readonly status: SessionStatus;
   readonly startedAt: string;
+  readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
 }
 
 // Thin persistence seam over the sessions/session_host_assignments tables —
@@ -340,6 +356,8 @@ interface SessionRow {
   qr_expires_at: string | null;
   started_at: string | null;
   created_at: string;
+  blocked_categories: BlockedCategory[];
+  blocked_packages: string[];
 }
 
 const toSessionRecord = (row: SessionRow): SessionRecord => ({
@@ -354,6 +372,8 @@ const toSessionRecord = (row: SessionRow): SessionRecord => ({
   qrExpiresAt: row.qr_expires_at,
   startedAt: row.started_at,
   createdAt: row.created_at,
+  blockedCategories: row.blocked_categories,
+  blockedPackages: row.blocked_packages,
 });
 
 export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsStore => ({
@@ -371,6 +391,8 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
         qr_expires_at: input.qrExpiresAt,
         status: input.status,
         started_at: input.startedAt,
+        blocked_categories: input.blockedCategories,
+        blocked_packages: input.blockedPackages,
       })
       .select()
       .single<SessionRow>();
@@ -437,7 +459,9 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
   async getSessionPreview(sessionId) {
     const { data, error } = await client
       .from('sessions')
-      .select('id, type, duration_mode, planned_duration_minutes, status, started_at, venue_id')
+      .select(
+        'id, type, duration_mode, planned_duration_minutes, status, started_at, venue_id, blocked_categories, blocked_packages',
+      )
       .eq('id', sessionId)
       .maybeSingle<{
         id: string;
@@ -447,6 +471,8 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
         status: SessionStatus;
         started_at: string | null;
         venue_id: string | null;
+        blocked_categories: BlockedCategory[];
+        blocked_packages: string[];
       }>();
 
     if (error !== null) {
@@ -463,6 +489,8 @@ export const createSupabaseSessionsStore = (client: SupabaseClient): SessionsSto
       status: data.status,
       startedAt: data.started_at,
       venueId: data.venue_id,
+      blockedCategories: data.blocked_categories,
+      blockedPackages: data.blocked_packages,
     };
   },
 

@@ -34,6 +34,8 @@ const buildFakeVenuesStore = (): VenuesStore & { created: NewVenueInput[] } => {
         qrToken: input.qrToken,
         qrTokenIssuedAt: '2026-07-29T00:00:00.000Z',
         createdAt: '2026-07-29T00:00:00.000Z',
+        approvedBlockedCategories: ['social', 'games', 'entertainment'],
+        approvedBlockedPackages: [],
       };
       venues.push(record);
       return record;

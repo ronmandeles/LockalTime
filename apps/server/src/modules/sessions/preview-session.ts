@@ -1,6 +1,7 @@
 import { COMPLETION_BONUS_JOIN_TOLERANCE_SECONDS } from '../../config/constants';
 import { verifyVenueQrToken } from '../venues/venue-qr-token';
 import type { VenuesStore } from '../venues/venues-store';
+import type { BlockedCategory } from './blocklist';
 import { verifyQrToken } from './qr-token';
 import type { DurationMode, SessionsStore, SessionStatus, SessionType } from './sessions-store';
 
@@ -29,6 +30,12 @@ export interface SessionPreview {
   // Rule, CLAUDE.md). false for a session that hasn't started yet
   // (nothing to be "within tolerance of").
   readonly completionBonusAvailable: boolean;
+  // Phase 9: what joining would cost you, stated before you join. Names
+  // only — the receiving device resolves them to display names from its own
+  // PackageManager (Android) or the bundled catalog (iOS), so nothing a
+  // host types ever renders on a stranger's phone (plan §6).
+  readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
 }
 
 export type PreviewSessionResult =
@@ -114,6 +121,8 @@ export const previewSession = async (
       participantCount,
       venueName,
       completionBonusAvailable,
+      blockedCategories: row.blockedCategories,
+      blockedPackages: row.blockedPackages,
     },
   };
 };
