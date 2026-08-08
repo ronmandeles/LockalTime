@@ -295,3 +295,38 @@ spot check.
   in most markets but `com.ss.android.ugc.trill` in some; the catalog carries
   only the first. Worth confirming which one a real device in the target market
   actually has before deciding whether to carry both.
+
+## Phase 9 — `InstalledAppsModule` (task 4)
+
+Kotlin **compiles** here (`./gradlew :app:compileDebugKotlin`, verified
+2026-08-07) and the JS side has a full contract test over a mocked bridge.
+Neither says anything about what `PackageManager` actually returns.
+
+- [ ] **The list is real and recognisable.** On the emulator (and ideally a
+  physical device with a normal set of apps installed), open Create Session
+  and confirm the picker shows the apps the device genuinely has, with
+  correct labels — not package names, not a wall of system services. The
+  LAUNCHER-intent filter is what is supposed to keep the latter out.
+- [ ] **The default dialer and SMS app are absent.** `TelecomManager
+  .defaultDialerPackage` and `Telephony.Sms.getDefaultSmsPackage` are the
+  only device-accurate way to name them, and only a real device proves the
+  lookup works. Check on a device where those are *not* the Google defaults
+  if one is available — that is the case the static denylist cannot cover.
+- [ ] **Lockal Time itself is absent** from its own picker.
+- [ ] **Category coverage.** Note roughly how many apps come back with a
+  null category (Android's `ApplicationInfo.category` is developer-declared
+  and often `CATEGORY_UNDEFINED`). If it is most of them, the category
+  toggles are weaker in practice than ARCHITECTURE §4 implies and that is
+  worth knowing before launch.
+- [ ] **Icon performance with a real app count.** `getIcons` is windowed
+  deliberately — the plan corrected an earlier design that sent ~200 icons
+  inline as 1.5–3 MB of base64 in one bridge payload. Scroll the picker
+  fast on a device with ~200 apps and watch for jank. If windowing is not
+  enough, the next step is a native view that renders the `Drawable`
+  directly and transfers nothing.
+- [ ] **The `QUERY_ALL_PACKAGES` refusal path.** Do not wait for Play to
+  decide: comment the permission out of `AndroidManifest.xml`, rebuild, and
+  confirm the picker silently falls back to the bundled catalog with no
+  error and no UI difference. That fallback is the whole mitigation and it
+  has only ever been exercised in Jest.
+- [ ] **The Play Console declaration itself** — see `docs/DEPLOYMENT.md`.

@@ -3,6 +3,7 @@ import { Linking, Platform } from 'react-native';
 import { APP_CATALOG, type CatalogApp } from '../config/app-catalog';
 import type { BlockedCategory } from '../config/blocked-categories';
 import { isSafetyDenied } from '../config/blocklist-safety';
+import { installedApps } from './installed-apps';
 
 // The source seam the Create Session app picker reads through
 // (docs/BLOCKLIST_SELECTION_PLAN.md §7). One component, two platforms:
@@ -96,7 +97,38 @@ export const catalogAppSource: BlockableAppSource = {
   },
 };
 
-// The one the picker imports. Android will resolve to the installed-apps
-// source once task 4 lands; today both platforms read the catalog, which is
-// also the permanent shape if the Play declaration is refused.
-export const blockableAppSource: BlockableAppSource = catalogAppSource;
+// Android's real list. Everything it returns is, by definition, installed —
+// that is what makes the §7 "you don't have 2 of these" note exact on
+// Android and only approximate on iOS.
+export const installedAppsSource: BlockableAppSource = {
+  async listApps(): Promise<readonly BlockableApp[]> {
+    const apps = await installedApps.list();
+    return apps.map((app) => ({
+      id: app.packageName,
+      name: app.label,
+      category: app.category,
+      installed: 'installed' as const,
+    }));
+  },
+};
+
+// The one the picker imports.
+//
+// The Android branch falls back to the catalog on an empty result, and that
+// is the whole QUERY_ALL_PACKAGES mitigation (§10) in one line: a refused
+// Play declaration, a revoked permission, or a build without the native
+// module all surface as "no apps enumerated", and the picker quietly reads
+// the same catalog iOS uses. No UI knows the difference.
+//
+// Empty is a safe trigger because it is never a truthful answer: a device
+// running this app has at least this app installed, so zero can only mean
+// the enumeration itself failed.
+export const blockableAppSource: BlockableAppSource = {
+  async listApps(): Promise<readonly BlockableApp[]> {
+    if (!installedApps.isAvailable()) {
+      return catalogAppSource.listApps();
+    }
+    const apps = await installedAppsSource.listApps();
+    return apps.length > 0 ? apps : catalogAppSource.listApps();
+  },
+};

@@ -29,6 +29,20 @@
          documented requirement as of this writing. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md §8/§10): InstalledAppsModule
+         enumerates the host's launchable apps so the Create Session picker can
+         offer them by name. This is a RESTRICTED permission — it needs a Play
+         Console declaration, review takes weeks, and it can be REFUSED, in
+         which case the app cannot ship with full enumeration.
+         The owner chose full enumeration knowingly. It blocks release, never
+         development, and the mitigation is already built rather than planned:
+         blockable-app-source.ts falls back to the bundled catalog on an empty
+         enumeration, so a refusal costs niche apps and no UI at all.
+         tools:ignore because Play's lint flags restricted permissions on
+         sight; the declaration is the answer to it, not a manifest change. -->
+    <uses-permission
+        android:name="android.permission.QUERY_ALL_PACKAGES"
+        tools:ignore="QueryAllPackagesPermission" />
 
     <application
       android:name=".MainApplication"

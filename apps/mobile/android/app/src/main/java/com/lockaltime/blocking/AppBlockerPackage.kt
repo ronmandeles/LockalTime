@@ -12,7 +12,10 @@ import com.facebook.react.uimanager.ViewManager
 @Suppress("DEPRECATION")
 class AppBlockerPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> =
-    listOf(AppBlockerModule(reactContext))
+    // InstalledAppsModule rides along in this package rather than getting
+    // its own: it is part of the same blocking feature, and one more
+    // ReactPackage in MainApplication buys nothing (Phase 9 task 4).
+    listOf(AppBlockerModule(reactContext), InstalledAppsModule(reactContext))
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> =
     emptyList()
