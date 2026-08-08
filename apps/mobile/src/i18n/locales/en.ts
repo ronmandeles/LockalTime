@@ -104,6 +104,31 @@ export const en = {
       empty: 'You have no venues yet. Add one from Manage Venues on Home.',
       error: "We couldn't load your venues. Please try again.",
     },
+    // Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md §7). App NAMES never appear
+    // here and never get translated — brands aren't localized, and the
+    // receiving device resolves them from its own catalog or PackageManager
+    // so nothing a host types travels (§6).
+    blocklist: {
+      label: 'What this session blocks',
+      categoriesLabel: 'Categories',
+      category: {
+        social: 'Social',
+        games: 'Games',
+        entertainment: 'Entertainment',
+        news: 'News',
+        maps: 'Maps',
+        productivity: 'Work',
+      },
+      categoriesNote:
+        'A category also covers apps installed later. A named app only counts if it is already installed.',
+      mapsNote: 'Blocking Maps also blocks navigation. You can always leave the session.',
+      appsLabel: 'Specific apps',
+      appsLoading: 'Looking at your apps…',
+      appsEmpty: 'No apps to choose from. Use the categories above.',
+      notInstalledNote:
+        'Not on this device: {{count}}. They will still block for anyone who has them.',
+      venueNote: 'This venue is approved to block only what is shown here.',
+    },
     submit: 'Start session',
     errors: {
       minutesRequired: 'Enter how many minutes this session should run.',
@@ -111,6 +136,9 @@ export const en = {
       venueRequired: 'Choose which venue this session is for.',
       venueNotOwned: "That venue isn't yours.",
       venueNotFound: "That venue couldn't be found.",
+      blocklistRequired: 'Choose at least one category or app to block.',
+      blocklistNotVenueApproved: 'This venue is not approved to block everything you picked.',
+      blockedPackageNotAllowed: 'That app can never be blocked.',
     },
   },
   scanSession: {

@@ -330,3 +330,26 @@ Neither says anything about what `PackageManager` actually returns.
   error and no UI difference. That fallback is the whole mitigation and it
   has only ever been exercised in Jest.
 - [ ] **The Play Console declaration itself** — see `docs/DEPLOYMENT.md`.
+
+## Phase 9 — Create Session blocklist picker (task 5)
+
+- [ ] **Hebrew + RTL.** Switch the device to Hebrew and re-open Create
+  Session. The category chips, notes and error copy must all be Hebrew and
+  the layout mirrored, while **app names stay in English** — brands are not
+  localized. Look specifically at a row where a Latin app name sits in an
+  otherwise Hebrew screen: each name is in its own `Text` node precisely so
+  the bidi algorithm cannot drag punctuation around it, and only a real
+  render proves that worked.
+- [ ] **Small screen, long list.** The app list is `flexShrink`-ed rather
+  than given a fixed height, so it should absorb whatever space the form
+  above leaves. On a ~320×568pt device with ~200 apps, confirm the submit
+  button stays visible and the list scrolls inside its own bounds rather
+  than pushing the page.
+- [ ] **Scroll performance.** ~200 rows through a real `FlatList` on a real
+  device — the reason it is virtualized rather than a `map()`.
+- [ ] **A venue-narrowed picker.** With a `static_qr` session at a venue
+  whose `approved_blocked_*` columns were narrowed by hand in Supabase,
+  confirm the picker shows only the approved entries plus the explanatory
+  note, and that the server still refuses an out-of-set blocklist if the
+  client is stale (temporarily narrow the venue's approval *after* the
+  screen has loaded, then submit).

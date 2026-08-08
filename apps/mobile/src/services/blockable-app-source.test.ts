@@ -47,7 +47,7 @@ describe('catalogAppSource on iOS', () => {
   it('reports an app whose scheme resolves as installed', async () => {
     mockCanOpenURL.mockImplementation(async (url: string) => url === 'instagram://');
 
-    const apps = await catalogAppSource.listApps();
+    const { apps } = await catalogAppSource.listApps();
 
     expect(apps.find((app) => app.id === 'com.instagram.android')?.installed).toBe('installed');
   });
@@ -55,7 +55,7 @@ describe('catalogAppSource on iOS', () => {
   it('reports an app whose scheme does not resolve as not installed', async () => {
     mockCanOpenURL.mockResolvedValue(false);
 
-    const apps = await catalogAppSource.listApps();
+    const { apps } = await catalogAppSource.listApps();
 
     expect(apps.find((app) => app.id === 'com.instagram.android')?.installed).toBe('not_installed');
   });
@@ -67,7 +67,7 @@ describe('catalogAppSource on iOS', () => {
   it('reports an app with no declared scheme as unknown, and still lists it', async () => {
     mockCanOpenURL.mockResolvedValue(false);
 
-    const apps = await catalogAppSource.listApps();
+    const { apps } = await catalogAppSource.listApps();
     const noScheme = APP_CATALOG.find((app) => app.iosScheme === undefined);
     const listed = apps.find((app) => app.id === noScheme?.id);
 
@@ -78,7 +78,7 @@ describe('catalogAppSource on iOS', () => {
   it('degrades a rejected probe to unknown rather than failing the whole picker', async () => {
     mockCanOpenURL.mockRejectedValue(new Error('scheme not declared in Info.plist'));
 
-    const apps = await catalogAppSource.listApps();
+    const { apps } = await catalogAppSource.listApps();
 
     expect(apps.find((app) => app.id === 'com.instagram.android')?.installed).toBe('unknown');
     expect(apps.length).toBe(APP_CATALOG.length);
@@ -87,7 +87,7 @@ describe('catalogAppSource on iOS', () => {
   it('carries the package name as the id, since that is the only thing that travels between phones', async () => {
     mockCanOpenURL.mockResolvedValue(true);
 
-    const apps = await catalogAppSource.listApps();
+    const { apps } = await catalogAppSource.listApps();
 
     expect(apps.find((app) => app.name === 'Instagram')?.id).toBe('com.instagram.android');
   });
@@ -108,7 +108,7 @@ describe('catalogAppSource on Android', () => {
   });
 
   it('reports every entry as unknown rather than guessing', async () => {
-    const apps = await catalogAppSource.listApps();
+    const { apps } = await catalogAppSource.listApps();
 
     expect(apps.every((app) => app.installed === 'unknown')).toBe(true);
   });
@@ -119,7 +119,7 @@ describe('the seam, on both platforms', () => {
     setPlatform(os);
     mockCanOpenURL.mockResolvedValue(true);
 
-    const apps = await blockableAppSource.listApps();
+    const { apps } = await blockableAppSource.listApps();
     const denied = apps.filter((app) => (SAFETY_DENYLIST as readonly string[]).includes(app.id));
 
     expect(denied).toEqual([]);
@@ -129,7 +129,7 @@ describe('the seam, on both platforms', () => {
     setPlatform(os);
     mockCanOpenURL.mockResolvedValue(true);
 
-    const apps = await blockableAppSource.listApps();
+    const { apps } = await blockableAppSource.listApps();
 
     expect(apps.every((app) => app.category !== null)).toBe(true);
   });
@@ -141,6 +141,23 @@ describe('the seam choosing a source', () => {
     mockCanOpenURL.mockResolvedValue(false);
   });
 
+  // The picker uses this to tell "you have uninstalled this" from "we have
+  // never heard of this app" for a selection carried over from a previous
+  // session. Only a real enumeration can say the first.
+  it('marks a real Android enumeration exhaustive and the catalog not', async () => {
+    setPlatform('android');
+    (NativeModules as Record<string, unknown>).InstalledAppsModule = {
+      getInstalledApps: async () => [
+        { packageName: 'com.some.niche.app', label: 'Niche App', category: 'games' },
+      ],
+      getIcons: async () => ({}),
+    };
+    await expect(blockableAppSource.listApps()).resolves.toMatchObject({ isExhaustive: true });
+
+    delete (NativeModules as Record<string, unknown>).InstalledAppsModule;
+    await expect(blockableAppSource.listApps()).resolves.toMatchObject({ isExhaustive: false });
+  });
+
   it('reads the device on Android when InstalledAppsModule is there', async () => {
     setPlatform('android');
     (NativeModules as Record<string, unknown>).InstalledAppsModule = {
@@ -150,7 +167,7 @@ describe('the seam choosing a source', () => {
       getIcons: async () => ({}),
     };
 
-    const apps = await blockableAppSource.listApps();
+    const { apps } = await blockableAppSource.listApps();
 
     // A package that is deliberately NOT in the catalog: proof this came
     // from the device rather than the bundled list.
@@ -171,7 +188,7 @@ describe('the seam choosing a source', () => {
       getIcons: async () => ({}),
     };
 
-    const apps = await blockableAppSource.listApps();
+    const { apps } = await blockableAppSource.listApps();
 
     expect(apps.length).toBeGreaterThan(50);
     expect(apps.every((app) => app.installed === 'unknown')).toBe(true);
@@ -181,7 +198,7 @@ describe('the seam choosing a source', () => {
     setPlatform('android');
     delete (NativeModules as Record<string, unknown>).InstalledAppsModule;
 
-    const apps = await blockableAppSource.listApps();
+    const { apps } = await blockableAppSource.listApps();
 
     expect(apps.length).toBeGreaterThan(50);
   });

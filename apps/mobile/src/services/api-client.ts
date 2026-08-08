@@ -1,4 +1,5 @@
 import { API_BASE_URL } from '../config/api-config';
+import type { BlockedCategory } from '../config/blocked-categories';
 import { useAuthStore } from '../state/auth-store';
 
 // Typed fetch wrapper for the Node API's WRITE endpoints only — create/join/
@@ -80,6 +81,13 @@ export interface CreateSessionInput {
   // server's ownership check (venue_not_owned/venue_not_found) applies
   // whenever this is present, regardless of type.
   readonly venue_id?: string;
+  // Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md §4). Optional on the wire:
+  // the server defaults both to what every session enforced before the
+  // host could choose, so omitting them is a valid, unchanged request.
+  // Snake_case here and camelCase in the response because that is what the
+  // API actually speaks on each side, not an inconsistency to tidy.
+  readonly blocked_categories?: readonly BlockedCategory[];
+  readonly blocked_packages?: readonly string[];
 }
 
 export interface CreateSessionResponse {
@@ -94,6 +102,8 @@ export interface CreateSessionResponse {
   readonly qrExpiresAt: string | null;
   readonly startedAt: string | null;
   readonly createdAt: string;
+  readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
 }
 
 export const createSession = (input: CreateSessionInput): Promise<ApiResult<CreateSessionResponse>> =>
@@ -134,6 +144,12 @@ export interface SessionPreviewResponse {
   readonly participantCount: number;
   readonly venueName: string | null;
   readonly completionBonusAvailable: boolean;
+  // Phase 9: what joining would cost you, stated before you join. Names
+  // only — the receiving device resolves them to display names from its own
+  // catalog or PackageManager, so nothing a host types ever renders on a
+  // stranger's phone.
+  readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
 }
 
 export const previewSession = (token: string): Promise<ApiResult<SessionPreviewResponse>> =>
@@ -190,6 +206,11 @@ export interface VenueResponse {
   readonly qrToken: string;
   readonly qrTokenIssuedAt: string;
   readonly createdAt: string;
+  // Phase 9 (plan §3): the ceiling on what a static_qr session at this
+  // venue may block, granted out of band. The picker narrows itself to
+  // these so the host is never offered something the server will refuse.
+  readonly approvedBlockedCategories: readonly BlockedCategory[];
+  readonly approvedBlockedPackages: readonly string[];
 }
 
 export interface CreateVenueInput {

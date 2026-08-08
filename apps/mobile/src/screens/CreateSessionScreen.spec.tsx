@@ -24,6 +24,32 @@ jest.mock('../state/profile-store', () => ({
     selector({ role: mockRole }),
 }));
 
+// Phase 9: the persisted blocklist preference is mocked rather than
+// exercised here — blocklist-preference-store.test.ts owns its behaviour,
+// and importing it for real drags AsyncStorage into a screen spec that has
+// nothing to say about storage. BlocklistPicker itself stays REAL, so these
+// tests cover the screen-to-picker wiring rather than a stub of it.
+const DEFAULT_SELECTION = {
+  categories: ['social', 'games', 'entertainment'],
+  packages: [] as readonly string[],
+};
+let mockPreference: { status: string; selection?: unknown } = {
+  status: 'ready',
+  selection: DEFAULT_SELECTION,
+};
+const mockRememberBlocklistPreference = jest.fn();
+jest.mock('../state/blocklist-preference-store', () => ({
+  DEFAULT_BLOCKLIST_SELECTION: { categories: ['social', 'games', 'entertainment'], packages: [] },
+  rememberBlocklistPreference: (...args: unknown[]) => mockRememberBlocklistPreference(...args),
+  useBlocklistPreferenceStore: (selector: (state: { preference: unknown }) => unknown) =>
+    selector({ preference: mockPreference }),
+}));
+
+const mockListApps = jest.fn();
+jest.mock('../services/blockable-app-source', () => ({
+  blockableAppSource: { listApps: () => mockListApps() },
+}));
+
 interface DeviceLocaleStub {
   readonly countryCode: string;
   readonly isRTL: boolean;
@@ -49,6 +75,25 @@ const navigationStub = {
 } as unknown as Parameters<typeof CreateSessionScreen>[0]['navigation'];
 const routeStub = { key: 'CreateSession', name: 'CreateSession' as const, params: undefined };
 
+// Presses a blocklist toggle and waits for the state change to actually
+// commit before returning.
+//
+// The wait is not ceremony. BlocklistPicker's FlatList schedules its own
+// cell-render work on a timer, which keeps an act() scope open across the
+// press — so a plain fireEvent can return before React has re-rendered, and
+// the very next press then runs against a handler closed over the previous
+// selection. Asserting the committed accessibilityState is what makes each
+// step ordered.
+const pressAndSettle = async (
+  testID: string,
+  expectedState: { checked: boolean },
+): Promise<void> => {
+  fireEvent.press(screen.getByTestId(testID));
+  await waitFor(() =>
+    expect(screen.getByTestId(testID)).toHaveProp('accessibilityState', expectedState),
+  );
+};
+
 const renderScreen = async (): Promise<void> => {
   const i18n = await initI18n();
   await i18n.changeLanguage('en');
@@ -57,6 +102,12 @@ const renderScreen = async (): Promise<void> => {
       <CreateSessionScreen navigation={navigationStub} route={routeStub} />
     </I18nProvider>,
   );
+  // Wait for the blocklist picker's async app-source read to land before any
+  // test interacts. Without this the FlatList's own cell-render timer is
+  // still holding an act() scope open when the first press arrives, and the
+  // press can be observed before the render it triggered — reliably under
+  // full-suite load, only intermittently when this file runs alone.
+  await waitFor(() => expect(screen.getByTestId('blocklist-app-list')).toBeOnTheScreen());
 };
 
 describe('CreateSessionScreen', () => {
@@ -64,6 +115,21 @@ describe('CreateSessionScreen', () => {
     mockCreateSession.mockReset();
     mockListVenues.mockReset();
     mockNavigate.mockClear();
+    mockRememberBlocklistPreference.mockReset();
+    mockRememberBlocklistPreference.mockResolvedValue(undefined);
+    mockListApps.mockReset();
+    mockListApps.mockResolvedValue({
+      apps: [
+        {
+          id: 'com.instagram.android',
+          name: 'Instagram',
+          category: 'social',
+          installed: 'installed',
+        },
+      ],
+      isExhaustive: true,
+    });
+    mockPreference = { status: 'ready', selection: DEFAULT_SELECTION };
     mockRole = null;
   });
 
@@ -102,6 +168,8 @@ describe('CreateSessionScreen', () => {
         type: 'solo',
         duration_mode: 'fixed',
         planned_duration_minutes: 30,
+        blocked_categories: ['social', 'games', 'entertainment'],
+        blocked_packages: [],
       }),
     );
     await waitFor(() =>
@@ -123,6 +191,8 @@ describe('CreateSessionScreen', () => {
       expect(mockCreateSession).toHaveBeenCalledWith({
         type: 'dynamic_qr',
         duration_mode: 'open_ended',
+        blocked_categories: ['social', 'games', 'entertainment'],
+        blocked_packages: [],
       }),
     );
   });
@@ -178,7 +248,16 @@ describe('CreateSessionScreen', () => {
     mockRole = 'verified_host';
     mockListVenues.mockResolvedValue({
       ok: true,
-      value: { venues: [{ id: 'venue-1', name: 'Cafe' }] },
+      value: {
+        venues: [
+          {
+            id: 'venue-1',
+            name: 'Cafe',
+            approvedBlockedCategories: ['social', 'games', 'entertainment'],
+            approvedBlockedPackages: [],
+          },
+        ],
+      },
     });
     await renderScreen();
 
@@ -195,7 +274,16 @@ describe('CreateSessionScreen', () => {
     mockRole = 'verified_host';
     mockListVenues.mockResolvedValue({
       ok: true,
-      value: { venues: [{ id: 'venue-1', name: 'Cafe' }] },
+      value: {
+        venues: [
+          {
+            id: 'venue-1',
+            name: 'Cafe',
+            approvedBlockedCategories: ['social', 'games', 'entertainment'],
+            approvedBlockedPackages: [],
+          },
+        ],
+      },
     });
     mockCreateSession.mockResolvedValue({
       ok: true,
@@ -213,6 +301,8 @@ describe('CreateSessionScreen', () => {
         type: 'static_qr',
         duration_mode: 'open_ended',
         venue_id: 'venue-1',
+        blocked_categories: ['social', 'games', 'entertainment'],
+        blocked_packages: [],
       }),
     );
   });
@@ -221,7 +311,16 @@ describe('CreateSessionScreen', () => {
     mockRole = 'verified_host';
     mockListVenues.mockResolvedValue({
       ok: true,
-      value: { venues: [{ id: 'venue-1', name: 'Cafe' }] },
+      value: {
+        venues: [
+          {
+            id: 'venue-1',
+            name: 'Cafe',
+            approvedBlockedCategories: ['social', 'games', 'entertainment'],
+            approvedBlockedPackages: [],
+          },
+        ],
+      },
     });
     mockCreateSession.mockResolvedValue({
       ok: false,
@@ -235,5 +334,174 @@ describe('CreateSessionScreen', () => {
     await fireEvent.press(screen.getByTestId('create-session-submit'));
 
     expect(await screen.findByText(en.createSession.errors.venueNotOwned)).toBeOnTheScreen();
+  });
+});
+
+describe('CreateSessionScreen — the blocklist (Phase 9)', () => {
+  beforeEach(() => {
+    mockCreateSession.mockReset();
+    mockListVenues.mockReset();
+    mockNavigate.mockClear();
+    mockRememberBlocklistPreference.mockReset();
+    mockRememberBlocklistPreference.mockResolvedValue(undefined);
+    mockListApps.mockReset();
+    mockListApps.mockResolvedValue({
+      apps: [
+        {
+          id: 'com.instagram.android',
+          name: 'Instagram',
+          category: 'social',
+          installed: 'installed',
+        },
+      ],
+      isExhaustive: true,
+    });
+    mockPreference = { status: 'ready', selection: DEFAULT_SELECTION };
+    mockRole = null;
+  });
+
+  it('pre-fills the host last committed choice rather than starting from scratch', async () => {
+    mockPreference = {
+      status: 'ready',
+      selection: { categories: ['news'], packages: ['com.instagram.android'] },
+    };
+    await renderScreen();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('blocklist-category-news')).toHaveProp('accessibilityState', {
+        checked: true,
+      }),
+    );
+    expect(screen.getByTestId('blocklist-category-social')).toHaveProp('accessibilityState', {
+      checked: false,
+    });
+  });
+
+  it('sends what the host actually picked', async () => {
+    mockCreateSession.mockResolvedValue({ ok: true, value: { id: 'session-9', qrToken: null } });
+    await renderScreen();
+
+    await fireEvent.changeText(screen.getByTestId('create-session-minutes-input'), '30');
+    await pressAndSettle('blocklist-category-news', { checked: true });
+    await pressAndSettle('blocklist-app-com.instagram.android', { checked: true });
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    await waitFor(() =>
+      expect(mockCreateSession).toHaveBeenCalledWith({
+        type: 'solo',
+        duration_mode: 'fixed',
+        planned_duration_minutes: 30,
+        blocked_categories: ['social', 'games', 'entertainment', 'news'],
+        blocked_packages: ['com.instagram.android'],
+      }),
+    );
+  });
+
+  // Mirrors the server's own non-empty rule. An accident-guard, not an
+  // anti-abuse control: it exists so nobody creates a session that blocks
+  // nothing while paying 1pt/min.
+  it('refuses to submit a session that blocks nothing, without sending a request', async () => {
+    await renderScreen();
+    await fireEvent.changeText(screen.getByTestId('create-session-minutes-input'), '30');
+
+    for (const category of ['social', 'games', 'entertainment']) {
+      await pressAndSettle(`blocklist-category-${category}`, { checked: false });
+    }
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    expect(await screen.findByText(en.createSession.errors.blocklistRequired)).toBeOnTheScreen();
+    expect(mockCreateSession).not.toHaveBeenCalled();
+  });
+
+  // Remembered only after a create the server accepted — what gets saved is
+  // a choice the host committed to, not one they were midway through
+  // changing their mind about.
+  it('remembers the choice only after the server accepts it', async () => {
+    mockCreateSession.mockResolvedValue({
+      ok: false,
+      error: { code: 'unexpected', message: 'boom' },
+    });
+    await renderScreen();
+    await fireEvent.changeText(screen.getByTestId('create-session-minutes-input'), '30');
+    await pressAndSettle('blocklist-category-news', { checked: true });
+
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    await screen.findByText(en.createSession.errors.requestFailed);
+    expect(mockRememberBlocklistPreference).not.toHaveBeenCalled();
+  });
+
+  it('remembers the choice once the session is created', async () => {
+    mockCreateSession.mockResolvedValue({ ok: true, value: { id: 'session-9', qrToken: null } });
+    await renderScreen();
+    await fireEvent.changeText(screen.getByTestId('create-session-minutes-input'), '30');
+    await pressAndSettle('blocklist-category-news', { checked: true });
+
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    await waitFor(() =>
+      expect(mockRememberBlocklistPreference).toHaveBeenCalledWith({
+        categories: ['social', 'games', 'entertainment', 'news'],
+        packages: [],
+      }),
+    );
+  });
+
+  // The picker should have made this unreachable; it arrives when the
+  // client was working from a stale venue approval. The copy has to explain
+  // the refusal rather than blame the network.
+  it('maps the venue-approval refusal to its own copy', async () => {
+    mockCreateSession.mockResolvedValue({
+      ok: false,
+      error: { code: 'blocklist_not_venue_approved', message: 'not approved: maps' },
+    });
+    await renderScreen();
+    await fireEvent.changeText(screen.getByTestId('create-session-minutes-input'), '30');
+
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    expect(
+      await screen.findByText(en.createSession.errors.blocklistNotVenueApproved),
+    ).toBeOnTheScreen();
+  });
+
+  it('maps the safety-denylist refusal to its own copy', async () => {
+    mockCreateSession.mockResolvedValue({
+      ok: false,
+      error: { code: 'blocked_package_not_allowed', message: 'com.android.dialer' },
+    });
+    await renderScreen();
+    await fireEvent.changeText(screen.getByTestId('create-session-minutes-input'), '30');
+
+    await fireEvent.press(screen.getByTestId('create-session-submit'));
+
+    expect(
+      await screen.findByText(en.createSession.errors.blockedPackageNotAllowed),
+    ).toBeOnTheScreen();
+  });
+
+  it('narrows the picker to a venue approved set once that venue is chosen', async () => {
+    mockRole = 'verified_host';
+    mockListVenues.mockResolvedValue({
+      ok: true,
+      value: {
+        venues: [
+          {
+            id: 'venue-1',
+            name: 'Test Venue',
+            approvedBlockedCategories: ['social'],
+            approvedBlockedPackages: [],
+          },
+        ],
+      },
+    });
+    await renderScreen();
+
+    await fireEvent.press(screen.getByTestId('create-session-type-static_qr'));
+    await waitFor(() => expect(screen.getByTestId('create-session-venue-venue-1')).toBeOnTheScreen());
+    await fireEvent.press(screen.getByTestId('create-session-venue-venue-1'));
+
+    await waitFor(() => expect(screen.getByTestId('blocklist-venue-note')).toBeOnTheScreen());
+    expect(screen.queryByTestId('blocklist-category-news')).toBeNull();
   });
 });

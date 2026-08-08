@@ -43,8 +43,24 @@ export interface BlockableApp {
   readonly installed: InstalledState;
 }
 
+export interface BlockableAppListing {
+  readonly apps: readonly BlockableApp[];
+  // Whether `apps` is the device's COMPLETE set of launchable apps.
+  //
+  // Only Android's real enumeration can say yes. The catalog is a curated
+  // partial list by design (docs/APP_CATALOG.md), so an app missing from it
+  // means nothing at all.
+  //
+  // The picker needs the distinction for one specific thing: a selection
+  // carried over from a previous session that no longer appears in the
+  // list. Against an exhaustive listing that is "you have uninstalled this"
+  // and can be said out loud; against the catalog it is "we have never
+  // heard of this app", which must not be reported as absence.
+  readonly isExhaustive: boolean;
+}
+
 export interface BlockableAppSource {
-  listApps(): Promise<readonly BlockableApp[]>;
+  listApps(): Promise<BlockableAppListing>;
 }
 
 // iOS offers no enumeration, but it does answer one narrow question per
@@ -70,7 +86,7 @@ const probeInstalled = async (app: CatalogApp): Promise<InstalledState> => {
 const visibleCatalog = (): readonly CatalogApp[] => APP_CATALOG.filter((app) => !isSafetyDenied(app.id));
 
 export const catalogAppSource: BlockableAppSource = {
-  async listApps(): Promise<readonly BlockableApp[]> {
+  async listApps(): Promise<BlockableAppListing> {
     const catalog = visibleCatalog();
 
     // Android deliberately does NOT probe. canOpenURL means something
@@ -79,21 +95,27 @@ export const catalogAppSource: BlockableAppSource = {
     // wrong answers rather than no answer. 'unknown' is the truthful one
     // until InstalledAppsModule lands.
     if (Platform.OS !== 'ios') {
-      return catalog.map((app) => ({
-        id: app.id,
-        name: app.name,
-        category: app.category,
-        installed: 'unknown' as const,
-      }));
+      return {
+        apps: catalog.map((app) => ({
+          id: app.id,
+          name: app.name,
+          category: app.category,
+          installed: 'unknown' as const,
+        })),
+        isExhaustive: false,
+      };
     }
 
     const states = await Promise.all(catalog.map(probeInstalled));
-    return catalog.map((app, index) => ({
-      id: app.id,
-      name: app.name,
-      category: app.category,
-      installed: states[index] ?? 'unknown',
-    }));
+    return {
+      apps: catalog.map((app, index) => ({
+        id: app.id,
+        name: app.name,
+        category: app.category,
+        installed: states[index] ?? 'unknown',
+      })),
+      isExhaustive: false,
+    };
   },
 };
 
@@ -101,14 +123,17 @@ export const catalogAppSource: BlockableAppSource = {
 // that is what makes the §7 "you don't have 2 of these" note exact on
 // Android and only approximate on iOS.
 export const installedAppsSource: BlockableAppSource = {
-  async listApps(): Promise<readonly BlockableApp[]> {
+  async listApps(): Promise<BlockableAppListing> {
     const apps = await installedApps.list();
-    return apps.map((app) => ({
-      id: app.packageName,
-      name: app.label,
-      category: app.category,
-      installed: 'installed' as const,
-    }));
+    return {
+      apps: apps.map((app) => ({
+        id: app.packageName,
+        name: app.label,
+        category: app.category,
+        installed: 'installed' as const,
+      })),
+      isExhaustive: true,
+    };
   },
 };
 
@@ -124,11 +149,11 @@ export const installedAppsSource: BlockableAppSource = {
 // running this app has at least this app installed, so zero can only mean
 // the enumeration itself failed.
 export const blockableAppSource: BlockableAppSource = {
-  async listApps(): Promise<readonly BlockableApp[]> {
+  async listApps(): Promise<BlockableAppListing> {
     if (!installedApps.isAvailable()) {
       return catalogAppSource.listApps();
     }
-    const apps = await installedAppsSource.listApps();
-    return apps.length > 0 ? apps : catalogAppSource.listApps();
+    const listing = await installedAppsSource.listApps();
+    return listing.apps.length > 0 ? listing : catalogAppSource.listApps();
   },
 };

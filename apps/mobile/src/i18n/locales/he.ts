@@ -85,6 +85,26 @@ export const he: TranslationSchema = {
       empty: 'עדיין אין לכם מקומות עסק. הוסיפו אחד דרך ניהול מקומות עסק במסך הבית.',
       error: 'לא הצלחנו לטעון את מקומות העסק שלכם. נסו שוב.',
     },
+    blocklist: {
+      label: 'מה הסשן הזה חוסם',
+      categoriesLabel: 'קטגוריות',
+      category: {
+        social: 'רשתות חברתיות',
+        games: 'משחקים',
+        entertainment: 'בידור',
+        news: 'חדשות',
+        maps: 'מפות',
+        productivity: 'עבודה',
+      },
+      categoriesNote:
+        'קטגוריה מכסה גם אפליקציות שיותקנו בהמשך. אפליקציה שנבחרה בשמה נספרת רק אם היא כבר מותקנת.',
+      mapsNote: 'חסימת מפות חוסמת גם ניווט. תמיד אפשר לצאת מהסשן.',
+      appsLabel: 'אפליקציות מסוימות',
+      appsLoading: 'בודקים את האפליקציות שלכם…',
+      appsEmpty: 'אין אפליקציות לבחירה. השתמשו בקטגוריות שלמעלה.',
+      notInstalledNote: 'לא במכשיר הזה: {{count}}. הן עדיין ייחסמו אצל מי שיש לו אותן.',
+      venueNote: 'מקום העסק הזה מאושר לחסום רק את מה שמוצג כאן.',
+    },
     submit: 'התחלת סשן',
     errors: {
       minutesRequired: 'הזינו כמה דקות הסשן יימשך.',
@@ -92,6 +112,9 @@ export const he: TranslationSchema = {
       venueRequired: 'בחרו לאיזה מקום עסק הסשן הזה שייך.',
       venueNotOwned: 'מקום העסק הזה אינו שלכם.',
       venueNotFound: 'מקום העסק לא נמצא.',
+      blocklistRequired: 'בחרו לפחות קטגוריה אחת או אפליקציה אחת לחסימה.',
+      blocklistNotVenueApproved: 'מקום העסק הזה אינו מאושר לחסום את כל מה שבחרתם.',
+      blockedPackageNotAllowed: 'לא ניתן לחסום את האפליקציה הזו לעולם.',
     },
   },
   scanSession: {

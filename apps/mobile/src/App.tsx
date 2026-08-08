@@ -36,6 +36,7 @@ import {
   reportTimezoneIfChanged,
 } from './services/user-profile';
 import { hydrateActiveSessionStatus, useActiveSessionStore } from './state/active-session-store';
+import { hydrateBlocklistPreference } from './state/blocklist-preference-store';
 import { attachAuthStateListener, useAuthStore } from './state/auth-store';
 import { hydrateOnboardingStatus, markOnboardingSeen, useOnboardingStore } from './state/onboarding-store';
 import {
@@ -103,6 +104,11 @@ const AppContent = (): React.JSX.Element | null => {
     hydrateOnboardingStatus();
     hydratePermissionStepStatus();
     hydrateActiveSessionStatus();
+    // Phase 9: NOT part of the render gate below, deliberately. This one
+    // only pre-fills a form field on Create Session — a screen nobody can
+    // reach during the cold-start gate — so blocking first paint on it
+    // would cost startup time for nothing.
+    hydrateBlocklistPreference();
 
     initI18n().then((instance) => {
       // initI18n only ever resolves to a supported language, so narrowing by
