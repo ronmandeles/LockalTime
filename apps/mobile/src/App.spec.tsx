@@ -445,7 +445,12 @@ describe('App', () => {
       });
       mockFetchSession.mockResolvedValue({
         ok: true,
-        value: { status: 'active', started_at: '2026-07-28T12:00:00.000Z' },
+        value: {
+          status: 'active',
+          started_at: '2026-07-28T12:00:00.000Z',
+          blocked_categories: ['social'],
+          blocked_packages: [],
+        },
       });
 
       await render(<App />);
@@ -462,7 +467,12 @@ describe('App', () => {
       });
       mockFetchSession.mockResolvedValue({
         ok: true,
-        value: { status: 'active', started_at: '2026-07-28T12:00:00.000Z' },
+        value: {
+          status: 'active',
+          started_at: '2026-07-28T12:00:00.000Z',
+          blocked_categories: ['social'],
+          blocked_packages: [],
+        },
       });
       await render(<App />);
       await fireEvent.press(await screen.findByTestId('welcome-back-rejoin'));
@@ -479,7 +489,12 @@ describe('App', () => {
       });
       mockFetchSession.mockResolvedValue({
         ok: true,
-        value: { status: 'completed', started_at: '2026-07-28T12:00:00.000Z' },
+        value: {
+          status: 'completed',
+          started_at: '2026-07-28T12:00:00.000Z',
+          blocked_categories: ['social'],
+          blocked_packages: [],
+        },
       });
 
       await render(<App />);

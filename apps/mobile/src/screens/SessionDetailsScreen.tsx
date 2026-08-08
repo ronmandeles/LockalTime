@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 
+import type { BlockedCategory } from '../config/blocked-categories';
 import type { RootStackParamList } from '../navigation/types';
 import { joinSession, joinVenueSession, previewSession, rejoinSession } from '../services/api-client';
+import { describeBlocklist } from '../services/blocklist-display';
+import { prepareIosBlocklistSelection } from '../services/ios-family-controls';
 import { fetchOpenPresenceIntervals, fetchSession } from '../services/session-repository';
 import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
@@ -41,6 +44,7 @@ const ERROR_KEYS: ReadonlySet<string> = new Set([
   'not_a_prior_participant',
   'venue_not_found',
   'no_active_session_at_venue',
+  'selection_cancelled',
 ]);
 
 // Which recovery action a given join failure gets — DESIGN_GUIDELINES-
@@ -70,6 +74,10 @@ interface DetailsView {
   // ARCHITECTURE.md §7 forfeits the completion bonus unconditionally for
   // any gap, so there is nothing left to compute.
   readonly showCompletionBonusNote: boolean;
+  // Phase 9: names only, resolved to display text on THIS device — nothing
+  // a host typed ever travels (plan §6).
+  readonly blockedCategories: readonly BlockedCategory[];
+  readonly blockedPackages: readonly string[];
 }
 
 type PreviewLoadState =
@@ -118,6 +126,8 @@ const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps):
               participantCount: intervalsResult.ok ? intervalsResult.value.length : 0,
               venueName: null,
               showCompletionBonusNote: true,
+              blockedCategories: sessionResult.value.blocked_categories,
+              blockedPackages: sessionResult.value.blocked_packages,
             },
           });
         },
@@ -143,6 +153,8 @@ const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps):
               result.value.elapsedMinutes !== null &&
               result.value.elapsedMinutes > 0 &&
               !result.value.completionBonusAvailable,
+            blockedCategories: result.value.blockedCategories,
+            blockedPackages: result.value.blockedPackages,
           },
         });
       });
@@ -156,16 +168,52 @@ const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps):
     // genuinely different screen instance in practice (a fresh scan/rejoin).
   }, [isRejoin, route.params, reloadToken]);
 
+  const details = previewLoad.status === 'loaded' ? previewLoad.details : null;
+  const blocklistLabels =
+    details === null
+      ? []
+      : describeBlocklist(details.blockedCategories, details.blockedPackages, (category) =>
+          t(`createSession.blocklist.category.${category}` as never),
+        );
+
   const handleJoin = (): void => {
     setErrorKey(null);
     setJoining(true);
-    const result$ = isRejoin
-      ? rejoinSession(route.params.sessionId)
-      : joinsViaVenue
-        ? joinVenueSession(route.params.token)
-        : joinSession(route.params.token);
-    result$
+
+    // Phase 9 (plan §7): on iOS this device has to acquire its own tokens
+    // before it can enforce anything, which may mean Apple's picker.
+    //
+    // It runs BEFORE the join call, deliberately. Cancelling must leave the
+    // member not joined at all — a join that succeeded followed by a
+    // dismissed picker is precisely the half-joined state the plan forbids:
+    // present in the session, enforcing nothing, still earning. The cost is
+    // that a picker completed just before a full session was wasted effort,
+    // which is the better of the two failures.
+    //
+    // Resolves 'not_applicable' immediately on Android, which resolves every
+    // name locally and needs nothing.
+    prepareIosBlocklistSelection({
+      categories: details?.blockedCategories ?? [],
+      packages: details?.blockedPackages ?? [],
+      headerText: `${t('sessionDetails.blocklist.pickerHeader')}\n${blocklistLabels.join(', ')}`,
+      footerText: t('sessionDetails.blocklist.pickerFooter'),
+    })
+      .then((outcome) => {
+        if (outcome === 'cancelled') {
+          setJoining(false);
+          setErrorKey('selection_cancelled');
+          return undefined;
+        }
+        return isRejoin
+          ? rejoinSession(route.params.sessionId)
+          : joinsViaVenue
+            ? joinVenueSession(route.params.token)
+            : joinSession(route.params.token);
+      })
       .then((result) => {
+        if (result === undefined) {
+          return;
+        }
         setJoining(false);
         if (!result.ok) {
           setErrorKey(ERROR_KEYS.has(result.error.code) ? result.error.code : 'unknown');
@@ -248,6 +296,29 @@ const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps):
                 {t('sessionDetails.completionBonusUnavailable')}
               </Text>
             )}
+
+            {/* Phase 9: what joining costs you, before you join. On iOS this
+                is also what the member works from inside Apple's own sheet,
+                so it is part of the join flow rather than decoration. Each
+                name is its own Text node — they are Latin brand names that
+                sit inside Hebrew copy, and interpolating them into a
+                sentence lets the bidi algorithm reorder the punctuation
+                around them (i18n skill). */}
+            {blocklistLabels.length > 0 && (
+              <View testID="session-details-blocklist">
+                <Text style={styles.blocklistLabel}>{t('sessionDetails.blocklist.label')}</Text>
+                {blocklistLabels.map((label) => (
+                  <Text key={label} style={styles.blocklistItem}>
+                    {label}
+                  </Text>
+                ))}
+                {Platform.OS === 'ios' && (
+                  <Text style={styles.previewText} testID="session-details-blocklist-ios-note">
+                    {t('sessionDetails.blocklist.iosNote')}
+                  </Text>
+                )}
+              </View>
+            )}
           </View>
         )}
 
@@ -280,6 +351,16 @@ const SessionDetailsScreen = ({ navigation, route }: SessionDetailsScreenProps):
 
 // Phase 7 (Release Prep): real palette tokens (DESIGN_GUIDELINES §12).
 const styles = StyleSheet.create({
+  blocklistItem: {
+    ...typography.body,
+    color: colors.textPrimary,
+    marginTop: spacing.xs,
+  },
+  blocklistLabel: {
+    ...typography.bodyStrong,
+    color: colors.textPrimary,
+    marginTop: spacing.md,
+  },
   body: {
     ...typography.body,
     color: colors.textSecondary,

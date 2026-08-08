@@ -156,6 +156,12 @@ export const he: TranslationSchema = {
       atVenue: 'ב-{{name}}',
     },
     completionBonusUnavailable: 'בונוס ההשלמה של הסשן הזה כבר לא זמין עבורכם, אבל עדיין תקבלו נקודות על הזמן שאתם נוכחים.',
+    blocklist: {
+      label: 'הסשן הזה חוסם',
+      iosNote: 'באייפון, הקישו הצטרפות ותבחרו את אלה בחלון של אפל.',
+      pickerHeader: 'בחרו את אלה ברשימה שלמטה',
+      pickerFooter: 'הקישו סיום אחרי שבחרתם את כולם.',
+    },
     recovery: {
       scanAgain: 'סרקו שוב',
       backToHome: 'חזרה למסך הבית',
@@ -170,6 +176,7 @@ export const he: TranslationSchema = {
       not_a_prior_participant: 'לא הייתם חלק מהסשן הזה, אז אי אפשר לחזור אליו בדרך הזו.',
       venue_not_found: 'מקום העסק לא נמצא.',
       no_active_session_at_venue: 'אין כרגע סשן פעיל במקום העסק הזה.',
+      selection_cancelled: 'צריך לבחור את הפריטים החסומים כדי להצטרף.',
       unknown: 'משהו השתבש בהצטרפות. נסו שוב.',
     },
   },

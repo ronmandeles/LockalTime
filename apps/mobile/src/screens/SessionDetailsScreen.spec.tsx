@@ -1,5 +1,7 @@
 import React from 'react';
 
+import { Platform } from 'react-native';
+
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 
 import { I18nProvider } from '../i18n/I18nProvider';
@@ -15,6 +17,16 @@ jest.mock('../services/api-client', () => ({
   joinVenueSession: (...args: unknown[]) => mockJoinVenueSession(...args),
   rejoinSession: (...args: unknown[]) => mockRejoinSession(...args),
   previewSession: (...args: unknown[]) => mockPreviewSession(...args),
+}));
+
+// Phase 9: the iOS token-acquisition step is mocked here — the real
+// orchestration is pinned in ios-family-controls.test.ts and the decision
+// rule behind it in ios-blocklist-selection.test.ts. What THIS file owns is
+// the screen's contract with it: that it runs before the join, and that
+// cancelling means not joining.
+const mockPrepareIosBlocklistSelection = jest.fn();
+jest.mock('../services/ios-family-controls', () => ({
+  prepareIosBlocklistSelection: (...args: unknown[]) => mockPrepareIosBlocklistSelection(...args),
 }));
 
 const mockFetchSession = jest.fn();
@@ -74,6 +86,12 @@ const DEFAULT_PREVIEW = {
   participantCount: 1,
   venueName: null,
   completionBonusAvailable: false,
+  blockedCategories: ['social', 'games', 'entertainment'],
+  blockedPackages: [],
+};
+
+const setPlatform = (os: 'android' | 'ios'): void => {
+  (Platform as unknown as { OS: string }).OS = os;
 };
 
 const renderScreen = async (
@@ -94,10 +112,17 @@ describe('SessionDetailsScreen', () => {
     mockJoinVenueSession.mockReset();
     mockRejoinSession.mockReset();
     mockNavigate.mockClear();
+    mockPrepareIosBlocklistSelection.mockReset().mockResolvedValue('not_applicable');
     mockPreviewSession.mockReset().mockResolvedValue({ ok: true, value: DEFAULT_PREVIEW });
     mockFetchSession.mockReset().mockResolvedValue({
       ok: true,
-      value: { id: 'session-1', started_at: null, status: 'active' },
+      value: {
+        id: 'session-1',
+        started_at: null,
+        status: 'active',
+        blocked_categories: ['social', 'games', 'entertainment'],
+        blocked_packages: [],
+      },
     });
     mockFetchOpenPresenceIntervals.mockReset().mockResolvedValue({ ok: true, value: [] });
   });
@@ -280,9 +305,16 @@ describe('SessionDetailsScreen (rejoin mode — route params has sessionId, not 
     mockJoinSession.mockReset();
     mockRejoinSession.mockReset();
     mockNavigate.mockClear();
+    mockPrepareIosBlocklistSelection.mockReset().mockResolvedValue('not_applicable');
     mockFetchSession.mockReset().mockResolvedValue({
       ok: true,
-      value: { id: 'session-1', started_at: null, status: 'active' },
+      value: {
+        id: 'session-1',
+        started_at: null,
+        status: 'active',
+        blocked_categories: ['social', 'games', 'entertainment'],
+        blocked_packages: [],
+      },
     });
     mockFetchOpenPresenceIntervals.mockReset().mockResolvedValue({ ok: true, value: [] });
   });
@@ -320,6 +352,8 @@ describe('SessionDetailsScreen (rejoin mode — route params has sessionId, not 
         id: 'session-1',
         started_at: new Date(Date.now() - 12 * 60_000).toISOString(),
         status: 'active',
+        blocked_categories: ['social', 'games', 'entertainment'],
+        blocked_packages: [],
       },
     });
 
@@ -357,5 +391,189 @@ describe('SessionDetailsScreen (rejoin mode — route params has sessionId, not 
     await fireEvent.press(screen.getByTestId('session-details-recovery-action'));
 
     expect(mockNavigate).toHaveBeenCalledWith('Home');
+  });
+});
+
+describe('SessionDetailsScreen — the blocklist (Phase 9)', () => {
+  beforeEach(() => {
+    mockJoinSession.mockReset();
+    mockJoinVenueSession.mockReset();
+    mockRejoinSession.mockReset();
+    mockNavigate.mockClear();
+    mockPrepareIosBlocklistSelection.mockReset().mockResolvedValue('not_applicable');
+    mockPreviewSession.mockReset().mockResolvedValue({ ok: true, value: DEFAULT_PREVIEW });
+    mockFetchSession.mockReset().mockResolvedValue({
+      ok: true,
+      value: {
+        id: 'session-1',
+        started_at: null,
+        status: 'active',
+        blocked_categories: ['social', 'games', 'entertainment'],
+        blocked_packages: [],
+      },
+    });
+    mockFetchOpenPresenceIntervals.mockReset().mockResolvedValue({ ok: true, value: [] });
+    setPlatform('android');
+  });
+
+  it('describes what the session blocks before anyone joins', async () => {
+    mockPreviewSession.mockResolvedValue({
+      ok: true,
+      value: {
+        ...DEFAULT_PREVIEW,
+        blockedCategories: ['news'],
+        blockedPackages: ['com.instagram.android'],
+      },
+    });
+
+    await renderScreen();
+
+    expect(await screen.findByTestId('session-details-blocklist')).toBeOnTheScreen();
+    expect(screen.getByText(en.createSession.blocklist.category.news)).toBeOnTheScreen();
+    expect(screen.getByText('Instagram')).toBeOnTheScreen();
+  });
+
+  // Plan §9: pick `social` AND Instagram and it is in both. Listing it twice
+  // makes the session look like it blocks more than it does.
+  it('does not list an app twice when its category is also blocked', async () => {
+    mockPreviewSession.mockResolvedValue({
+      ok: true,
+      value: {
+        ...DEFAULT_PREVIEW,
+        blockedCategories: ['social'],
+        blockedPackages: ['com.instagram.android'],
+      },
+    });
+
+    await renderScreen();
+
+    await screen.findByTestId('session-details-blocklist');
+    expect(screen.queryByText('Instagram')).toBeNull();
+  });
+
+  it('describes the blocklist in rejoin mode too, off the session row', async () => {
+    mockFetchSession.mockResolvedValue({
+      ok: true,
+      value: {
+        id: 'session-1',
+        started_at: null,
+        status: 'active',
+        blocked_categories: ['maps'],
+        blocked_packages: [],
+      },
+    });
+
+    await renderScreen(rejoinRouteStub);
+
+    expect(await screen.findByTestId('session-details-blocklist')).toBeOnTheScreen();
+    expect(screen.getByText(en.createSession.blocklist.category.maps)).toBeOnTheScreen();
+  });
+
+  it('warns iOS members that joining means picking these in Apple sheet', async () => {
+    setPlatform('ios');
+
+    await renderScreen();
+
+    expect(await screen.findByTestId('session-details-blocklist-ios-note')).toBeOnTheScreen();
+  });
+
+  it('says nothing about Apple sheet on Android, which resolves everything locally', async () => {
+    await renderScreen();
+
+    await screen.findByTestId('session-details-blocklist');
+    expect(screen.queryByTestId('session-details-blocklist-ios-note')).toBeNull();
+  });
+
+  it('acquires the iOS selection with the session blocklist and the described items', async () => {
+    mockPreviewSession.mockResolvedValue({
+      ok: true,
+      value: {
+        ...DEFAULT_PREVIEW,
+        blockedCategories: ['news'],
+        blockedPackages: ['com.instagram.android'],
+      },
+    });
+    mockJoinSession.mockResolvedValue({ ok: true, value: { sessionId: 'session-1' } });
+    await renderScreen();
+    await screen.findByTestId('session-details-blocklist');
+
+    await fireEvent.press(screen.getByTestId('session-details-join'));
+
+    await waitFor(() =>
+      expect(mockPrepareIosBlocklistSelection).toHaveBeenCalledWith(
+        expect.objectContaining({
+          categories: ['news'],
+          packages: ['com.instagram.android'],
+        }),
+      ),
+    );
+    // The list travels INTO Apple's own sheet, so the member isn't working
+    // from memory of this screen while using Apple's search field.
+    const call = mockPrepareIosBlocklistSelection.mock.calls[0][0] as { headerText: string };
+    expect(call.headerText).toContain('Instagram');
+  });
+
+  // Plan §9: not joined. No half-joined state, and no markBlockerReady —
+  // being present in a session while enforcing nothing is exactly what this
+  // step exists to prevent.
+  it('does not join at all when the member dismisses Apple picker', async () => {
+    mockPrepareIosBlocklistSelection.mockResolvedValue('cancelled');
+    await renderScreen();
+    await screen.findByTestId('session-details-blocklist');
+
+    await fireEvent.press(screen.getByTestId('session-details-join'));
+
+    expect(await screen.findByText(en.sessionDetails.errors.selection_cancelled)).toBeOnTheScreen();
+    expect(mockJoinSession).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('lets the member try again after cancelling', async () => {
+    mockPrepareIosBlocklistSelection.mockResolvedValue('cancelled');
+    mockJoinSession.mockResolvedValue({ ok: true, value: { sessionId: 'session-1' } });
+    await renderScreen();
+    await screen.findByTestId('session-details-blocklist');
+    await fireEvent.press(screen.getByTestId('session-details-join'));
+    await screen.findByText(en.sessionDetails.errors.selection_cancelled);
+
+    mockPrepareIosBlocklistSelection.mockResolvedValue('ready');
+    await fireEvent.press(screen.getByTestId('session-details-recovery-action'));
+
+    await waitFor(() => expect(mockJoinSession).toHaveBeenCalled());
+  });
+
+  // The selection has to be acquired BEFORE the join call: a join that
+  // succeeded followed by a dismissed picker is the half-joined state the
+  // plan forbids. The cost is a wasted picker when the join then fails,
+  // which is the better of the two failures.
+  it('acquires the selection before calling join, not after', async () => {
+    const order: string[] = [];
+    mockPrepareIosBlocklistSelection.mockImplementation(async () => {
+      order.push('selection');
+      return 'ready';
+    });
+    mockJoinSession.mockImplementation(async () => {
+      order.push('join');
+      return { ok: true, value: { sessionId: 'session-1' } };
+    });
+    await renderScreen();
+    await screen.findByTestId('session-details-blocklist');
+
+    await fireEvent.press(screen.getByTestId('session-details-join'));
+
+    await waitFor(() => expect(order).toEqual(['selection', 'join']));
+  });
+
+  it('joins normally when the selection is already satisfied', async () => {
+    mockPrepareIosBlocklistSelection.mockResolvedValue('ready');
+    mockJoinSession.mockResolvedValue({ ok: true, value: { sessionId: 'session-1' } });
+    await renderScreen();
+    await screen.findByTestId('session-details-blocklist');
+
+    await fireEvent.press(screen.getByTestId('session-details-join'));
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('ActiveSession', { sessionId: 'session-1' }),
+    );
   });
 });

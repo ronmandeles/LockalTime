@@ -191,6 +191,18 @@ export const en = {
       atVenue: 'At {{name}}',
     },
     completionBonusUnavailable: "This session's completion bonus is no longer available to you, but you'll still earn points for the time you're present.",
+    // Phase 9 (docs/BLOCKLIST_SELECTION_PLAN.md §7): what joining costs you,
+    // stated before you join. On iOS this list is also what the member works
+    // from inside Apple's own sheet, so it is load-bearing, not decoration.
+    blocklist: {
+      label: 'This session blocks',
+      // Shown on iOS only, and only when this device has to acquire tokens —
+      // it is a real extra step, not a formality, so it is announced rather
+      // than sprung on them.
+      iosNote: "On iPhone, tap Join and you'll pick these in Apple's own sheet.",
+      pickerHeader: 'Select these in the list below',
+      pickerFooter: 'Tap Done when you have selected all of them.',
+    },
     recovery: {
       scanAgain: 'Scan again',
       backToHome: 'Back to Home',
@@ -205,6 +217,9 @@ export const en = {
       not_a_prior_participant: "You weren't part of this session, so it can't be rejoined this way.",
       venue_not_found: "That venue couldn't be found.",
       no_active_session_at_venue: 'No session is currently running at this venue.',
+      // Cancelling Apple's sheet means not joining — there is no
+      // half-joined state where someone is in a session enforcing nothing.
+      selection_cancelled: 'You need to select the blocked items before you can join.',
       unknown: "Something went wrong joining. Please try again.",
     },
   },
