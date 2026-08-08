@@ -381,3 +381,44 @@ the poll loop actually blocking something.
   runs, so nothing else can supply them.
 - [ ] **An app the OS will not label.** Confirm the overlay falls back to
   the generic line rather than rendering an empty screen.
+
+## Phase 9 — The iOS join flow (task 7)
+
+**None of this has ever run.** No Mac, no simulator, no device (see
+`.claude/skills/platform-constraints/SKILL.md`). The Swift here compiles
+only in cloud CI, and it was written deliberately dumb — a keyed store with
+no branching — precisely because the branch logic could not be tested if it
+lived there. That logic is in JS and is fully unit-tested; what follows is
+everything the split could not cover.
+
+- [ ] **A first-ever join.** Fresh install, join a session blocking
+  Social + Instagram. Apple's picker must appear with the two items named
+  in its **header text**, inside Apple's own sheet — that header is the only
+  thing standing between the member and working from memory while using
+  Apple's search field.
+- [ ] **Cancelling.** Dismiss the picker. The member must **not** be joined:
+  no session, no `markBlockerReady`, and the retry affordance must
+  re-present the picker.
+- [ ] **The repeat session (the cache).** Join a second session with the
+  *identical* blocklist. **No picker at all.**
+- [ ] **A changed blocklist re-prompts.** Same session plus one more app is
+  a different cache key, so the picker must appear again.
+- [ ] **Learning by subtraction — the important one.** With Social already
+  known, join a session blocking Social + TikTok. The picker should open
+  with Social **pre-ticked**; add TikTok and confirm. Then join a *third*
+  session blocking only TikTok: it must now compose from the map and show
+  **no picker**. That round trip is the entire token-learning feature, and
+  it is unobservable from here.
+- [ ] **Two unknowns learn nothing.** Join a session with two items this
+  device has never seen. The picker must open with nothing pre-ticked, and
+  afterwards neither item should be in the map (verify by joining a session
+  for just one of them — it should still prompt). Guessing which token was
+  which would poison the map permanently, so declining to learn is correct.
+- [ ] **Token rotation, if it can be provoked.** Accepted limitation, not a
+  bug to fix (plan §2/§7, owner decision): iOS reissues tokens
+  unpredictably, a stale map entry silently shields nothing, and no API
+  reports it. If it does bite in the field, expiring map entries after N
+  days is the available lever — but that is a periodic re-prompt by another
+  name, which was offered and declined.
+- [ ] **Android is untouched by all of this.** Confirm an Android join shows
+  no extra step, no note, and no delay.
