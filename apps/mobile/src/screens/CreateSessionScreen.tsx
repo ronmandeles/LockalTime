@@ -4,9 +4,16 @@ import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-nativ
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 
+import BlocklistPicker from '../components/BlocklistPicker';
 import type { RootStackParamList } from '../navigation/types';
 import { createSession, listVenues } from '../services/api-client';
 import type { DurationMode, SessionType, VenueResponse } from '../services/api-client';
+import {
+  DEFAULT_BLOCKLIST_SELECTION,
+  rememberBlocklistPreference,
+  useBlocklistPreferenceStore,
+  type BlocklistSelection,
+} from '../state/blocklist-preference-store';
 import { useProfileStore } from '../state/profile-store';
 import { colors, radius, sizing, spacing, typography } from '../theme/tokens';
 
@@ -59,6 +66,35 @@ const CreateSessionScreen = ({ navigation }: CreateSessionScreenProps): React.JS
   const [venuesLoad, setVenuesLoad] = useState<VenuesLoadState>({ status: 'idle' });
   const [selectedVenueId, setSelectedVenueId] = useState<string | null>(null);
 
+  // Phase 9: pre-filled from the host's last committed choice, then owned
+  // locally for the rest of this form. `null` until the persisted
+  // preference has hydrated, so the picker never briefly shows a default
+  // the host already changed.
+  const preference = useBlocklistPreferenceStore((state) => state.preference);
+  const [blocklist, setBlocklist] = useState<BlocklistSelection | null>(null);
+  useEffect(() => {
+    if (blocklist === null && preference.status === 'ready') {
+      setBlocklist(preference.selection);
+    }
+  }, [blocklist, preference]);
+  const selection = blocklist ?? DEFAULT_BLOCKLIST_SELECTION;
+
+  // A static_qr session's blocklist must fall inside its venue's approved
+  // set (plan §3). Narrowing the picker keeps the host from choosing
+  // something the server will refuse; the refusal is still what enforces
+  // it, since this is client code.
+  const selectedVenue =
+    venuesLoad.status === 'loaded'
+      ? venuesLoad.venues.find((venue) => venue.id === selectedVenueId) ?? null
+      : null;
+  const approvedBlocklist: BlocklistSelection | null =
+    type === 'static_qr' && selectedVenue !== null
+      ? {
+          categories: selectedVenue.approvedBlockedCategories,
+          packages: selectedVenue.approvedBlockedPackages,
+        }
+      : null;
+
   useEffect(() => {
     if (type !== 'static_qr' || venuesLoad.status !== 'idle') {
       return;
@@ -91,12 +127,22 @@ const CreateSessionScreen = ({ navigation }: CreateSessionScreenProps): React.JS
       return;
     }
 
+    // Mirrors the server's own non-empty rule (and the DB CHECK behind it).
+    // An accident-guard, not an anti-abuse control: it exists so nobody
+    // creates a session that blocks nothing while paying 1pt/min.
+    if (selection.categories.length + selection.packages.length === 0) {
+      setError(t('createSession.errors.blocklistRequired'));
+      return;
+    }
+
     setSubmitting(true);
     createSession({
       type,
       duration_mode: durationMode,
       ...(plannedDurationMinutes === undefined ? {} : { planned_duration_minutes: plannedDurationMinutes }),
       ...(selectedVenueId === null ? {} : { venue_id: selectedVenueId }),
+      blocked_categories: selection.categories,
+      blocked_packages: selection.packages,
     })
       .then((result) => {
         setSubmitting(false);
@@ -109,9 +155,27 @@ const CreateSessionScreen = ({ navigation }: CreateSessionScreenProps): React.JS
             setError(t('createSession.errors.venueNotFound'));
             return;
           }
+          // The picker should have made both of these unreachable; they
+          // arrive when it was working from a stale venue approval or an
+          // out-of-date safety list, so the copy explains the refusal
+          // rather than blaming the network.
+          if (result.error.code === 'blocklist_not_venue_approved') {
+            setError(t('createSession.errors.blocklistNotVenueApproved'));
+            return;
+          }
+          if (result.error.code === 'blocked_package_not_allowed') {
+            setError(t('createSession.errors.blockedPackageNotAllowed'));
+            return;
+          }
           setError(t('createSession.errors.requestFailed'));
           return;
         }
+
+        // Remembered only after a create the server accepted — what gets
+        // saved is a choice the host committed to, not one they were
+        // midway through changing their mind about. Fire-and-forget: a
+        // storage failure must never block the navigation.
+        rememberBlocklistPreference(selection).catch(() => undefined);
         navigation.navigate(
           'ActiveSession',
           result.value.qrToken === null
@@ -216,6 +280,12 @@ const CreateSessionScreen = ({ navigation }: CreateSessionScreenProps): React.JS
           testID="create-session-minutes-input"
         />
       )}
+
+      <BlocklistPicker
+        selection={selection}
+        onChange={setBlocklist}
+        approved={approvedBlocklist}
+      />
 
       {error !== null && (
         <Text style={styles.error} testID="create-session-error">
