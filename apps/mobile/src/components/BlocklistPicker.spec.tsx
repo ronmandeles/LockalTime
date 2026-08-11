@@ -41,6 +41,31 @@ const LISTING: readonly BlockableApp[] = [
   { id: 'com.roblox.client', name: 'Roblox', category: 'games', installed: 'not_installed' },
 ];
 
+// The two places the same app can be tapped. They are different rows on
+// screen — one inside its category, one in the flat list below — and they
+// must always agree, because they read and write the same selection.
+const inCategory = (packageName: string): string => `blocklist-category-app-${packageName}`;
+const inFlatList = (packageName: string): string => `blocklist-app-${packageName}`;
+
+// Opening or closing a category changes the picker's OWN state, and React
+// flushes that asynchronously here — unlike a tap that only calls back out
+// through onChange, which lands synchronously. Every drawer press therefore
+// has to be awaited, or the assertion after it reads the previous render.
+const pressExpander = async (category: string, becomesOpen: boolean): Promise<void> => {
+  fireEvent.press(screen.getByTestId(`blocklist-category-expand-${category}`));
+  await waitFor(
+    () =>
+      expect(screen.getByTestId(`blocklist-category-expand-${category}`)).toHaveProp(
+        'accessibilityState',
+        { expanded: becomesOpen },
+      ),
+    // Well past the default second: the whole suite runs in parallel
+    // workers, and a timeout that only trips under load is a flake, not a
+    // signal (testing-standards, determinism).
+    { timeout: 5000 },
+  );
+};
+
 const onChange = jest.fn();
 
 const renderPicker = async (
@@ -122,6 +147,191 @@ describe('the category toggles', () => {
     await renderPicker({ categories: ['social'], packages: [] });
 
     expect(screen.queryByText(en.createSession.blocklist.mapsNote)).toBeNull();
+  });
+});
+
+// Owner decision 2026-08-11: a category row expands to show the apps we can
+// actually name inside it, so "Social" is not an opaque word the host has to
+// take on trust. What the expansion shows is the catalog, filtered exactly
+// as the flat list below is; what the category BLOCKS is whatever the
+// device files under that category, which is strictly more. Those two facts
+// are why the expansion carries a note rather than a bare list.
+describe('the apps under a category', () => {
+  it('keeps every category collapsed until it is asked to expand', async () => {
+    await renderPicker({ categories: ['social'], packages: [] });
+
+    await screen.findByText('Instagram');
+    expect(screen.queryByTestId(inCategory('com.instagram.android'))).toBeNull();
+  });
+
+  it('lists that category’s apps when expanded, and no other category’s', async () => {
+    await renderPicker({ categories: ['social'], packages: [] });
+    await screen.findByText('Instagram');
+
+    await pressExpander('social', true);
+
+    expect(screen.getByTestId(inCategory('com.instagram.android'))).toBeOnTheScreen();
+    expect(screen.getByTestId(inCategory('com.zhiliaoapp.musically'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(inCategory('com.roblox.client'))).toBeNull();
+  });
+
+  it('marks the expander as expanded for screen readers', async () => {
+    await renderPicker({ categories: ['social'], packages: [] });
+    await screen.findByText('Instagram');
+
+    expect(screen.getByTestId('blocklist-category-expand-social')).toHaveProp(
+      'accessibilityState',
+      { expanded: false },
+    );
+
+    await pressExpander('social', true);
+
+    expect(screen.getByTestId('blocklist-category-expand-social')).toHaveProp(
+      'accessibilityState',
+      { expanded: true },
+    );
+  });
+
+  // One at a time, deliberately: Social alone is 32 rows in the real
+  // catalog, and this screen does not scroll past what the picker is given.
+  it('opens one category at a time', async () => {
+    await renderPicker({ categories: ['social'], packages: [] });
+    await screen.findByText('Instagram');
+
+    await pressExpander('social', true);
+    await pressExpander('games', true);
+
+    expect(screen.getByTestId(inCategory('com.roblox.client'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(inCategory('com.instagram.android'))).toBeNull();
+  });
+
+  it('collapses again when the open category is tapped a second time', async () => {
+    await renderPicker({ categories: ['social'], packages: [] });
+    await screen.findByText('Instagram');
+
+    await pressExpander('social', true);
+    await pressExpander('social', false);
+
+    expect(screen.queryByTestId(inCategory('com.instagram.android'))).toBeNull();
+  });
+
+  it('says how many apps it can name in a category', async () => {
+    await renderPicker({ categories: ['social'], packages: [] });
+    await screen.findByText('Instagram');
+
+    // Matched loosely: the assertion is about the number the host sees, not
+    // about the sentence it sits in, which is copy and may be reworded.
+    expect(screen.getByTestId('blocklist-category-count-social')).toHaveTextContent(/\b2\b/);
+    expect(screen.getByTestId('blocklist-category-count-games')).toHaveTextContent(/\b1\b/);
+  });
+
+  // A category we can name nothing in still blocks everything the device
+  // files under it — there is just no list to show, so offering an empty
+  // drawer would only look broken.
+  it('offers no expander for a category it can name no apps in', async () => {
+    await renderPicker({ categories: ['social'], packages: [] });
+    await screen.findByText('Instagram');
+
+    expect(screen.getByTestId('blocklist-category-expand-social')).toBeOnTheScreen();
+    expect(screen.queryByTestId('blocklist-category-expand-news')).toBeNull();
+  });
+
+  // Looking at a category is not choosing it, and choosing it is not
+  // looking at it. Conflating the two would make the host block something
+  // by browsing, or hide the list behind a commitment.
+  it('does not change the selection when a category is expanded', async () => {
+    await renderPicker({ categories: [], packages: [] });
+    await screen.findByText('Instagram');
+
+    await pressExpander('social', true);
+
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('does not expand when the category itself is tapped', async () => {
+    await renderPicker({ categories: [], packages: [] });
+    await screen.findByText('Instagram');
+
+    fireEvent.press(screen.getByTestId('blocklist-category-social'));
+
+    expect(onChange).toHaveBeenCalledWith({ categories: ['social'], packages: [] });
+    expect(screen.queryByTestId(inCategory('com.instagram.android'))).toBeNull();
+  });
+
+  it('adds an app tapped inside its category, by package name', async () => {
+    await renderPicker({ categories: ['games'], packages: [] });
+    await screen.findByText('Instagram');
+    await pressExpander('social', true);
+
+    fireEvent.press(screen.getByTestId(inCategory('com.instagram.android')));
+
+    expect(onChange).toHaveBeenCalledWith({
+      categories: ['games'],
+      packages: ['com.instagram.android'],
+    });
+  });
+
+  it('removes an already-selected app tapped inside its category', async () => {
+    await renderPicker({ categories: [], packages: ['com.instagram.android', 'com.waze'] });
+    await screen.findByText('Instagram');
+    await pressExpander('social', true);
+
+    fireEvent.press(screen.getByTestId(inCategory('com.instagram.android')));
+
+    expect(onChange).toHaveBeenCalledWith({ categories: [], packages: ['com.waze'] });
+  });
+
+  it('shows the same checked state as the flat list below', async () => {
+    await renderPicker({ categories: [], packages: ['com.instagram.android'] });
+    await screen.findByText('Instagram');
+    await pressExpander('social', true);
+
+    expect(screen.getByTestId(inCategory('com.instagram.android'))).toHaveProp(
+      'accessibilityState',
+      { checked: true },
+    );
+    expect(screen.getByTestId(inFlatList('com.instagram.android'))).toHaveProp(
+      'accessibilityState',
+      { checked: true },
+    );
+    expect(screen.getByTestId(inCategory('com.zhiliaoapp.musically'))).toHaveProp(
+      'accessibilityState',
+      { checked: false },
+    );
+  });
+
+  // The honesty note. The blocker matches on the device's own category, so
+  // this list is what we can name, never the boundary of what gets blocked.
+  it('says the list is what it can name, not the whole category', async () => {
+    await renderPicker({ categories: [], packages: [] });
+    await screen.findByText('Instagram');
+
+    expect(screen.queryByText(en.createSession.blocklist.categoryAppsNote)).toBeNull();
+
+    await pressExpander('social', true);
+
+    expect(screen.getByText(en.createSession.blocklist.categoryAppsNote)).toBeOnTheScreen();
+  });
+
+  // Ticking Instagram under a Social session changes nothing, and the host
+  // should be told that rather than left to infer it from a checkbox that
+  // appears to do nothing.
+  it('says the apps are already covered when the category is on', async () => {
+    await renderPicker({ categories: ['social'], packages: [] });
+    await screen.findByText('Instagram');
+
+    await pressExpander('social', true);
+
+    expect(screen.getByText(en.createSession.blocklist.categoryCoveredNote)).toBeOnTheScreen();
+  });
+
+  it('says nothing about coverage when the category is off', async () => {
+    await renderPicker({ categories: ['games'], packages: [] });
+    await screen.findByText('Instagram');
+
+    await pressExpander('social', true);
+
+    expect(screen.queryByText(en.createSession.blocklist.categoryCoveredNote)).toBeNull();
   });
 });
 
@@ -255,6 +465,16 @@ describe('a venue-approved blocklist', () => {
     expect(screen.queryByText('TikTok')).toBeNull();
   });
 
+  it('narrows a category’s own list to the approved apps too', async () => {
+    await renderPicker({ categories: ['social'], packages: [] }, approved);
+    await screen.findByText('Instagram');
+
+    await pressExpander('social', true);
+
+    expect(screen.getByTestId(inCategory('com.instagram.android'))).toBeOnTheScreen();
+    expect(screen.queryByTestId(inCategory('com.zhiliaoapp.musically'))).toBeNull();
+  });
+
   it('explains why the list is shorter rather than silently showing less', async () => {
     await renderPicker({ categories: ['social'], packages: [] }, approved);
 
@@ -283,5 +503,14 @@ describe('i18n', () => {
     await renderPicker({ categories: ['social'], packages: [] }, null, 'he');
 
     expect(await screen.findByText('Instagram')).toBeOnTheScreen();
+  });
+
+  it('renders the expanded category’s copy in Hebrew', async () => {
+    await renderPicker({ categories: [], packages: [] }, null, 'he');
+    await screen.findByText('Instagram');
+
+    await pressExpander('social', true);
+
+    expect(screen.getByText(he.createSession.blocklist.categoryAppsNote)).toBeOnTheScreen();
   });
 });

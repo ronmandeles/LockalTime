@@ -121,6 +121,13 @@ export const en = {
       },
       categoriesNote:
         'A category also covers apps installed later. A named app only counts if it is already installed.',
+      appCount: '{{count}} listed',
+      showApps: 'Show the apps in this category',
+      hideApps: 'Hide the apps in this category',
+      categoryAppsNote:
+        'The apps we can name in this category. It also blocks ones that are not listed here.',
+      categoryCoveredNote:
+        'This category is on, so all of these are blocked whether or not you tick them.',
       mapsNote: 'Blocking Maps also blocks navigation. You can always leave the session.',
       appsLabel: 'Specific apps',
       appsLoading: 'Looking at your apps…',
