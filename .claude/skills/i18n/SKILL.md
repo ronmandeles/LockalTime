@@ -39,6 +39,7 @@ Binding for every style and layout, from the first line of any new screen:
 - No direction-dependent absolute positioning (e.g. pinning a badge with `left: 8`) — use `start`/`end`.
 - Icons that imply direction (back arrows, chevrons, "next" indicators) must flip under RTL: render them with `transform: [{ scaleX: I18nManager.isRTL ? -1 : 1 }]` via a shared helper/component when the first such icon lands — not ad hoc per screen. Icons that don't imply direction (clock, QR) never flip.
 - Never branch layout on locale (`locale === 'he'`) — branch on nothing; write direction-neutral styles and let `I18nManager` do the flipping.
+- **A glyph drawn out of borders is the one exception to "logical properties only", and it must say so in a comment.** `BlocklistPicker`'s expand chevron is a square with `borderBottomWidth` + `borderRightWidth` rotated 45°. Physical edges are deliberate there: it points *down* ("opens"), which is direction-neutral and must look identical in Hebrew, whereas logical edges would swap which two sides carry the border and rotate the arrowhead into a different direction. The rule stays "logical properties for layout"; a rotated border-glyph is not layout. Never "fix" one into `borderEndWidth` without re-checking it under RTL.
 
 ## Testing conventions
 

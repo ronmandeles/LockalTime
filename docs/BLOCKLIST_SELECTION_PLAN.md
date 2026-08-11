@@ -337,6 +337,9 @@ the iOS host flow has no shareable identity to produce.
 New section below session type:
 
 - Three category toggles, reusing the existing toggle styles on that screen.
+  **Superseded 2026-08-11 (owner request):** the toggles are full-width rows
+  that open to list the catalog apps in that category — see "Category drawers"
+  at the end of this section.
 - A specific-app list with checkboxes, fed by a **source seam**:
   - **Android** — the host's actually-installed apps (`InstalledAppsModule`, §8).
   - **iOS** — the bundled catalog (§6), filtered by `canOpenURL` probing so it
@@ -362,6 +365,30 @@ New section below session type:
 The seam is what makes both platforms one component, and it doubles as the
 `QUERY_ALL_PACKAGES` mitigation (§10) — a refusal swaps Android onto the same
 catalog iOS already uses, with no UI change.
+
+### Category drawers (owner request 2026-08-11)
+
+A category name alone asks the host to trust a word. Each category row now
+carries a count and an expander; opening it lists the catalog apps filed under
+that category, individually selectable, sharing one selection with the flat app
+list — so the same app is two rows on screen that can never disagree.
+
+- **The list is not the boundary.** Enforcement matches on the device's own
+  category, which covers apps we have never heard of and apps installed later.
+  The drawer says so in its own copy. Without that line the screen promises
+  something the blocker does not keep, which is worse than showing no list.
+- **A selected category makes its rows redundant**, so the drawer says that too
+  rather than leaving a host to wonder why ticking Instagram under Social
+  changes nothing.
+- **Fed from the source seam, not the catalog directly** — the safety denylist
+  and a venue's approved set therefore narrow a drawer exactly as they narrow
+  the flat list. A carried-over selection the source no longer offers stays
+  uncategorised: guessing its category from the catalog would put an
+  unapproved app inside an approved venue's drawer.
+- **One category open at a time**, and the whole picker became a single
+  `FlatList` over a tagged row stream (headings and notes are rows) rather than
+  a static block above a fixed-height list. Create Session does not scroll, so
+  without that the drawers would open off the bottom of a small screen.
 
 An iOS host still needs the confirm step below for their *own* device, since
 choosing from the catalog produces a shareable name but no Apple token.
