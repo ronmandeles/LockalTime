@@ -22,5 +22,11 @@ module.exports = {
   //
   // A timeout is the right lever rather than per-test waitFor tuning: nothing
   // here is actually slow, and a real hang still fails, just 15s later.
+  //
+  // NOT sufficient on its own, discovered 2026-08-14: `testTimeout` governs the
+  // jest test, while RNTL's waitFor/findBy* enforce a SEPARATE 1000ms budget
+  // that this setting never touches. The same cold-cache transform cost kept
+  // blowing that one, which is what jest.setup.js addresses.
   testTimeout: 20000,
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
 };
