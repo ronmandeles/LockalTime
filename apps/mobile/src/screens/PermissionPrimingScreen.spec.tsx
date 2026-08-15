@@ -31,9 +31,17 @@ import PermissionPrimingScreen from './PermissionPrimingScreen';
 //   internals, never this screen; .claude/skills/testing-standards/SKILL.md native-modules
 //   rule).
 // - Result handling, keyed off the discriminated status: 'granted' fires
-//   onHandled; 'denied' switches to the fallback state; 'undetermined' (OS
-//   flow abandoned without an answer) leaves the priming state intact for a
-//   retry — neither completion nor fallback.
+//   onHandled; 'denied' switches to the fallback state; 'undetermined' (a
+//   Settings screen is now open) leaves the priming state intact — the CTA
+//   stays available, and the foreground-return listener drives the next step.
+// - CHAINED ROUND-TRIP — one Allow tap, not one per permission. Android needs
+//   two separate special-access grants (Usage Access, then Overlay), each in
+//   its own Settings screen, with no combined screen to send the user to. So
+//   on foreground return mid-flow the screen re-drives request() itself
+//   instead of waiting for a second Allow press. Loop safety lives in the
+//   native module, which only advances when the permission it just asked for
+//   actually became granted: a user who backs out without granting gets
+//   'denied' and the recovery state, never a relaunch they cannot escape.
 // - DENIED FALLBACK (the backlog item's second half): explanatory copy, an
 //   open-settings affordance (Linking.openSettings, the sole OS touchpoint,
 //   spied here) that keeps the user on the screen for a return-and-retry, and
@@ -140,6 +148,17 @@ const driveToDeniedFallback = async (): Promise<void> => {
   mockRequest.mockResolvedValue({ status: 'denied' });
   await pressAllow();
   await screen.findByTestId('permission-open-settings-cta');
+};
+
+// Leaves the screen mid-flow: Allow pressed once, a Settings screen open,
+// nothing granted yet. Awaiting the call settles request()'s .then, so the
+// screen has recorded the in-flight trip before a foreground return fires.
+const pressAllowAndLandInSettings = async (): Promise<void> => {
+  mockRequest.mockResolvedValue({ status: 'undetermined' });
+  await pressAllow();
+  await waitFor(() => {
+    expect(mockRequest).toHaveBeenCalledTimes(1);
+  });
 };
 
 // The testID element must expose a static (flattenable) style — arrays fine,
@@ -455,6 +474,84 @@ describe('PermissionPrimingScreen', () => {
       await simulateAppBecameActive();
 
       expect(mockGetStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  // Android needs TWO special-access grants (Usage Access, then Overlay), each
+  // in its own Settings screen, and offers no combined screen and no runtime
+  // dialog for either. Before this, request() opened the first screen and the
+  // user had to press Allow a second time to reach the other — two taps for
+  // one decision. Now one tap drives the whole sequence: 'undetermined' means
+  // a Settings screen is open, and the foreground return re-drives request().
+  //
+  // The dangerous failure mode here is a relaunch loop — return to the app,
+  // get thrown straight back into Settings, forever, with no way out. The
+  // guard is that the screen only ever re-asks; the native module decides
+  // whether to actually launch anything, and answers 'denied' when the
+  // permission it last asked for is still not granted. These tests pin the
+  // screen's half: it re-drives only mid-flow, and honours a 'denied' answer
+  // by stopping.
+  describe('chained permission round-trip (one Allow tap)', () => {
+    it('re-drives the request on foreground return, opening the next permission screen', async () => {
+      await renderPermissionPrimingIn('en');
+      await pressAllowAndLandInSettings();
+
+      await simulateAppBecameActive();
+
+      await waitFor(() => {
+        expect(mockRequest).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('completes on a single Allow press once the chained request resolves granted', async () => {
+      const onHandled = jest.fn<void, []>();
+      await renderPermissionPrimingIn('en', onHandled);
+      await pressAllowAndLandInSettings();
+
+      // The second Settings screen was granted: the chained call now answers
+      // for the whole capability, with no further user action on this screen.
+      mockRequest.mockResolvedValue({ status: 'granted' });
+      await simulateAppBecameActive();
+
+      await waitFor(() => {
+        expect(onHandled).toHaveBeenCalledTimes(1);
+      });
+      expect(mockRequestBatteryOptimizationExemption).toHaveBeenCalledTimes(1);
+    });
+
+    it('lands in the recovery state when the chained request reports no progress', async () => {
+      const onHandled = jest.fn<void, []>();
+      await renderPermissionPrimingIn('en', onHandled);
+      await pressAllowAndLandInSettings();
+
+      // The user came back without granting, so the native module refuses to
+      // relaunch and answers denied — the recovery state, not another trip.
+      mockRequest.mockResolvedValue({ status: 'denied' });
+      await simulateAppBecameActive();
+
+      await screen.findByTestId('permission-open-settings-cta');
+      expect(onHandled).not.toHaveBeenCalled();
+    });
+
+    it('does not re-drive the request when Allow was never pressed', async () => {
+      await renderPermissionPrimingIn('en');
+
+      await simulateAppBecameActive();
+
+      expect(mockRequest).not.toHaveBeenCalled();
+    });
+
+    it('stops re-driving once the flow has ended in the recovery state', async () => {
+      await renderPermissionPrimingIn('en');
+      await driveToDeniedFallback();
+
+      mockGetStatus.mockResolvedValue({ status: 'denied' });
+      await simulateAppBecameActive();
+
+      // The denied state recovers through getStatus() and the user's own
+      // open-settings press — never by reopening Settings unprompted.
+      expect(mockRequest).toHaveBeenCalledTimes(1);
+      expect(mockGetStatus).toHaveBeenCalledTimes(1);
     });
   });
 

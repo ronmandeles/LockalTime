@@ -29,6 +29,17 @@ import { colors, sizing, spacing, typography } from '../theme/tokens';
 // (ARCHITECTURE.md §8 item 13) — separate from the granted/denied capability
 // itself, so its outcome is never awaited or gated on.
 //
+// That same listener also chains the two Android grants behind ONE Allow tap.
+// Android needs Usage Access and Overlay separately, each in its own Settings
+// screen, with no combined screen and no runtime dialog for either — so
+// 'undetermined' means "a Settings screen is open", and on the return trip
+// this screen re-drives request() rather than making the user press Allow a
+// second time for the second permission. The loop guard is in the native
+// module, not here: it only launches when the permission it last asked for
+// actually became granted, and otherwise answers 'denied'. Without that, a
+// user who backed out would be thrown straight back into Settings on every
+// return, with no way out of the app.
+//
 // Like OnboardingScreen, the screen is storage-agnostic: it only fires
 // onHandled (granted result or proceed-anyway); the App gate owns persistence
 // and what handling means. All copy flows through t() (placeholder, flagged
@@ -52,19 +63,33 @@ const PermissionPrimingScreen = ({
     onHandled();
   };
 
-  const handleAllowPress = (): void => {
+  // True between launching a Settings screen and coming back from it. A ref,
+  // not state: the AppState listener reads it, and re-rendering on it would
+  // change nothing on screen.
+  const awaitingSettingsReturnRef = useRef(false);
+
+  // Drives one step of the grant sequence. Called by the Allow CTA, and again
+  // by the foreground-return listener for each remaining permission.
+  const requestBlockingPermission = (): void => {
     // Never rejects per the service contract, so no catch branch exists to
     // get wrong; the screen only maps the discriminated result.
     blockingPermissions.request().then((result) => {
       if (result.status === 'granted') {
+        awaitingSettingsReturnRef.current = false;
         handleGranted();
         return;
       }
       if (result.status === 'denied') {
+        // Either a real refusal or the native module declining to reopen a
+        // screen the user just backed out of — both are the recovery state.
+        awaitingSettingsReturnRef.current = false;
         setScreenState('denied');
+        return;
       }
-      // 'undetermined': the OS flow ended without an answer — stay in the
-      // priming state so Allow remains available for a retry.
+      // 'undetermined': a Settings screen is open now. Stay in the priming
+      // state so Allow remains available, and let the return trip continue
+      // the sequence.
+      awaitingSettingsReturnRef.current = true;
     });
   };
 
@@ -82,17 +107,28 @@ const PermissionPrimingScreen = ({
   screenStateRef.current = screenState;
   const handleGrantedRef = useRef(handleGranted);
   handleGrantedRef.current = handleGranted;
+  const requestBlockingPermissionRef = useRef(requestBlockingPermission);
+  requestBlockingPermissionRef.current = requestBlockingPermission;
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState !== 'active' || screenStateRef.current !== 'denied') {
+      if (nextState !== 'active') {
         return;
       }
-      blockingPermissions.getStatus().then((result) => {
-        if (result.status === 'granted') {
-          handleGrantedRef.current();
-        }
-      });
+      if (screenStateRef.current === 'denied') {
+        // Recovery: the user left via open-settings, so only a status recheck
+        // is owed. Never reopen Settings from here — the flow already ended.
+        blockingPermissions.getStatus().then((result) => {
+          if (result.status === 'granted') {
+            handleGrantedRef.current();
+          }
+        });
+        return;
+      }
+      // Mid-sequence: continue to whichever permission is still missing.
+      if (awaitingSettingsReturnRef.current) {
+        requestBlockingPermissionRef.current();
+      }
     });
     return () => subscription.remove();
   }, []);
@@ -123,7 +159,7 @@ const PermissionPrimingScreen = ({
           </View>
           <GradientButton
             label={t('permissionPriming.allow')}
-            onPress={handleAllowPress}
+            onPress={requestBlockingPermission}
             testID="permission-allow-cta"
           />
           {/* The escape hatch is offered up front, not only after a refusal
