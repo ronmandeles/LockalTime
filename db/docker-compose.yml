@@ -1,0 +1,39 @@
+# Local Postgres stack replacing `supabase start` (Phase 10, task 10.1).
+#
+# Ports are deliberately in the 554xx range rather than Supabase's 543xx: the
+# Supabase stack stays runnable side by side for the length of the migration,
+# so a ported store can be checked against the behaviour it is replacing
+# without stopping anything. Nothing here is reachable from outside the host.
+services:
+  postgres:
+    build: .
+    container_name: lockaltime_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: lockaltime
+    ports:
+      - '55432:5432'
+    volumes:
+      - lockaltime_db_data:/var/lib/postgresql/data
+    healthcheck:
+      # Named database and user both given: the default `pg_isready` probe
+      # passes during the entrypoint's own bootstrap pass, before the real
+      # database exists, which would let a migration run start too early.
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d lockaltime']
+      interval: 2s
+      timeout: 5s
+      retries: 30
+
+  # Stands in for the SMTP provider that task 10.4's email OTP will need. The
+  # Maestro e2e suite already reads one-time codes out of a Mailpit instance,
+  # so the helper it uses carries over.
+  mailpit:
+    image: axllent/mailpit:v1.30
+    container_name: lockaltime_mailpit
+    ports:
+      - '55025:1025'
+      - '55026:8025'
+
+volumes:
+  lockaltime_db_data:

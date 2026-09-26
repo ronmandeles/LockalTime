@@ -90,16 +90,28 @@ production data is being carried over — see §4.
 
 Each task is TDD, atomic, and closed fully before the next opens.
 
-### 10.1 — Local Postgres stack replaces `supabase start`
+### 10.1 — Local Postgres stack replaces `supabase start` — **done 2026-09-26**
 
 `docker-compose.yml` with Postgres 17 + pgTAP + Mailpit (the e2e suite
 already reads OTPs from Mailpit). A migration runner to replace
 `supabase db push`: the files are already timestamped SQL, so this is an
-ordered apply plus a `schema_migrations` ledger. A replacement for
-`supabase test db` that runs the 15 pgTAP files.
+ordered apply plus a ledger. A replacement for `supabase test db` that runs
+the 15 pgTAP files.
 
 **Test first:** a fresh database applies all 22 migrations and the full
-pgTAP suite passes.
+pgTAP suite passes. **Result: 22/22 applied, 250/250 pgTAP assertions across
+15 files, all unchanged.**
+
+One refinement was agreed at the task checkpoint and is not what this section
+originally described: rather than rewriting migrations here,
+`db/bootstrap/000_supabase_compat.sql` supplies the Supabase surface they
+depend on, so both the migrations and the pgTAP files run untouched. That is
+what lets 10.1 stand alone as a verifiable step — the schema is proven to port
+while the authorization predicate is still `auth.uid()`, so 10.2's swap to
+`app.current_user_id()` is the only suspect if the suite goes red. 10.2
+deletes the bootstrap. Conventions are recorded in the `postgres-local-stack`
+skill; the stack listens on 554xx so it runs alongside Supabase's 543xx for
+the length of the phase.
 
 ### 10.2 — The `app.current_user_id()` shim
 

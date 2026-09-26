@@ -144,3 +144,50 @@ This reverses ARCHITECTURE §4's "fixed set of default categories… not a per-s
 **Follow-up, 2026-08-11 — category drawers (owner request).** Every category row on Create Session now opens to list the catalog apps inside it, individually selectable and sharing one selection with the flat app list below. The point is that a category name alone asks the host to trust a word. **What the drawer shows is not what the category blocks** — enforcement matches on the device's own category, so the list is what we can name and the drawer's copy says exactly that; the same copy explains that a selected category already covers its rows. Forced one structural change: the picker became a single scrolling list, because Create Session itself does not scroll and six rows plus an open drawer would otherwise clip off a small screen. The layout has passed its tests but has **not been seen on a device** — the emulator has not run it.
 
 **Follow-up, 2026-08-08 — platform parity (owner decision).** The picker now offers the **same fixed catalog on Android and iOS**, reversing the full-enumeration choice made a day earlier. Android filters that catalog through a manifest `<queries>` block instead of enumerating the device, which is the exact counterpart of iOS's `canOpenURL` probing. **`QUERY_ALL_PACKAGES` is removed** — no Play Console declaration, no weeks of review, no risk of a refusal blocking release. The honest cost: an app outside the catalog can no longer be named by anyone, on any platform; categories still cover the long tail. The catalog stays at its current size for now, to be revisited once there is real signal about what people pick.
+
+## Phase 10 — Replacing Supabase with plain Postgres (started 2026-09-26)
+
+Owner decision, 2026-09-26: leave Supabase entirely for a plain Postgres
+database, rebuilding its Auth, Data API and Realtime halves inside
+`apps/server`. The plan, the four architectural decisions behind it and the
+risks accepted are in
+[docs/POSTGRES_MIGRATION_PLAN.md](POSTGRES_MIGRATION_PLAN.md); per-task truth
+is `backlog.md`'s Phase 10 section.
+
+**Supabase stays live in production for the whole phase.** Cancelling it is
+the last step of 10.8, after data has moved and a real create → join →
+complete has been smoke-tested — not the first step of anything.
+
+Why it is a phase rather than a connection-string change: four services are
+in use, not one. The database half ports directly, and so do the ~10
+`SECURITY DEFINER` functions carrying money-equivalent logic — so
+`CLAUDE.md`'s first non-negotiable never enters the blast radius. Auth,
+Realtime, and **21 places where the mobile app reads and writes PostgREST
+directly** do not port; those become Node API endpoints, which is also why
+the end state is a better trust story than today's: after 10.5 there is no
+path at all from a client to the database, and RLS becomes defence-in-depth
+behind the API rather than the client-facing boundary.
+
+**10.1 is done (2026-09-26).** A Docker Postgres 17 + pgTAP + Mailpit stack
+on ports 554xx, a migration runner replacing `supabase db push`, and a pgTAP
+runner replacing `supabase test db`. All 22 migrations apply to a fresh plain
+Postgres and **all 15 pgTAP files pass 250/250 assertions, unchanged** — the
+schema ports. Both stacks run side by side for the length of the phase, so a
+ported store can be checked against what it replaces. Forward-only is now
+enforced by the runner (checksum drift, missing file, backdated timestamp)
+rather than trusted to discipline.
+
+**What this migration fixes, and what it costs.** It removes the Realtime
+connection cap the Phase 7 load test hit — a single Node process holds 500
+WebSockets comfortably, where the vendor tier refused above ~200–300. In
+exchange it introduces a single-instance ceiling: in-memory presence plus
+per-connection `LISTEN` means API fan-out breaks under horizontal scaling
+until a Redis adapter exists. Fine at launch scale, recorded so it is not
+discovered late.
+
+**The risk that matters** is 10.4. Everything else in the phase ports logic
+that already has tests; self-built auth is the one piece of genuinely new
+security-critical code, and it needs adversarial tests rather than happy-path
+ones. Realtime (10.6) is the least verifiable — the two-device flow still
+cannot run here, and after 10.6 that path is our code rather than a
+vendor-tested service.
