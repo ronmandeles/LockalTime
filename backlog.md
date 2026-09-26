@@ -293,3 +293,66 @@ Dependency order: 1 and 2 are independent roots; 3 depends on 2, 4 and 5 on 3, 6
 - [x] **That `testTimeout` fix was half the budget, and the suite stayed flaky for it.** *(found 2026-08-14, reviewing the category-drawers merge)* RNTL's `waitFor`/`findBy*` enforce their **own** timeout — 1000ms by default — that `testTimeout: 20000` never touches. So the same cold-cache transform cost kept blowing the 1s budget underneath every `await waitFor(...)`, and the two settings being independent is exactly what hid it. The symptoms actively misled: a `waitFor` that never saw an effect run, then **`render function has not been called` cascading into *following* tests**, which reads like a component bug in whatever spec happens to be heaviest. Measured before the fix: 1/900 failed on the review run, 2 failures in 9 warm full-suite runs, 3–5 per suite under two concurrent suites — and **reproduced on the parent commit `e392345`**, so it predates the category drawers rather than being caused by them. Fixed with a new `apps/mobile/jest.setup.js` (wired via `setupFilesAfterEnv`): a 5s `asyncUtilTimeout`, plus a warm-up that touches React Native's lazy component getters so their babel transform is paid at setup instead of inside the first timed `render()`. Cold-cache full-suite runs went from failing essentially every time to **16 green out of 18**. Guarded by `__tests__/jest-harness.test.ts`, which asserts both halves ran — RNTL exports `configure` but no `getConfig`, so a marker global is the only readable proof the harness is still wired. **Two warm-up shapes that look obviously right and are wrong, both measured, both now in `testing-standards`:** a throwaway `render()` corrupts RNTL's global root tracking even when cleaned up (`toBeOnTheScreen()` then fails for elements that plainly are on screen — broke the first test of five screen specs, deterministically, with both a sync and an awaited `cleanup()`), and warming the app's i18n graph drags in `react-native-localize`'s TurboModule and kills all 70 suites before a single test runs. **Residual, stated honestly rather than rounded to green:** roughly 1 cold run in 18 still fails one test in `BlocklistPicker.spec.tsx` — the heaviest spec at 40 tests and ~21s cold against ~8s warm — and 2 per suite survive under two *concurrent* full suites, a load CI does not generate. Budgets of 10s and 15s were both measured and neither helped, so the residual is **not** budget-bound and raising the number is not the fix. The untried lever is that spec's 40 per-test `initI18n()` bootstraps
 
 **DoD:** a host can pick categories and specific apps at creation; the choice reaches every member's device and is enforced there; a `static_qr` session cannot exceed its venue's approved set; the safety denylist is refused server-side, not merely hidden in the picker; the blocklist is frozen for the session's lifetime; suites green in every workspace touched, plus pgTAP. iOS behaviour, `canOpenURL` probing, icon performance, the Play `QUERY_ALL_PACKAGES` declaration outcome and iOS token rotation are all unverifiable here and belong in `docs/MANUAL_QA.md` (plan §12).
+
+---
+
+## Phase 10 — Replace Supabase with plain Postgres
+
+Owner-approved 2026-09-26. The plan it is built from, including the four
+architectural decisions taken and the risks accepted, is
+[docs/POSTGRES_MIGRATION_PLAN.md](docs/POSTGRES_MIGRATION_PLAN.md). Supabase
+stays live in production throughout — cancellation is the last step of 10.8,
+not the first step of anything.
+
+**10.1 — Local Postgres stack**
+- [ ] `docker-compose.yml` with Postgres 17 + pgTAP + Mailpit, replacing `supabase start`; a migration runner replacing `supabase db push` (ordered apply over the existing timestamped files + a `schema_migrations` ledger); a pgTAP runner replacing `supabase test db`. Test first: a fresh database applies all 22 migrations and the 15 pgTAP files pass
+
+**10.2 — The RLS identity shim**
+- [ ] `app.current_user_id()` reading a transaction-scoped `SET LOCAL app.user_id`, replacing all 23 `auth.uid()` call sites across 7 migration files; pgTAP sets the GUC instead of impersonating a Supabase role. **Blocked on one owner answer: does the production project hold real user data?** If none, this is a squashed baseline rather than 22 `drop policy`/`create policy` pairs
+
+**10.3 — Node API off `supabase-js`**
+- [ ] `pg` Pool + a `withUser(userId, fn)` helper owning the `SET LOCAL`, replacing `supabase-admin.ts`
+- [ ] Port `users-store` + its integration suite
+- [ ] Port `sessions-store` + its integration suite
+- [ ] Port `venues-store` + its integration suite
+- [ ] Port `friends-store` + its integration suite
+- [ ] Port `notifications-store` + its integration suite
+- [ ] Port `attestation-store` + its integration suite
+- [ ] Port `session-realtime-port` (depends on 10.6's transport)
+
+**10.4 — Auth in the Node API** *(highest-risk task in the phase)*
+- [ ] Identity + OTP-challenge tables (expiry, attempt ceiling, single-use), ES256 keypair, `/.well-known/jwks.json`
+- [ ] Email OTP request/verify endpoints, SMTP via Mailpit locally; replaces the `handle_new_user` trigger, so user-row creation moves into the verify path
+- [ ] Google/Apple OIDC id-token verification, replacing `signInWithIdToken`
+- [ ] Refresh + sign-out with rotation; `require-auth.ts` switched to `createLocalJwks()`
+- [ ] Adversarial test pass: OTP brute-force, account enumeration, rate limits, refresh replay, expired/rotated keys
+
+**10.5 — Endpoints for the 21 direct client call sites**
+- [ ] `friends-repository` (1 read, 1 delete) → API + mobile rewrite
+- [ ] `session-repository` (4 reads) → API + mobile rewrite
+- [ ] `stats-repository` (6 reads) → API + mobile rewrite
+- [ ] `user-profile` (1 read, 3 updates) → API + mobile rewrite
+- [ ] `device_tokens` upsert → API + mobile rewrite
+
+**10.6 — Realtime: WS + `LISTEN`/`NOTIFY`**
+- [ ] `NOTIFY` triggers on `session_participants` + `session_presence_intervals`; WS server in Express with `session:{session_id}` rooms, socket authenticated by the new JWT
+- [ ] Server-held Presence + Broadcast (both already untrusted UI hints per `ARCHITECTURE.md` §5); document the single-instance fan-out ceiling
+- [ ] `session-channel.ts` rewritten against its existing handler interface, so consumers are unchanged
+
+**10.7 — Strip Supabase and rewrite the conventions**
+- [ ] Remove `@supabase/supabase-js` from both workspaces; delete `supabase-client.ts`, `supabase-config.ts`, `supabase-jwks.ts`, and the `react-native-url-polyfill` workaround that existed only for it
+- [ ] `.claude/skills/supabase-integration/` → `postgres-integration` (binding conventions — lands with the code that invalidates them)
+- [ ] `ARCHITECTURE.md` §3/§5, `DATABASE.md`, `DEPLOYMENT.md`, `MANUAL_QA.md` (new Phase 10 section), `PROJECT_STATUS.md`
+
+**10.8 — Hosting, data migration, then cancellation** *(owner-actioned)*
+- [ ] Choose and provision the managed Postgres host (deferred from 10.1 deliberately)
+- [ ] Migrate any real data out of the `LockalTime` project; deploy; smoke-test one real create → join → complete
+- [ ] **Only then** cancel Supabase
+
+**DoD:** the app runs end to end against a plain Postgres with no Supabase
+dependency in either workspace; all 22 RLS policies still enforced and proven
+by pgTAP against `app.current_user_id()`; email OTP and Google/Apple sign-in
+work with adversarial tests green; realtime delivers participant and presence
+changes between two independent clients in an integration test; every
+workspace's suite, lint and typecheck green. Two-device realtime, iOS, and
+anything needing hardware stay in `docs/MANUAL_QA.md` as ever.
