@@ -8,6 +8,10 @@
     "start": "node dist/server.js",
     "test": "jest",
     "test:integration": "jest -c jest.integration.config.js",
+    "db:up": "docker compose -f ../../db/docker-compose.yml up -d --build",
+    "db:down": "docker compose -f ../../db/docker-compose.yml down",
+    "db:migrate": "ts-node src/db/migrate-cli.ts",
+    "db:test": "ts-node src/db/pgtap-cli.ts",
     "lint": "eslint . --ext .ts,.js",
     "typecheck": "tsc --noEmit"
   },
